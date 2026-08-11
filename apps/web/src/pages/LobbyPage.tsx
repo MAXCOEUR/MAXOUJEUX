@@ -1,7 +1,6 @@
 import {
   formatCoins,
   GAMES,
-  MOTUS_REWARDS,
   type CurrentUser,
   type GameDefinition,
 } from "@maxoujeux/shared";
@@ -179,7 +178,10 @@ function WelcomeBar({ user }: { user: CurrentUser }) {
 
 function GameCard({ game, delay }: { game: GameDefinition; delay: number }) {
   const locked = game.status !== "live";
-  const bestMotus = Math.max(...MOTUS_REWARDS);
+  const wager =
+    game.wager.min === game.wager.max
+      ? formatCoins(game.wager.min)
+      : `${formatCoins(game.wager.min)} – ${formatCoins(game.wager.max)}`;
 
   return (
     <article
@@ -228,20 +230,24 @@ function GameCard({ game, delay }: { game: GameDefinition; delay: number }) {
               </dd>
             </div>
 
-            {game.usesChips ? (
+            <div>
+              <dt className="text-cream-faint">
+                {game.wager.label} {game.wager.min === game.wager.max ? "fixe" : "min. / max."}
+              </dt>
+              <dd className="tabular mt-0.5 text-brass">{wager}</dd>
+            </div>
+
+            {game.wager.payout && (
               <div>
-                <dt className="text-cream-faint">Cave minimum</dt>
-                <dd className="tabular mt-0.5 text-brass">{formatCoins(500)}</dd>
-              </div>
-            ) : game.code === "motus" ? (
-              <div>
-                <dt className="text-cream-faint">Récompense</dt>
-                <dd className="tabular mt-0.5 text-game-motus">jusqu'à {bestMotus} MC</dd>
-              </div>
-            ) : (
-              <div>
-                <dt className="text-cream-faint">Mise</dt>
-                <dd className="mt-0.5 text-cream-dim">aucune</dd>
+                <dt className="text-cream-faint">Gain</dt>
+                <dd
+                  className={cn(
+                    "mt-0.5 font-semibold",
+                    game.code === "motus" ? "text-game-motus" : "text-cream",
+                  )}
+                >
+                  {game.wager.payout}
+                </dd>
               </div>
             )}
           </dl>

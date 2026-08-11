@@ -12,6 +12,16 @@ export type GameCode = (typeof GAME_CODES)[number];
 
 export type GameStatus = "live" | "soon";
 
+export interface GameWager {
+  /** Libellé affiché dans le lobby : une cave pour le poker, une mise ailleurs. */
+  label: "Cave" | "Mise";
+  /** Bornes obligatoires, en MaxouCoin. Deux valeurs égales indiquent une mise fixe. */
+  min: number;
+  max: number;
+  /** Résumé du versement au gagnant lorsqu'il ne découle pas directement des règles. */
+  payout?: string;
+}
+
 export interface GameDefinition {
   code: GameCode;
   name: string;
@@ -21,6 +31,8 @@ export interface GameDefinition {
   maxPlayers: number;
   /** Le jeu consomme-t-il des jetons virtuels ? */
   usesChips: boolean;
+  /** Mise obligatoire et toujours plafonnée. */
+  wager: GameWager;
   status: GameStatus;
   /** Lot du plan de développement qui livre ce jeu. */
   milestone: number;
@@ -45,6 +57,7 @@ export const GAMES: readonly GameDefinition[] = [
     minPlayers: 2,
     maxPlayers: 9,
     usesChips: true,
+    wager: { label: "Cave", min: 500, max: 10_000 },
     status: "soon",
     milestone: 4,
     accent: "var(--color-game-poker)",
@@ -57,6 +70,7 @@ export const GAMES: readonly GameDefinition[] = [
     minPlayers: 1,
     maxPlayers: 5,
     usesChips: true,
+    wager: { label: "Mise", min: 10, max: 2500 },
     status: "soon",
     milestone: 3,
     accent: "var(--color-game-blackjack)",
@@ -64,10 +78,11 @@ export const GAMES: readonly GameDefinition[] = [
   {
     code: "motus",
     name: "Motus",
-    tagline: "Un mot toutes les six heures, six essais pour le trouver.",
+    tagline: "Seul face au mot : six essais, et chaque ligne compte.",
     minPlayers: 1,
-    maxPlayers: 4,
-    usesChips: false,
+    maxPlayers: 1,
+    usesChips: true,
+    wager: { label: "Mise", min: 100, max: 100, payout: "100 à 600 MC" },
     status: "soon",
     milestone: 2,
     accent: "var(--color-game-motus)",
@@ -78,7 +93,8 @@ export const GAMES: readonly GameDefinition[] = [
     tagline: "Quatre disques alignés. Simple à comprendre, dur à gagner.",
     minPlayers: 2,
     maxPlayers: 2,
-    usesChips: false,
+    usesChips: true,
+    wager: { label: "Mise", min: 10, max: 100, payout: "1,5 × la mise" },
     status: "soon",
     milestone: 1,
     accent: "var(--color-game-connect4)",
@@ -89,7 +105,8 @@ export const GAMES: readonly GameDefinition[] = [
     tagline: "Trois cases alignées et la partie est pliée.",
     minPlayers: 2,
     maxPlayers: 2,
-    usesChips: false,
+    usesChips: true,
+    wager: { label: "Mise", min: 10, max: 100, payout: "1,5 × la mise" },
     status: "soon",
     milestone: 1,
     accent: "var(--color-game-tictactoe)",

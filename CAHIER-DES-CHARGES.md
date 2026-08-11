@@ -14,8 +14,8 @@ Parcours attendu :
 
 1. Le visiteur crée un compte avec **email, mot de passe et pseudo**.
 2. Il arrive sur une **interface de lobby** présentant plusieurs mini-jeux.
-3. Il joue, dont à des **jeux multijoueur contre de vraies personnes** : poker,
-   blackjack, ou des jeux du type Motus.
+3. Il joue à des **jeux multijoueur contre de vraies personnes** (Puissance 4,
+   Morpion, poker) ou à des jeux solo (Motus, blackjack).
 
 Exigences techniques formulées :
 
@@ -190,11 +190,36 @@ administrer en V1).
 
 | Jeu | Joueurs | Jetons | Lot |
 |---|---|---|---|
-| **Puissance 4** | 2 | non | 1 |
-| **Morpion** | 2 | non | 1 |
-| **Motus** — mot du jour solo + duel | 1 à 4 | non | 2 |
+| **Puissance 4** | 2 | oui | 1 |
+| **Morpion** | 2 | oui | 1 |
+| **Motus** — mot du créneau en solo | 1 | oui | 2 |
 | **Blackjack** — croupier automatique | 1 à 5 | oui | 3 |
 | **Texas Hold'em** | 2 à 9 | oui | 4 |
+
+### 7.1 Mises et gains
+
+Une **mise est obligatoire dans tous les jeux**. Chaque jeu impose une mise maximale,
+affichée avant l'entrée à la table et validée par le serveur : le client ne peut jamais
+engager davantage en modifiant la requête.
+
+| Jeu | Mise minimale | Mise maximale | Versement au gagnant |
+|---|---:|---:|---|
+| **Puissance 4** | 10 MC | 100 MC | 1,5 × la mise du joueur |
+| **Morpion** | 10 MC | 100 MC | 1,5 × la mise du joueur |
+| **Motus** | 100 MC | 100 MC | de 600 à 100 MC selon l'essai |
+| **Blackjack** | 10 MC | 2 500 MC | selon la main et les options jouées |
+| **Texas Hold'em** | cave de 500 MC | cave de 10 000 MC | part remportée du pot |
+
+Pour le Puissance 4 et le Morpion, les deux joueurs engagent la même mise. Avec
+10 MC chacun, le gagnant reçoit 15 MC, le perdant 0 et les 5 MC restants sont retirés
+de l'économie. Une égalité rembourse les deux mises. Les mises progressent par pas de
+10 MC et ne dépassent jamais 100 MC par joueur.
+
+Motus est **exclusivement solo** et coûte 100 MC par mot. Le versement brut dépend de
+la ligne à laquelle le mot est trouvé : 600, 450, 350, 250, 175 puis 100 MC de la
+première à la sixième ligne. Un échec verse 0 MC ; une réussite à la sixième ligne
+rend donc seulement la mise, sans gain net. Un nouveau mot est proposé toutes les six
+heures.
 
 Puissance 4 et Morpion sont livrés en premier délibérément : leurs règles sont
 triviales, ils servent donc à valider toute la chaîne temps réel (matchmaking,
@@ -282,7 +307,7 @@ valide acceptée, socket avec signature falsifiée refusée.
 | Lot | Contenu | Charge |
 |---|---|---|
 | **1** | Couche temps réel générique (RoomManager, timers, reconnexion), matchmaking, Puissance 4 + Morpion, statistiques | 3 j |
-| **2** | Motus : dictionnaire, mot du jour, solo, duel | 3 j |
+| **2** | Motus : dictionnaire, mot du créneau, solo et barème par essai | 3 j |
 | **3** | Blackjack : moteur, sabot, croupier, transactions de jetons | 4 j |
 | **4** | Poker Hold'em : moteur + ~60 tests, UI de table, timers, sit-out | 8–10 j |
 | **5** | Profils, classements Elo, chat, modération, sauvegardes | 3 j |
