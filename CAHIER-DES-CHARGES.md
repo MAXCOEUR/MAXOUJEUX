@@ -405,9 +405,9 @@ Décisions arrêtées à cette occasion :
   saisie native, couleurs accompagnées de libellés accessibles, synchronisation entre
   onglets et reconnexion automatique. Après une défaite, le mot reste caché.
 
-Vérifications passées : typage strict sur les quatre paquets, **156 tests** (51 partagés,
-39 moteurs, 66 API), dont les courses réelles sur PostgreSQL 16 ; build de production
-(API 82,84 Ko, front 111,52 Ko gzip). La migration de 1,8 Mo contenant le dictionnaire
+Vérifications passées : typage strict sur les quatre paquets, **163 tests** (55 partagés,
+39 moteurs, 66 API, 3 web), dont les courses réelles sur PostgreSQL 16 ; build de production
+(API 82,84 Ko, front 112,15 Ko gzip). La migration de 1,8 Mo contenant le dictionnaire
 s'applique en environ 3,9 s sur une base PGlite vierge. Les images locales mesurées font
 303,5 Mo pour l'API et 48,9 Mo pour le front. Le parcours navigateur couvre les grilles
 5 et 8 lettres, téléphone 360 px sans débordement, deux onglets, coupure réseau,

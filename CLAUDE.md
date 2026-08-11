@@ -353,9 +353,9 @@ Ce qui est déjà en place et **à consommer sans le réécrire** :
 
 Dette assumée, à traiter le jour où elle gêne :
 
-- Aucun harnais de test côté front. La logique testable a été déplacée là où un runner
-  existe déjà : formatage des durées dans `packages/shared`, règles de plateau dans
-  `packages/engines`. À reconsidérer si l'interface de poker devient complexe.
+- Le harnais front reste volontairement minimal (`tsx --test`) et ne teste que les
+  adaptateurs aux API navigateur. La logique pure reste dans `packages/shared` ou
+  `packages/engines`. À étendre si l'interface de poker devient complexe.
 - Le parcours à deux joueurs se vérifie à la main (deux navigateurs) ou avec un script
   pilotant deux clients `socket.io-client`. Il n'y a pas de test d'intégration WebSocket
   automatisé.
