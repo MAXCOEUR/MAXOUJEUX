@@ -1,4 +1,3 @@
-import { normalizeMotusDraft } from "@maxoujeux/engines";
 import {
   formatCoins,
   formatMotusShare,
@@ -7,8 +6,8 @@ import {
   type CurrentUser,
   type MotusView,
 } from "@maxoujeux/shared";
-import { ArrowLeft, CircleCheck, CircleHelp, Loader2, Send, Share2, Trophy } from "lucide-react";
-import { useEffect, useState, type FormEvent } from "react";
+import { ArrowLeft, CircleCheck, CircleHelp, Loader2, Share2, Trophy } from "lucide-react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/Button";
 import { Countdown } from "@/components/Countdown";
 import { GameArtefact } from "@/components/GameArtefact";
@@ -16,8 +15,14 @@ import { Lien } from "@/components/Lien";
 import { Modal } from "@/components/Modal";
 import { Plaque } from "@/components/Plaque";
 import { MotusBoard } from "@/components/games/MotusBoard";
+import { MotusKeyboard } from "@/components/games/MotusKeyboard";
 import { cn } from "@/lib/cn";
 import { useMotus } from "@/lib/motus";
+import {
+  appendMotusLetter,
+  eraseMotusLetter,
+  motusCommandForKey,
+} from "@/lib/motus-input";
 import { request, useRealtime, watchMotus } from "@/lib/socket";
 import { shareText } from "@/lib/share";
 import { pushToast } from "@/lib/toast";
@@ -66,8 +71,7 @@ function MotusContent({ user, view }: { user: CurrentUser; view: MotusView }) {
     }
   }
 
-  async function proposer(event: FormEvent) {
-    event.preventDefault();
+  async function proposer() {
     if (draft.length !== view.length || pending) return;
     markPending("guess");
     setError(undefined);
@@ -78,6 +82,16 @@ function MotusContent({ user, view }: { user: CurrentUser; view: MotusView }) {
       clearPending();
       setError(reply.message);
     }
+  }
+
+  function saisirLettre(letter: string) {
+    setDraft((current) => appendMotusLetter(current, letter, view.length));
+    setError(undefined);
+  }
+
+  function effacerLettre() {
+    setDraft((current) => eraseMotusLetter(current));
+    setError(undefined);
   }
 
   async function abandonner() {
@@ -95,6 +109,29 @@ function MotusContent({ user, view }: { user: CurrentUser; view: MotusView }) {
   const playing = view.status === "playing";
   const finished = view.status === "won" || view.status === "lost";
   const canAfford = user.balance >= view.stake;
+
+  useEffect(() => {
+    if (!playing || pending || confirmAbandon) return;
+
+    function onKeyDown(event: KeyboardEvent) {
+      // Entrée sur une touche ciblée doit conserver le clic natif de cette touche.
+      if (event.key === "Enter" && event.target instanceof HTMLButtonElement) return;
+
+      const command = motusCommandForKey(
+        event.key,
+        event.ctrlKey || event.altKey || event.metaKey,
+      );
+      if (!command) return;
+      event.preventDefault();
+
+      if (command.type === "letter") saisirLettre(command.letter);
+      else if (command.type === "erase") effacerLettre();
+      else void proposer();
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [confirmAbandon, draft, pending, playing, view.length, view.version]);
 
   return (
     <div className="space-y-5 pb-8">
@@ -150,46 +187,17 @@ function MotusContent({ user, view }: { user: CurrentUser; view: MotusView }) {
             <MotusBoard view={view} draft={draft} pending={pending === "guess"} />
 
             {playing && (
-              <form onSubmit={proposer} className="mx-auto mt-5 max-w-xl">
-                <label htmlFor="motus-guess" className="sr-only">
-                  Proposer un mot de {view.length} lettres
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    id="motus-guess"
-                    autoFocus
-                    autoComplete="off"
-                    autoCapitalize="characters"
-                    spellCheck={false}
-                    inputMode="text"
-                    value={draft}
-                    maxLength={view.length}
-                    onChange={(event) => {
-                      setDraft(normalizeMotusDraft(event.target.value, view.length));
-                      setError(undefined);
-                    }}
-                    disabled={pending !== null}
-                    className={cn(
-                      "tabular min-w-0 flex-1 rounded-xl border bg-felt-deep px-4 py-3",
-                      "text-center text-lg font-bold tracking-[0.2em] text-cream uppercase",
-                      "placeholder:tracking-normal placeholder:text-cream-faint",
-                      error ? "border-danger" : "border-line-strong",
-                    )}
-                    placeholder={`${view.length} lettres`}
-                  />
-                  <Button
-                    type="submit"
-                    loading={pending === "guess"}
-                    disabled={draft.length !== view.length || pending !== null}
-                    aria-label="Valider le mot"
-                    className="px-4"
-                  >
-                    <Send className="size-4" aria-hidden />
-                    <span className="hidden sm:inline">Valider</span>
-                  </Button>
-                </div>
+              <div className="mx-auto mt-5 max-w-xl">
+                <MotusKeyboard
+                  guesses={view.guesses}
+                  disabled={pending !== null}
+                  canSubmit={draft.length === view.length}
+                  onLetter={saisirLettre}
+                  onErase={effacerLettre}
+                  onSubmit={() => void proposer()}
+                />
                 {error && <p role="alert" className="mt-2 text-sm text-danger">{error}</p>}
-              </form>
+              </div>
             )}
 
             {finished && <Result view={view} pending={pending !== null} error={error} onStart={commencer} />}

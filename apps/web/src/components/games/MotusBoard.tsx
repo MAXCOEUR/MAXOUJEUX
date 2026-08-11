@@ -23,6 +23,7 @@ interface MotusBoardProps {
 export function MotusBoard({ view, draft, pending }: MotusBoardProps) {
   const rows = Array.from({ length: MOTUS_MAX_ATTEMPTS }, (_, index) => index);
   const activeRow = view.status === "playing" ? view.guesses.length : -1;
+  const activeColumn = view.length > 0 ? Math.min(draft.length, view.length - 1) : -1;
 
   return (
     <div
@@ -54,6 +55,7 @@ export function MotusBoard({ view, draft, pending }: MotusBoardProps) {
             {Array.from({ length: view.length }, (_, column) => {
               const letter = letters[column] ?? "";
               const mark = confirmed?.marks[column];
+              const isCursor = row === activeRow && column === activeColumn;
               return (
                 <span
                   key={column}
@@ -64,6 +66,7 @@ export function MotusBoard({ view, draft, pending }: MotusBoardProps) {
                     "grid aspect-square min-w-0 place-items-center rounded-lg border",
                     "font-display text-lg font-black sm:text-2xl",
                     confirmed && "animate-flip-up",
+                    isCursor && "relative z-10 ring-2 ring-cream ring-offset-2 ring-offset-felt-deep",
                     mark
                       ? MARK_STYLE[mark]
                       : row === activeRow
