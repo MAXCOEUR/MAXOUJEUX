@@ -1,0 +1,32 @@
+node_modules/
+dist/
+build/
+.turbo/
+*.tsbuildinfo
+
+.env
+.env.local
+.env.*.local
+
+# Base de données locale de développement (PGlite)
+.data/
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Compétences d'agent vendorisées : contenu tiers, restaurable depuis
+# skills-lock.json — même logique que node_modules face au fichier de verrouillage.
+.agents/
+
+# Réglages locaux de Claude Code (permissions propres au poste)
+.claude/settings.local.json
+
+# Éditeurs / OS
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini

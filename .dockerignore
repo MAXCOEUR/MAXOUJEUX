@@ -1,0 +1,16 @@
+**/node_modules
+**/dist
+**/.data
+**/*.tsbuildinfo
+
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+
+*.md
+!README.md
+
+.vscode
+.idea

@@ -1,0 +1,32 @@
+# PostgreSQL seul, pour développer au plus près de la production.
+#
+#   docker compose -f docker-compose.dev.yml up -d
+#   DATABASE_URL=postgres://maxoujeux:maxoujeux@localhost:5433/maxoujeux pnpm dev
+#
+# Facultatif : sans DATABASE_URL, l'API bascule sur PGlite et ne dépend
+# d'aucun conteneur. Ce fichier sert à valider le comportement réel de
+# PostgreSQL (transactions concurrentes, contraintes) avant un déploiement.
+
+name: maxoujeux-dev
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: maxoujeux
+      POSTGRES_USER: maxoujeux
+      POSTGRES_PASSWORD: maxoujeux
+    ports:
+      # 5433 et non 5432 : évite le conflit avec un PostgreSQL déjà installé.
+      - "5433:5432"
+    volumes:
+      - pgdata_dev:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U maxoujeux -d maxoujeux"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  pgdata_dev:

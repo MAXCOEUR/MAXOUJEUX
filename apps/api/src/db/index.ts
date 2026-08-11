@@ -1,0 +1,87 @@
+import { mkdirSync } from "node:fs";
+import path from "node:path";
+import { drizzle as drizzlePostgres, type PostgresJsDatabase } from "drizzle-orm/postgres-js";
+import postgres from "postgres";
+import { env, isProduction } from "../env.js";
+import * as schema from "./schema.js";
+
+export { schema };
+
+/**
+ * Deux pilotes, une seule API.
+ *
+ * - Production (et tout environnement disposant d'un `DATABASE_URL`) : PostgreSQL
+ *   via postgres-js.
+ * - Développement sans `DATABASE_URL` : PGlite, un vrai PostgreSQL compilé en
+ *   WebAssembly qui persiste dans `.data/`. Le projet se lance donc sans
+ *   installer ni Docker ni PostgreSQL, tout en exécutant exactement les mêmes
+ *   migrations SQL qu'en production.
+ *
+ * Les deux pilotes exposent la même surface de requête ; on type l'export avec
+ * celui de postgres-js pour garder une inférence propre côté appelant.
+ */
+export type Database = PostgresJsDatabase<typeof schema>;
+
+/** Répertoire des migrations générées par drizzle-kit, relatif au dossier de travail. */
+const migrationsFolder = path.resolve(process.cwd(), "drizzle");
+
+interface Connection {
+  db: Database;
+  driver: "postgres" | "pglite";
+  migrate: () => Promise<void>;
+  close: () => Promise<void>;
+}
+
+async function connectPostgres(url: string): Promise<Connection> {
+  const { migrate } = await import("drizzle-orm/postgres-js/migrator");
+
+  // Pool volontairement modeste : un NAS n'a pas besoin de 50 connexions,
+  // et PostgreSQL en réserve une part pour la maintenance.
+  const client = postgres(url, { max: 10, idle_timeout: 30, connect_timeout: 10 });
+  const db = drizzlePostgres(client, { schema });
+
+  return {
+    db,
+    driver: "postgres",
+    migrate: () => migrate(db, { migrationsFolder }),
+    close: () => client.end({ timeout: 5 }),
+  };
+}
+
+async function connectPglite(): Promise<Connection> {
+  const [{ PGlite }, { drizzle }, { migrate }] = await Promise.all([
+    import("@electric-sql/pglite"),
+    import("drizzle-orm/pglite"),
+    import("drizzle-orm/pglite/migrator"),
+  ]);
+
+  // PGlite ne crée pas l'arborescence parente : sans ce mkdir récursif, un
+  // premier lancement sur un dépôt fraîchement cloné échoue en ENOENT.
+  const dataDir = path.resolve(process.cwd(), ".data/pglite");
+  mkdirSync(dataDir, { recursive: true });
+
+  const client = new PGlite(dataDir);
+  const db = drizzle(client, { schema });
+
+  return {
+    db: db as unknown as Database,
+    driver: "pglite",
+    migrate: () => migrate(db, { migrationsFolder }),
+    close: () => client.close(),
+  };
+}
+
+const connection: Connection = env.DATABASE_URL
+  ? await connectPostgres(env.DATABASE_URL)
+  : await connectPglite();
+
+if (connection.driver === "pglite" && isProduction) {
+  // Ceinture et bretelles : env.ts l'interdit déjà, mais une base éphémère
+  // en production mérite deux garde-fous.
+  throw new Error("PGlite ne doit jamais être utilisé en production");
+}
+
+export const db = connection.db;
+export const dbDriver = connection.driver;
+export const runMigrations = connection.migrate;
+export const closeDatabase = connection.close;

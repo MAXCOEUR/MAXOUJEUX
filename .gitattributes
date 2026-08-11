@@ -1,0 +1,17 @@
+# Fins de ligne normalisées en LF dans le dépôt, quelle que soit la
+# configuration `core.autocrlf` du poste.
+#
+# Ce n'est pas cosmétique : `nginx.conf`, les Dockerfile et les migrations SQL
+# sont consommés dans des conteneurs Linux, où un CRLF casse silencieusement
+# une directive ou un script.
+* text=auto eol=lf
+
+# Fichiers binaires : aucune conversion.
+*.png binary
+*.jpg binary
+*.woff2 binary
+*.ico binary
+
+# Fichiers générés : masqués dans les diffs de pull request.
+pnpm-lock.yaml linguist-generated=true
+apps/api/drizzle/meta/*.json linguist-generated=true

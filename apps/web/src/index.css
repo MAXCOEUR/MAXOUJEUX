@@ -1,0 +1,130 @@
+@import "tailwindcss";
+
+/* Polices auto-hébergées via npm : aucun appel à un CDN externe, le site
+   fonctionne donc aussi sur un réseau local coupé d'Internet. */
+@import "@fontsource-variable/inter";
+@import "@fontsource-variable/outfit";
+
+/* ---------------------------------------------------------------------------
+   Thème MaxouJeux — arcade feutrée.
+   Fond très sombre, surfaces légèrement bleutées, accents néon réservés aux
+   éléments actifs. Le doré ne sert qu'aux gains et aux jetons, jamais à la
+   décoration : il doit rester un signal.
+   --------------------------------------------------------------------------- */
+@theme {
+  /* Nommé `night` et non `base` : `--color-base` produirait l'utilitaire
+     `text-base`, qui entre en collision avec la taille de police du même nom. */
+  --color-night: #0f1115;
+  --color-surface: #181b22;
+  --color-surface-2: #21252e;
+  --color-surface-3: #2b313c;
+
+  --color-line: #2e3440;
+  --color-line-strong: #3d4557;
+
+  --color-ink: #e9ebf2;
+  --color-ink-muted: #99a1b3;
+  --color-ink-faint: #6b7386;
+
+  --color-accent-violet: #a78bfa;
+  --color-accent-cyan: #22d3ee;
+  --color-accent-amber: #fbbf24;
+  --color-accent-emerald: #34d399;
+  --color-accent-rose: #fb7185;
+  --color-gold: #d4af37;
+
+  --color-danger: #f87171;
+  --color-success: #4ade80;
+
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Outfit Variable", "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+
+  --radius-card: 1rem;
+
+  --animate-rise: rise 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-pulse-soft: pulse-soft 2.4s ease-in-out infinite;
+}
+
+/* Les variables `--accent-*` sont référencées par le catalogue de jeux
+   (packages/shared) pour colorer chaque vignette du lobby. */
+:root {
+  --accent-violet: var(--color-accent-violet);
+  --accent-cyan: var(--color-accent-cyan);
+  --accent-amber: var(--color-accent-amber);
+  --accent-emerald: var(--color-accent-emerald);
+  --accent-rose: var(--color-accent-rose);
+
+  color-scheme: dark;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes pulse-soft {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--color-night);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    /* Halos discrets en haut de page : donne de la profondeur au fond plat
+       sans image de fond à télécharger. */
+    background-image:
+      radial-gradient(60rem 40rem at 15% -10%, color-mix(in oklab, var(--color-accent-violet) 14%, transparent), transparent),
+      radial-gradient(50rem 35rem at 85% -5%, color-mix(in oklab, var(--color-accent-cyan) 10%, transparent), transparent);
+    background-attachment: fixed;
+    min-height: 100dvh;
+  }
+
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-display);
+    letter-spacing: -0.02em;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-accent-cyan);
+    outline-offset: 2px;
+  }
+
+  /* Respect du réglage système : les animations décoratives disparaissent. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+@layer components {
+  .card-surface {
+    background-color: color-mix(in oklab, var(--color-surface) 85%, transparent);
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-card);
+    backdrop-filter: blur(12px);
+  }
+}
