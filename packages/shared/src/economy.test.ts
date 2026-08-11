@@ -6,6 +6,7 @@ import {
   DAILY_BONUS_CAP_STREAK,
   dailyBonusAmount,
   formatCoinsDelta,
+  WALLET_REASON_LABELS,
   motusReward,
   nextMotusSlot,
   nextParisMidnight,
@@ -84,6 +85,11 @@ describe("addDays", () => {
 });
 
 describe("récompense Motus", () => {
+  it("distingue la mise du versement dans le journal", () => {
+    expect(WALLET_REASON_LABELS.motus_stake).toBe("Mise Motus");
+    expect(WALLET_REASON_LABELS.motus_reward).toBe("Gain Motus");
+  });
+
   it("suit le barème dégressif", () => {
     expect(motusReward(1, true)).toBe(600);
     expect(motusReward(4, true)).toBe(250);

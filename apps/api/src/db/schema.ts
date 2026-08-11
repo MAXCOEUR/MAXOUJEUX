@@ -213,6 +213,8 @@ export const motusWords = pgTable(
     word: text("word").primaryKey(),
     length: integer("length").notNull(),
     active: boolean("active").notNull().default(true),
+    /** Sous-ensemble courant et familial pouvant être tiré comme solution. */
+    isSolution: boolean("is_solution").notNull().default(false),
   },
   (table) => [index("motus_words_length_active_idx").on(table.length, table.active)],
 );
@@ -240,9 +242,19 @@ export const motusAttempts = pgTable(
     solved: boolean("solved").notNull().default(false),
     /** Récompense effectivement versée. Empêche un second versement au même créneau. */
     reward: bigint("reward", { mode: "number" }).notNull().default(0),
+    /** Version autoritaire, comparée à celle jointe à chaque proposition. */
+    version: integer("version").notNull().default(0),
+    /** Null tant que la tentative peut être reprise, même après son créneau. */
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().default(now),
   },
-  (table) => [primaryKey({ columns: [table.userId, table.slotStart] })],
+  (table) => [
+    primaryKey({ columns: [table.userId, table.slotStart] }),
+    // Une tentative suspendue reste la seule tentative Motus ouverte du compte.
+    uniqueIndex("motus_attempts_user_active_idx")
+      .on(table.userId)
+      .where(sql`${table.finishedAt} is null`),
+  ],
 );
 
 // ---------------------------------------------------------------------------

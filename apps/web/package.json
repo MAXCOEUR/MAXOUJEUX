@@ -13,6 +13,7 @@
     "@fontsource-variable/bricolage-grotesque": "^5.3.0",
     "@fontsource-variable/figtree": "^5.3.0",
     "@fontsource-variable/jetbrains-mono": "^5.3.0",
+    "@maxoujeux/engines": "workspace:*",
     "@maxoujeux/shared": "workspace:*",
     "@tanstack/react-query": "^5.64.1",
     "lucide-react": "^0.471.1",

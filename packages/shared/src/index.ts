@@ -1,7 +1,9 @@
 export * from "./auth.js";
 export * from "./economy.js";
 export * from "./games.js";
+export * from "./motus.js";
 export * from "./realtime.js";
+export * from "./tables.js";
 
 /** Enveloppe d'erreur uniforme renvoyée par l'API sur tout statut >= 400. */
 export interface ApiError {

@@ -7,13 +7,14 @@ import {
   type WalletEntry,
   type WalletSummary,
 } from "@maxoujeux/shared";
-import { Coins, Gift, Loader2, Puzzle, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { Coins, Gift, Loader2, Puzzle } from "lucide-react";
+import { useState } from "react";
 import { ApiClientError } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { formatDuration, useCountdown } from "@/lib/countdown";
 import { useClaimDailyBonus, useWallet, useWalletHistory } from "@/lib/wallet";
 import { Button } from "./Button";
+import { Modal } from "./Modal";
 import { StreakStrip } from "./StreakStrip";
 
 interface WalletPanelProps {
@@ -30,82 +31,49 @@ interface WalletPanelProps {
 export function WalletPanel({ open, onClose }: WalletPanelProps) {
   const wallet = useWallet(open);
   const history = useWalletHistory(open);
-  const closeRef = useRef<HTMLButtonElement>(null);
-
-  // Échappement et focus initial : le panneau doit se fermer au clavier, et le
-  // focus ne doit pas rester derrière lui sur la page.
-  useEffect(() => {
-    if (!open) return;
-
-    closeRef.current?.focus();
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [open, onClose]);
-
-  if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end">
-      {/* Fond cliquable pour fermer. `aria-hidden` : le bouton de fermeture
-          dédié suffit aux technologies d'assistance. */}
-      <div
-        aria-hidden
-        onClick={onClose}
-        className="absolute inset-0 bg-black/65 backdrop-blur-sm"
-      />
-
-      <aside
-        role="dialog"
-        aria-modal="true"
-        aria-label={COIN_NAME}
-        className={cn(
-          "relative flex h-full w-full max-w-md flex-col overflow-y-auto",
-          "animate-rise border-l border-line bg-felt shadow-2xl",
+    <Modal
+      open={open}
+      onClose={onClose}
+      variant="lateral"
+      label={COIN_NAME}
+      title={
+        <span className="flex items-center gap-2">
+          <Coins className="size-5 text-brass" aria-hidden />
+          {COIN_NAME}
+        </span>
+      }
+    >
+      <div className="space-y-5">
+        {wallet.isPending && (
+          <div className="grid place-items-center py-10">
+            <Loader2 className="size-5 animate-spin text-cream-faint" aria-label="Chargement" />
+          </div>
         )}
-      >
-        <header className="sticky top-0 z-10 flex items-center justify-between border-b border-line bg-felt/95 px-5 py-4 backdrop-blur">
-          <h2 className="flex items-center gap-2 font-display text-lg font-semibold text-cream">
-            <Coins className="size-5 text-brass" aria-hidden />
-            {COIN_NAME}
-          </h2>
-          <Button ref={closeRef} variant="ghost" onClick={onClose} aria-label="Fermer" className="px-2.5">
-            <X className="size-4" aria-hidden />
-          </Button>
-        </header>
 
-        <div className="space-y-5 px-5 py-5">
-          {wallet.isPending && (
-            <div className="grid place-items-center py-10">
-              <Loader2 className="size-5 animate-spin text-cream-faint" aria-label="Chargement" />
-            </div>
-          )}
-
-          {wallet.isError && (
-            <p role="alert" className="rounded-lg bg-danger/10 px-3 py-2 text-sm text-danger">
-              Impossible de charger ton porte-monnaie.
-            </p>
-          )}
-
-          {wallet.data && (
-            <>
-              <BalanceCard balance={wallet.data.balance} />
-              <DailyBonusCard summary={wallet.data} />
-              <MotusCard nextSlotAt={wallet.data.nextMotusSlotAt} />
-            </>
-          )}
-
-          <HistorySection entries={history.data?.entries} loading={history.isPending} />
-
-          <p className="pt-2 text-xs leading-relaxed text-cream-faint">
-            Les {COIN_NAME} n'ont aucune valeur monétaire. Ils ne peuvent être ni achetés, ni
-            convertis, ni transférés entre comptes.
+        {wallet.isError && (
+          <p role="alert" className="rounded-lg bg-danger/10 px-3 py-2 text-sm text-danger">
+            Impossible de charger ton porte-monnaie.
           </p>
-        </div>
-      </aside>
-    </div>
+        )}
+
+        {wallet.data && (
+          <>
+            <BalanceCard balance={wallet.data.balance} />
+            <DailyBonusCard summary={wallet.data} />
+            <MotusCard nextSlotAt={wallet.data.nextMotusSlotAt} />
+          </>
+        )}
+
+        <HistorySection entries={history.data?.entries} loading={history.isPending} />
+
+        <p className="pt-2 text-xs leading-relaxed text-cream-faint">
+          Les {COIN_NAME} n'ont aucune valeur monétaire. Ils ne peuvent être ni achetés, ni
+          convertis, ni transférés entre comptes.
+        </p>
+      </div>
+    </Modal>
   );
 }
 
@@ -197,7 +165,9 @@ function MotusCard({ nextSlotAt }: { nextSlotAt: string }) {
         <Puzzle className="size-4 text-game-motus" aria-hidden />
         Prochain mot Motus
       </h3>
-      <p className="tabular mt-2 text-2xl font-bold text-cream">
+      {/* Une taille en dessous depuis que les secondes s'affichent : la chaîne
+          gagne cinq caractères et débordait du panneau sur petit écran. */}
+      <p className="tabular mt-2 text-xl font-bold text-cream sm:text-2xl">
         {formatDuration(remaining)}
       </p>
       <p className="mt-1 text-xs text-cream-dim">

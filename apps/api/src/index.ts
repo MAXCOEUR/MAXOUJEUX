@@ -7,6 +7,8 @@ import { env, isDevelopment, isProduction } from "./env.js";
 import { registerErrorHandler } from "./lib/errors.js";
 import { authRoutes } from "./modules/auth/routes.js";
 import { lobbyRoutes } from "./modules/lobby/routes.js";
+import { shutdown as shutdownTables } from "./modules/tables/manager.js";
+import { shutdown as shutdownMotus } from "./modules/motus/service.js";
 import { purgeExpiredSessions } from "./modules/auth/session.js";
 import { walletRoutes } from "./modules/wallet/routes.js";
 import { attachRealtime } from "./realtime/index.js";
@@ -98,6 +100,11 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
 
     void (async () => {
       try {
+        // Les minuteries de tables d'abord : un `setTimeout` encore armé
+        // empêche Node de rendre la main, et un forfait déclenché pendant
+        // l'arrêt écrirait en base alors qu'on la referme.
+        shutdownTables();
+        shutdownMotus();
         await io.close();
         await app.close();
         await closeDatabase();

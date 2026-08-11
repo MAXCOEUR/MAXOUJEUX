@@ -3,20 +3,31 @@ import {
   GAMES,
   type CurrentUser,
   type GameDefinition,
+  type TableCounts,
 } from "@maxoujeux/shared";
-import { Lock, Users } from "lucide-react";
+import { Lock, Play, Users } from "lucide-react";
 import { Avatar } from "@/components/Avatar";
 import { Button } from "@/components/Button";
 import { GameArtefact } from "@/components/GameArtefact";
+import { Lien } from "@/components/Lien";
+import { Plaque } from "@/components/Plaque";
 import { StreakStrip } from "@/components/StreakStrip";
 import { ApiClientError } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { formatDuration, useCountdown } from "@/lib/countdown";
+import { useLobby } from "@/lib/lobby";
 import { useRealtime } from "@/lib/socket";
+import { useTables } from "@/lib/tables";
 import { useClaimDailyBonus, useWallet } from "@/lib/wallet";
 
 export function LobbyPage({ user }: { user: CurrentUser }) {
   const presence = useRealtime((state) => state.presence);
+  const lobby = useLobby();
+  const liveCounts = useTables((state) => state.counts);
+
+  // La socket est la source à jour ; l'appel REST ne sert qu'à ne pas afficher
+  // « 0 table » pendant la seconde d'établissement de la liaison.
+  const counts = Object.keys(liveCounts).length > 0 ? liveCounts : (lobby.data?.tables ?? {});
 
   return (
     <div className="space-y-8">
@@ -36,7 +47,12 @@ export function LobbyPage({ user }: { user: CurrentUser }) {
             laisseraient un trou en fin de grille et aucun point d'entrée. */}
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {GAMES.map((game, index) => (
-            <GameCard key={game.code} game={game} delay={index * 70} />
+            <GameCard
+              key={game.code}
+              game={game}
+              counts={counts[game.code]}
+              delay={index * 70}
+            />
           ))}
         </div>
       </section>
@@ -158,8 +174,11 @@ function WelcomeBar({ user }: { user: CurrentUser }) {
               même si le jeu n'est pas encore ouvert. */}
           {wallet.data && (
             <div className="flex items-center justify-between gap-3 rounded-xl border border-line bg-felt-deep/40 px-3 py-2">
-              <span className="text-xs text-cream-dim">Prochain mot Motus</span>
-              <span className="tabular text-xs font-semibold text-game-motus">
+              {/* `min-w-0 truncate` / `shrink-0` : depuis que les secondes
+                  s'affichent, la valeur est plus large et poussait le libellé
+                  hors de la boîte sur petit écran. */}
+              <span className="min-w-0 truncate text-xs text-cream-dim">Prochain mot Motus</span>
+              <span className="tabular shrink-0 text-xs font-semibold text-game-motus">
                 {formatDuration(untilMotus)}
               </span>
             </div>
@@ -176,12 +195,23 @@ function WelcomeBar({ user }: { user: CurrentUser }) {
   );
 }
 
-function GameCard({ game, delay }: { game: GameDefinition; delay: number }) {
+function GameCard({
+  game,
+  counts,
+  delay,
+}: {
+  game: GameDefinition;
+  counts: TableCounts | undefined;
+  delay: number;
+}) {
   const locked = game.status !== "live";
   const wager =
     game.wager.min === game.wager.max
       ? formatCoins(game.wager.min)
       : `${formatCoins(game.wager.min)} – ${formatCoins(game.wager.max)}`;
+
+  const ouvertes = counts?.waiting ?? 0;
+  const enCours = counts?.playing ?? 0;
 
   return (
     <article
@@ -199,8 +229,8 @@ function GameCard({ game, delay }: { game: GameDefinition; delay: number }) {
         style={{ backgroundColor: game.accent }}
       />
 
-      <div className={cn("flex gap-4 p-5", game.featured && "sm:gap-6 sm:p-6")}>
-        <div className="min-w-0 flex-1">
+      <div className={cn("flex flex-1 gap-4 p-5", game.featured && "sm:gap-6 sm:p-6")}>
+        <div className="flex min-w-0 flex-1 flex-col">
           <div className="flex items-start gap-2">
             <h3
               className={cn(
@@ -210,11 +240,18 @@ function GameCard({ game, delay }: { game: GameDefinition; delay: number }) {
             >
               {game.name}
             </h3>
-            {locked && (
-              <span className="plaque ml-auto flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-[10px] font-semibold uppercase tracking-wide">
-                <Lock className="size-3" aria-hidden />
+            {locked ? (
+              <Plaque icon={Lock} className="ml-auto">
                 Lot {game.milestone}
-              </span>
+              </Plaque>
+            ) : ouvertes > 0 ? (
+              <Plaque tone="actif" className="ml-auto">
+                {ouvertes} table{ouvertes > 1 ? "s" : ""} libre{ouvertes > 1 ? "s" : ""}
+              </Plaque>
+            ) : (
+              <Plaque tone="attente" className="ml-auto">
+                Ouvert
+              </Plaque>
             )}
           </div>
 
@@ -251,6 +288,26 @@ function GameCard({ game, delay }: { game: GameDefinition; delay: number }) {
               </div>
             )}
           </dl>
+
+          {/* Point d'entrée du jeu. Un vrai lien : le clic milieu, le Ctrl+clic
+              et le clavier fonctionnent comme partout ailleurs. */}
+          <div className="mt-auto pt-4">
+            {locked ? (
+              <p className="text-xs text-cream-faint">Disponible au lot {game.milestone}.</p>
+            ) : (
+              <Lien to={{ name: "salon", game: game.code }} className="inline-block">
+                <Button className="px-3.5 py-2">
+                  <Play className="size-4" aria-hidden />
+                  Jouer
+                  {enCours > 0 && (
+                    <span className="tabular text-xs font-normal opacity-70">
+                      · {enCours} en cours
+                    </span>
+                  )}
+                </Button>
+              </Lien>
+            )}
+          </div>
         </div>
 
         {/* L'artefact : c'est lui qui distingue une table d'une autre. */}

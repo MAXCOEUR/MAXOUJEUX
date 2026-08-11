@@ -1,22 +1,24 @@
-import type {
-  ClientToServerEvents,
-  ServerToClientEvents,
-  SocketData,
-} from "@maxoujeux/shared";
 import fastifyCookie from "@fastify/cookie";
 import type { FastifyInstance } from "fastify";
 import { Server } from "socket.io";
 import { env, isProduction } from "../env.js";
 import { SESSION_COOKIE, resolveSession } from "../modules/auth/session.js";
+import {
+  attach,
+  detach,
+  setTableLogger,
+  setTableNotifier,
+  viewFor,
+} from "../modules/tables/manager.js";
+import { setRealtimeLogger } from "./guard.js";
+import { createMotusNotifier, registerMotusHandlers } from "./motus.js";
 import { setWalletNotifier } from "./notify.js";
 import { addConnection, presenceSnapshot, removeConnection } from "./presence.js";
+import { createTableNotifier, registerTableHandlers } from "./tables.js";
+import { userRoom, type GameServer } from "./types.js";
+import { setMotusNotifier, unwatch as unwatchMotus } from "../modules/motus/service.js";
 
-export type GameServer = Server<ClientToServerEvents, ServerToClientEvents, never, SocketData>;
-
-/** Nom de la room privée d'un compte, partagée par tous ses appareils. */
-function userRoom(userId: string): string {
-  return `user:${userId}`;
-}
+export type { GameServer } from "./types.js";
 
 /**
  * Monte Socket.IO sur le serveur HTTP de Fastify.
@@ -68,6 +70,13 @@ export function attachRealtime(app: FastifyInstance): GameServer {
     io.to(userRoom(userId)).emit("wallet:update", { balance });
   });
 
+  // Même principe pour les tables. Les deux journaliseurs sont injectés parce
+  // que ni le gestionnaire ni le garde-fou ne doivent dépendre de Fastify.
+  setTableNotifier(createTableNotifier(io));
+  setMotusNotifier(createMotusNotifier(io));
+  setTableLogger((error, message) => app.log.error({ err: error }, message));
+  setRealtimeLogger((error, message) => app.log.error({ err: error }, message));
+
   io.on("connection", (socket) => {
     const player = {
       userId: socket.data.userId,
@@ -76,7 +85,7 @@ export function attachRealtime(app: FastifyInstance): GameServer {
     };
 
     // Room par compte : permet d'adresser un joueur sur tous ses appareils.
-    // Servira aussi aux invitations et aux notifications de tour au lot 1.
+    // C'est aussi par elle que passe l'état des parties.
     void socket.join(userRoom(player.userId));
 
     // On enregistre d'abord, pour que l'arrivant se voie lui-même dans la liste.
@@ -92,7 +101,29 @@ export function attachRealtime(app: FastifyInstance): GameServer {
       socket.emit("presence:update", presenceSnapshot());
     });
 
+    registerTableHandlers(socket);
+    registerMotusHandlers(socket);
+
+    /**
+     * Rattachement à la partie en cours.
+     *
+     * Une reconnexion Socket.IO fournit un nouvel identifiant de socket, donc
+     * plus aucune room : sans ce rattachement, un joueur qui recharge sa page en
+     * pleine partie ne recevrait plus rien et perdrait sa mise au bout du
+     * sursis. C'est aussi ce qui annule le sursis déjà armé.
+     */
+    const resumed = attach(player.userId);
+    if (resumed) {
+      const view = viewFor(resumed, player.userId);
+      if (view) socket.emit("match:state", view);
+    }
+
     socket.on("disconnect", () => {
+      // L'ordre importe : le sursis d'abandon est armé sur la perte de la
+      // dernière socket, il faut donc décompter avant de tester la présence.
+      detach(player.userId);
+      unwatchMotus(player.userId, socket.id);
+
       if (removeConnection(player.userId)) {
         io.emit("presence:update", presenceSnapshot());
       }

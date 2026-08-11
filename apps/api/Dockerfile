@@ -19,6 +19,7 @@ WORKDIR /app
 FROM base AS deps
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY packages/shared/package.json packages/shared/
+COPY packages/engines/package.json packages/engines/
 COPY apps/api/package.json apps/api/
 COPY apps/web/package.json apps/web/
 # `sharing=locked` : les étapes `deps` et `runtime` descendent toutes deux de
@@ -31,6 +32,7 @@ RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store,sharing=locked \
 FROM deps AS build
 COPY tsconfig.base.json ./
 COPY packages/shared packages/shared
+COPY packages/engines packages/engines
 COPY apps/api apps/api
 RUN pnpm --filter @maxoujeux/api build
 
@@ -42,6 +44,7 @@ ENV NODE_ENV=production
 # bundle, il n'y a donc plus de lien d'atelier à résoudre ici.
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY packages/shared/package.json packages/shared/
+COPY packages/engines/package.json packages/engines/
 COPY apps/api/package.json apps/api/
 COPY apps/web/package.json apps/web/
 #

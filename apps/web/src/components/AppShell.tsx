@@ -4,7 +4,10 @@ import { useState, type ReactNode } from "react";
 import { Avatar } from "./Avatar";
 import { Button } from "./Button";
 import { ConnectionBadge } from "./ConnectionBadge";
+import { Lien } from "./Lien";
 import { Logo } from "./Logo";
+import { ResumeBanner } from "./ResumeBanner";
+import { Toaster } from "./Toaster";
 import { WalletPanel } from "./WalletPanel";
 import { useLogout } from "@/lib/session";
 
@@ -19,9 +22,11 @@ export function AppShell({ user, children }: AppShellProps) {
 
   return (
     <div className="flex min-h-dvh flex-col">
-      <header className="sticky top-0 z-20 border-b border-line bg-felt-deep/85 backdrop-blur-md">
+      <header className="sticky top-0 z-20 border-b border-line bg-felt-deep/85 pt-[env(safe-area-inset-top)] backdrop-blur-md">
         <div className="mx-auto flex h-16 w-full max-w-6xl items-center gap-3 px-4 sm:px-6">
-          <Logo className="text-xl" />
+          <Lien to={{ name: "lobby" }} aria-label="Retour au lobby">
+            <Logo className="text-xl" />
+          </Lien>
           <ConnectionBadge className="hidden sm:flex" />
 
           <div className="ml-auto flex items-center gap-2 sm:gap-3">
@@ -68,13 +73,16 @@ export function AppShell({ user, children }: AppShellProps) {
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 sm:px-6 sm:py-10">{children}</main>
+      <ResumeBanner />
 
-      <footer className="border-t border-line px-4 py-6 text-center text-xs text-cream-faint">
+      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6 sm:py-10">{children}</main>
+
+      <footer className="border-t border-line px-4 py-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))] text-center text-xs text-cream-faint">
         MaxouJeux — les {COIN_NAME} sont des jetons de jeu, sans valeur monétaire.
       </footer>
 
       <WalletPanel open={walletOpen} onClose={() => setWalletOpen(false)} />
+      <Toaster />
     </div>
   );
 }

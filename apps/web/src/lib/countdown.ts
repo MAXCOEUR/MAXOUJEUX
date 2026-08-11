@@ -1,39 +1,51 @@
 import { useEffect, useState } from "react";
+import { msUntilServer } from "./clock.js";
+
+// Les formateurs vivent dans `@maxoujeux/shared` (`formatDuration`,
+// `formatClock`) : ce sont des fonctions pures, elles y sont couvertes par les
+// tests du paquet sans imposer de harnais de test au front. Réexportés ici pour
+// que les composants n'aient qu'un seul import à faire.
+export { formatClock, formatDuration } from "@maxoujeux/shared";
 
 /**
  * Compte à rebours vers un instant donné.
  *
- * Purement décoratif : c'est le serveur qui décide si un bonus est encaissable.
- * Une horloge locale décalée fera afficher un mauvais délai, jamais gagner un
- * MaxouCoin en avance.
+ * Purement décoratif : c'est le serveur qui décide si un bonus est encaissable
+ * ou si un tour est expiré. Une horloge locale décalée fera afficher un mauvais
+ * délai, jamais gagner un MaxouCoin en avance — et `msUntilServer` corrige même
+ * cet écart d'affichage.
  */
-export function useCountdown(target: string | undefined): number {
-  const [remaining, setRemaining] = useState(() => msUntil(target));
+export function useCountdown(target: string | undefined | null): number {
+  const [remaining, setRemaining] = useState(() => msUntilServer(target));
 
   useEffect(() => {
-    if (!target) return;
+    if (!target) {
+      setRemaining(0);
+      return;
+    }
 
-    setRemaining(msUntil(target));
-    const timer = setInterval(() => setRemaining(msUntil(target)), 1000);
-    return () => clearInterval(timer);
+    let timer: number;
+
+    const tick = () => {
+      const left = msUntilServer(target);
+      setRemaining(left);
+      if (left <= 0) return;
+
+      /**
+       * Réveil aligné sur la frontière de seconde, plutôt qu'un `setInterval`
+       * de 1 000 ms.
+       *
+       * Tant qu'on n'affichait que les minutes, la dérive était invisible ;
+       * avec les secondes à l'écran, un intervalle fixe finit par sauter une
+       * valeur ou bégayer. Recalculer depuis l'horloge à chaque tour rattrape
+       * aussi le bridage des minuteries d'onglet en arrière-plan.
+       */
+      timer = window.setTimeout(tick, left % 1_000 || 1_000);
+    };
+
+    tick();
+    return () => window.clearTimeout(timer);
   }, [target]);
 
   return remaining;
-}
-
-function msUntil(target: string | undefined): number {
-  if (!target) return 0;
-  return Math.max(0, new Date(target).getTime() - Date.now());
-}
-
-/** `3 h 12 min`, `12 min 40 s`, `40 s`. On n'affiche jamais trois unités. */
-export function formatDuration(ms: number): string {
-  const totalSeconds = Math.floor(ms / 1000);
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-
-  if (hours > 0) return `${hours} h ${String(minutes).padStart(2, "0")} min`;
-  if (minutes > 0) return `${minutes} min ${String(seconds).padStart(2, "0")} s`;
-  return `${seconds} s`;
 }

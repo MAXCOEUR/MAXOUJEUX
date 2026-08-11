@@ -1,0 +1,319 @@
+import { normalizeMotusDraft } from "@maxoujeux/engines";
+import {
+  formatCoins,
+  MOTUS_MAX_ATTEMPTS,
+  MOTUS_REWARDS,
+  type CurrentUser,
+  type MotusView,
+} from "@maxoujeux/shared";
+import { ArrowLeft, CircleCheck, CircleHelp, Loader2, Send, Trophy } from "lucide-react";
+import { useEffect, useState, type FormEvent } from "react";
+import { Button } from "@/components/Button";
+import { Countdown } from "@/components/Countdown";
+import { GameArtefact } from "@/components/GameArtefact";
+import { Lien } from "@/components/Lien";
+import { Modal } from "@/components/Modal";
+import { Plaque } from "@/components/Plaque";
+import { MotusBoard } from "@/components/games/MotusBoard";
+import { cn } from "@/lib/cn";
+import { useMotus } from "@/lib/motus";
+import { request, useRealtime, watchMotus } from "@/lib/socket";
+
+export function MotusPage({ user }: { user: CurrentUser }) {
+  const view = useMotus((state) => state.view);
+  const status = useRealtime((state) => state.status);
+
+  useEffect(() => watchMotus(), []);
+
+  if (!view) {
+    return (
+      <div className="grid place-items-center py-24">
+        {status === "connected" ? (
+          <p className="text-sm text-cream-dim">Le mot du créneau est indisponible.</p>
+        ) : (
+          <Loader2 className="size-6 animate-spin text-game-motus" aria-label="Chargement" />
+        )}
+      </div>
+    );
+  }
+
+  return <MotusContent user={user} view={view} />;
+}
+
+function MotusContent({ user, view }: { user: CurrentUser; view: MotusView }) {
+  const pending = useMotus((state) => state.pending);
+  const markPending = useMotus((state) => state.markPending);
+  const clearPending = useMotus((state) => state.clearPending);
+  const [draft, setDraft] = useState("");
+  const [error, setError] = useState<string>();
+  const [confirmAbandon, setConfirmAbandon] = useState(false);
+
+  useEffect(() => {
+    setDraft("");
+    setError(undefined);
+  }, [view.slotStart, view.version]);
+
+  async function commencer() {
+    markPending("start");
+    setError(undefined);
+    const reply = await request<null>((socket, ack) => socket.emit("motus:start", ack));
+    if (!reply.ok) {
+      clearPending();
+      setError(reply.message);
+    }
+  }
+
+  async function proposer(event: FormEvent) {
+    event.preventDefault();
+    if (draft.length !== view.length || pending) return;
+    markPending("guess");
+    setError(undefined);
+    const reply = await request<null>((socket, ack) =>
+      socket.emit("motus:guess", { guess: draft, version: view.version }, ack),
+    );
+    if (!reply.ok) {
+      clearPending();
+      setError(reply.message);
+    }
+  }
+
+  async function abandonner() {
+    markPending("abandon");
+    setError(undefined);
+    const reply = await request<null>((socket, ack) => socket.emit("motus:abandon", ack));
+    if (!reply.ok) {
+      clearPending();
+      setError(reply.message);
+      return;
+    }
+    setConfirmAbandon(false);
+  }
+
+  const playing = view.status === "playing";
+  const finished = view.status === "won" || view.status === "lost";
+  const canAfford = user.balance >= view.stake;
+
+  return (
+    <div className="space-y-5 pb-8">
+      <div className="flex items-center justify-between gap-3">
+        <Lien
+          to={{ name: "lobby" }}
+          className="inline-flex items-center gap-1.5 text-sm text-cream-dim transition-colors hover:text-cream"
+        >
+          <ArrowLeft className="size-4" aria-hidden />
+          Le lobby
+        </Lien>
+        {playing && (
+          <Button variant="ghost" onClick={() => setConfirmAbandon(true)} className="text-xs">
+            Abandonner
+          </Button>
+        )}
+      </div>
+
+      <header className="panel relative overflow-hidden p-5 sm:p-7">
+        <span className="absolute inset-x-0 top-0 h-0.5 bg-game-motus" aria-hidden />
+        <div className="flex items-center gap-4 sm:gap-6">
+          <div className="w-16 shrink-0 sm:w-24" aria-hidden>
+            <GameArtefact code="motus" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="font-display text-2xl font-black text-cream sm:text-3xl">Motus</h1>
+              <Plaque tone={playing ? "actif" : finished ? "gain" : "attente"}>
+                {playing ? `${view.attemptsLeft} essais` : finished ? "Terminé" : "Disponible"}
+              </Plaque>
+            </div>
+            <p className="mt-1 text-sm text-cream-dim">
+              {view.length} lettres, aucun indice. Chaque couleur rapproche du mot.
+            </p>
+          </div>
+        </div>
+      </header>
+
+      {view.status === "available" ? (
+        <BeforeGame view={view} canAfford={canAfford} pending={pending !== null} error={error} onStart={commencer} />
+      ) : (
+        <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_17rem]">
+          <section className="panel min-w-0 p-4 sm:p-6" aria-labelledby="motus-grid-title">
+            <div className="mb-4 flex items-baseline justify-between gap-3">
+              <h2 id="motus-grid-title" className="font-display text-lg font-bold text-cream">
+                Le mot du créneau
+              </h2>
+              <span className="tabular text-xs text-cream-faint">
+                {view.guesses.length} / {MOTUS_MAX_ATTEMPTS}
+              </span>
+            </div>
+
+            <MotusBoard view={view} draft={draft} pending={pending === "guess"} />
+
+            {playing && (
+              <form onSubmit={proposer} className="mx-auto mt-5 max-w-xl">
+                <label htmlFor="motus-guess" className="sr-only">
+                  Proposer un mot de {view.length} lettres
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    id="motus-guess"
+                    autoFocus
+                    autoComplete="off"
+                    autoCapitalize="characters"
+                    spellCheck={false}
+                    inputMode="text"
+                    value={draft}
+                    maxLength={view.length}
+                    onChange={(event) => {
+                      setDraft(normalizeMotusDraft(event.target.value, view.length));
+                      setError(undefined);
+                    }}
+                    disabled={pending !== null}
+                    className={cn(
+                      "tabular min-w-0 flex-1 rounded-xl border bg-felt-deep px-4 py-3",
+                      "text-center text-lg font-bold tracking-[0.2em] text-cream uppercase",
+                      "placeholder:tracking-normal placeholder:text-cream-faint",
+                      error ? "border-danger" : "border-line-strong",
+                    )}
+                    placeholder={`${view.length} lettres`}
+                  />
+                  <Button
+                    type="submit"
+                    loading={pending === "guess"}
+                    disabled={draft.length !== view.length || pending !== null}
+                    aria-label="Valider le mot"
+                    className="px-4"
+                  >
+                    <Send className="size-4" aria-hidden />
+                    <span className="hidden sm:inline">Valider</span>
+                  </Button>
+                </div>
+                {error && <p role="alert" className="mt-2 text-sm text-danger">{error}</p>}
+              </form>
+            )}
+
+            {finished && <Result view={view} pending={pending !== null} error={error} onStart={commencer} />}
+          </section>
+
+          <aside className="space-y-4">
+            <Legend />
+            <RewardScale compact used={view.guesses.length} />
+          </aside>
+        </div>
+      )}
+
+      <p aria-live="polite" aria-atomic="true" className="sr-only">
+        {view.status === "won"
+          ? `Mot trouvé en ${view.guesses.length} essais. Gain ${view.payout} MaxouCoin.`
+          : view.status === "lost"
+            ? "Tentative terminée sans gain."
+            : playing
+              ? `${view.attemptsLeft} essais restants.`
+              : "Motus prêt à commencer."}
+      </p>
+
+      <Modal
+        open={confirmAbandon}
+        onClose={() => setConfirmAbandon(false)}
+        title="Abandonner ce mot ?"
+        footer={
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => setConfirmAbandon(false)}>Continuer</Button>
+            <Button variant="outline" onClick={abandonner} loading={pending === "abandon"} className="text-danger">
+              Abandonner définitivement
+            </Button>
+          </div>
+        }
+      >
+        <p className="text-sm leading-relaxed text-cream-dim">
+          La mise ne sera pas remboursée et ce créneau ne pourra plus être rejoué. Fermer simplement la page suspend la tentative.
+        </p>
+      </Modal>
+    </div>
+  );
+}
+
+function BeforeGame({
+  view,
+  canAfford,
+  pending,
+  error,
+  onStart,
+}: {
+  view: MotusView;
+  canAfford: boolean;
+  pending: boolean;
+  error?: string;
+  onStart: () => void;
+}) {
+  return (
+    <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_20rem]">
+      <section className="panel p-5 sm:p-7">
+        <p className="max-w-2xl text-base leading-relaxed text-cream-dim">
+          Trouve un mot français en six propositions. Vert : bonne lettre, bonne place. Jaune : bonne lettre, autre place. Gris : lettre absente.
+        </p>
+        <Legend className="mt-6" />
+        <div className="mt-7 border-t border-line pt-5">
+          <Button onClick={onStart} loading={pending} disabled={!canAfford} className="w-full sm:w-auto sm:text-base">
+            Commencer pour {formatCoins(view.stake)}
+          </Button>
+          {!canAfford && <p className="mt-2 text-sm text-danger">Solde insuffisant pour engager la mise.</p>}
+          {error && <p role="alert" className="mt-2 text-sm text-danger">{error}</p>}
+          <p className="mt-3 text-xs text-cream-faint">Une partie commencée reste disponible après la fin du créneau.</p>
+        </div>
+      </section>
+      <RewardScale />
+    </div>
+  );
+}
+
+function Legend({ className }: { className?: string }) {
+  return (
+    <div className={cn("panel-plat p-4", className)}>
+      <h2 className="font-display text-sm font-bold text-cream">Lire les couleurs</h2>
+      <ul className="mt-3 grid gap-2 text-xs text-cream-dim sm:grid-cols-3 lg:grid-cols-1">
+        <li className="flex items-center gap-2"><span className="size-4 rounded bg-win" aria-hidden /> Bien placée</li>
+        <li className="flex items-center gap-2"><span className="size-4 rounded bg-game-motus" aria-hidden /> Présente ailleurs</li>
+        <li className="flex items-center gap-2"><span className="size-4 rounded bg-felt-high ring-1 ring-line-strong" aria-hidden /> Absente</li>
+      </ul>
+    </div>
+  );
+}
+
+function RewardScale({ compact = false, used = 0 }: { compact?: boolean; used?: number }) {
+  return (
+    <section className="panel p-4 sm:p-5" aria-labelledby={compact ? "reward-title-side" : "reward-title"}>
+      <h2 id={compact ? "reward-title-side" : "reward-title"} className="flex items-center gap-2 font-display text-sm font-bold text-cream">
+        <Trophy className="size-4 text-brass" aria-hidden /> Barème
+      </h2>
+      <ol className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-xs sm:grid-cols-3 lg:grid-cols-2">
+        {MOTUS_REWARDS.map((reward, index) => (
+          <li key={reward} className={cn("flex justify-between gap-3", used > index && "opacity-45")}>
+            <span className="text-cream-faint">Essai {index + 1}</span>
+            <span className="tabular text-brass-bright">{formatCoins(reward)}</span>
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
+function Result({ view, pending, error, onStart }: { view: MotusView; pending: boolean; error?: string; onStart: () => void }) {
+  const won = view.status === "won";
+  return (
+    <div className="mx-auto mt-6 max-w-xl border-t border-line pt-5 text-center">
+      {won ? <CircleCheck className="mx-auto size-8 text-win" aria-hidden /> : <CircleHelp className="mx-auto size-8 text-cream-faint" aria-hidden />}
+      <h2 className="mt-2 font-display text-xl font-bold text-cream">
+        {won ? "Mot trouvé" : view.endReason === "abandoned" ? "Tentative abandonnée" : "Six essais utilisés"}
+      </h2>
+      <div className="mt-4 flex justify-center gap-8">
+        <div><p className="text-xs text-cream-faint">Gain brut</p><p className="tabular mt-1 text-xl font-bold text-brass-bright">{formatCoins(view.payout)}</p></div>
+        <div><p className="text-xs text-cream-faint">Bilan net</p><p className={cn("tabular mt-1 text-xl font-bold", view.net > 0 ? "text-win" : "text-danger")}>{view.net > 0 ? "+" : ""}{formatCoins(view.net)}</p></div>
+      </div>
+      {view.canStartCurrent ? (
+        <Button onClick={onStart} loading={pending} className="mt-5">Jouer le mot actuel</Button>
+      ) : (
+        <p className="mt-5 text-sm text-cream-dim">Prochain mot dans <Countdown to={view.nextSlotAt} className="text-game-motus" fallback="quelques instants" />.</p>
+      )}
+      {error && <p role="alert" className="mt-2 text-sm text-danger">{error}</p>}
+      <p className="mt-3 text-xs text-cream-faint">Le mot secret reste caché, même après une défaite.</p>
+    </div>
+  );
+}

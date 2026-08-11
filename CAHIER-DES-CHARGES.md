@@ -154,7 +154,7 @@ MaxouJeux/
 ├─ .env.example
 ├─ packages/
 │  ├─ shared/                  # types + schémas Zod, contrat front/back
-│  └─ engines/                 # logique pure des jeux (lots 1 à 4)
+│  └─ engines/                 # logique pure des jeux (Puissance 4, Morpion ; puis 2 à 4)
 └─ apps/
    ├─ api/                     # Fastify, Socket.IO, Drizzle
    └─ web/                     # React, Vite, Tailwind, nginx.conf
@@ -190,13 +190,43 @@ administrer en V1).
 
 | Jeu | Joueurs | Jetons | Lot |
 |---|---|---|---|
-| **Puissance 4** | 2 | oui | 1 |
-| **Morpion** | 2 | oui | 1 |
+| **Puissance 4** | 2 | oui | 1 — *livré* |
+| **Morpion** | 2 | oui | 1 — *livré* |
 | **Motus** — mot du créneau en solo | 1 | oui | 2 |
 | **Blackjack** — croupier automatique | 1 à 5 | oui | 3 |
 | **Texas Hold'em** | 2 à 9 | oui | 4 |
 
-### 7.1 Mises et gains
+### 7.1 Capacité initiale des jeux
+
+Le nombre de parties simultanées est volontairement plafonné afin qu'un afflux de
+joueurs ne puisse pas saturer le petit serveur. Au lancement, les limites sont :
+
+| Jeu | Capacité simultanée maximale |
+|---|---:|
+| **Puissance 4** | 10 parties de 2 joueurs |
+| **Morpion** | 10 parties de 2 joueurs |
+| **Motus** | 10 sessions solo |
+| **Blackjack** | 1 table de 5 joueurs |
+| **Texas Hold'em** | 1 table de 9 joueurs |
+
+Il n'existe donc qu'une seule table de poker et une seule table de blackjack au
+lancement. La création de tables supplémentaires constitue une évolution possible,
+à activer uniquement après avoir observé la consommation réelle du serveur et réalisé
+des tests de charge.
+
+Ces plafonds sont appliqués par le serveur, depuis une configuration centralisée. Un
+client ne peut ni les contourner ni créer directement une room. Un joueur ne peut
+participer qu'à **une seule partie active à la fois**, quel que soit le nombre d'onglets
+ou d'appareils connectés à son compte.
+
+Lorsque la capacité d'un jeu est atteinte, aucune nouvelle partie n'est créée et le
+serveur renvoie une erreur métier explicite ; les parties déjà commencées continuent
+normalement. Une partie terminée ou définitivement abandonnée est retirée sans délai du
+gestionnaire de rooms afin de libérer sa place. La vérification et la réservation de
+capacité doivent être atomiques pour que deux demandes simultanées ne puissent jamais
+dépasser le plafond.
+
+### 7.2 Mises et gains
 
 Une **mise est obligatoire dans tous les jeux**. Chaque jeu impose une mise maximale,
 affichée avant l'entrée à la table et validée par le serveur : le client ne peut jamais
@@ -242,16 +272,25 @@ Points connus qui font échouer les implémentations naïves, à traiter explici
 
 Thème sombre « arcade feutrée », cohérent sur tous les écrans.
 
-- Fond `#0f1115`, surfaces bleutées, accents néon réservés aux éléments actifs.
+- Palette « feutre, laiton, crème » nommée d'après la matière : fond `#0b1410`, surfaces
+  vertes assombries, chaque jeu portant sa propre couleur d'accent.
 - Le **doré est réservé aux jetons et aux gains** — jamais décoratif, pour qu'il
-  reste un signal lisible.
-- Polices **Inter** et **Outfit** variables, auto-hébergées via npm : aucun appel à
-  un CDN, le site fonctionne sur un réseau local coupé d'Internet.
+  reste un signal lisible. Le tour actif est en vert, les erreurs en rouge.
+- Polices **Bricolage Grotesque** (titres), **Figtree** (texte) et **JetBrains Mono**
+  (chiffres et comptes à rebours) en versions variables, auto-hébergées via npm
+  (`@fontsource-variable`) : aucun appel à un CDN, le site fonctionne sur un réseau local
+  coupé d'Internet. Le monospace n'est pas décoratif — des chiffres de largeur fixe
+  empêchent la ligne de trembler à chaque seconde.
 - Avatars **procéduraux** dérivés d'une graine par compte : pas d'hébergement
   d'images, donc pas d'upload, de stockage ni de modération à prévoir.
-- Responsive obligatoire — les tables se jouent beaucoup au téléphone.
-- Accessibilité : navigation clavier, `aria-live` sur les erreurs de formulaire,
-  respect de `prefers-reduced-motion`.
+- Responsive obligatoire — les tables se jouent beaucoup au téléphone. L'orientation
+  paysage est traitée explicitement : sans cela, un téléphone couché n'affiche qu'un tiers
+  du plateau.
+- Accessibilité : navigation clavier, `aria-live` sur les erreurs de formulaire et sur le
+  tour de jeu, respect de `prefers-reduced-motion`. **Jamais de région annoncée sur un
+  compte à rebours** — un lecteur d'écran énoncerait chaque seconde et couvrirait tout le
+  reste. Les plateaux ne reposent jamais sur la seule couleur : le Morpion distingue par la
+  forme, et chaque siège rappelle son jeton à côté du pseudo.
 
 ---
 
@@ -302,12 +341,82 @@ Vérifications passées : typage strict sur les trois paquets, build de producti
 3 scénarios de handshake WebSocket — socket sans cookie refusée, socket avec cookie
 valide acceptée, socket avec signature falsifiée refusée.
 
+### Lot 1 — Temps réel, tables, Puissance 4 & Morpion : **livré**
+
+- **`packages/engines`** : nouveau paquet de règles pures. Contrat
+  `reduce(state, move) -> { state, events }` et `view(state, seat)`. Grille en tableau
+  plat, détection d'alignement commune aux deux jeux, coups illégaux typés
+  (`IllegalMove`). **31 tests** : les quatre directions d'alignement, le segment de cinq
+  disques, l'égalité sur grille pleine vérifiée case par case, l'immuabilité de l'état.
+- **Gestionnaire de tables** en mémoire : cycle de vie `waiting → playing → finished`,
+  plafond de 10 tables par jeu, index « une seule partie active par joueur » tous appareils
+  confondus, réservation **synchrone** avant écriture en base pour que deux demandes
+  simultanées ne puissent jamais dépasser une capacité ni occuper le même siège.
+- **Minuteries** : 30 s par coup puis forfait, 45 s de sursis après la perte de la dernière
+  socket puis abandon, 10 min pour une table sans adversaire puis annulation et
+  remboursement. Garde de version sur chaque rappel, purge à l'arrêt du serveur.
+- **Reconnexion** : un rechargement de page ou une coupure réseau ne coûte pas la mise.
+  L'état de la partie est repoussé au rattachement de la socket.
+- **Mises et règlement** : débit à l'entrée sur la table, versement de 1,5 × la mise au
+  vainqueur, remboursement sur égalité, écriture de `matches`, `match_players` et `stats`
+  dans une **seule transaction** avec les mouvements de MaxouCoin.
+- **Front** : routeur d'URL (`/`, `/jeu/:code`, `/table/:id`), salon des tables par jeu
+  avec état vide soigné et sélecteur de mise, plateaux Puissance 4 et Morpion animés,
+  anneau de temps par tour, bandeau de reprise de partie, notifications d'erreur.
+  Responsive PC / téléphone, orientation paysage traitée, secondes affichées sur tous les
+  comptes à rebours.
+
+Vérifications passées : typage strict sur les quatre paquets, **122 tests** (47 partagés,
+31 moteurs, 44 API), build de production (API 66 Ko, front 108 Ko gzip), et une partie
+complète jouée de bout en bout contre l'API réelle — deux comptes, deux sockets
+authentifiées par cookie, diffusion du salon, refus d'un coup hors tour et d'un coup sur
+état périmé, victoire détectée, soldes conformes (5 000 → 4 980 → 5 010 pour le vainqueur,
+4 980 pour le perdant, 10 MC retirés de l'économie).
+
+Décisions arrêtées à cette occasion :
+
+| Question | Choix retenu |
+|---|---|
+| Temps écoulé sur un coup | Forfait au bout de 30 s ; l'adversaire encaisse |
+| Déconnexion en pleine partie | 45 s de sursis, puis abandon |
+| Accès aux tables | Une page « salon » par jeu, depuis la carte du lobby |
+| Statistiques | Écrites en base, avec un récapitulatif discret ; Elo au lot 5 |
+
+### Lot 2 — Motus : **livré**
+
+- **Moteur pur** : normalisation des accents et de la cédille, comparaison en deux
+  passes pour les lettres doublées, six essais, et vue ne contenant jamais le secret.
+- **Dictionnaire embarqué** : 60 024 formes françaises acceptées de 5 à 8 lettres,
+  dont 3 868 solutions courantes et familiales. Il est dérivé de Lexique 4, figé par le
+  SHA-256 `8ed5a64373ae798f0485a2a35848c09286b6694c6859abeaab6806594c046993`, avec
+  filtrage des solutions par `french-badwords-list@1.0.7`. Le script reproductible et
+  les notices CC BY-SA 4.0 / MIT sont conservés dans `apps/api/scripts/` et
+  `apps/api/src/modules/motus/data/` ; aucune API externe n'est appelée en production.
+- **Quatre créneaux par jour** : tous les joueurs reçoivent le même mot du créneau.
+  La sélection concurrente est protégée par `INSERT … ON CONFLICT`, et une partie
+  commencée reste reprenable après le changement de créneau.
+- **Économie transactionnelle** : mise fixe de 100 MC, débit unique même sur double
+  clic, puis récompense brute de 600 / 450 / 350 / 250 / 175 / 100 MC selon l'essai.
+  Tentative, version, clôture et mouvements de portefeuille sont atomiques.
+- **Cycle de vie** : dix comptes attachés au maximum, multi-onglets compté une seule
+  fois, exclusion mutuelle avec les tables. Quitter ou perdre le réseau suspend la
+  tentative ; seul l'abandon explicite la clôt sans remboursement.
+- **Front** : accès direct par `/jeu/motus`, grille responsive de 5 à 8 lettres,
+  saisie native, couleurs accompagnées de libellés accessibles, synchronisation entre
+  onglets et reconnexion automatique. Après une défaite, le mot reste caché.
+
+Vérifications passées : typage strict sur les quatre paquets, **156 tests** (51 partagés,
+39 moteurs, 66 API), dont les courses réelles sur PostgreSQL 16 ; build de production
+(API 82,84 Ko, front 111,52 Ko gzip). La migration de 1,8 Mo contenant le dictionnaire
+s'applique en environ 3,9 s sur une base PGlite vierge. Les images locales mesurées font
+303,5 Mo pour l'API et 48,9 Mo pour le front. Le parcours navigateur couvre les grilles
+5 et 8 lettres, téléphone 360 px sans débordement, deux onglets, coupure réseau,
+abandon et réduction des mouvements.
+
 ### Lots suivants
 
 | Lot | Contenu | Charge |
 |---|---|---|
-| **1** | Couche temps réel générique (RoomManager, timers, reconnexion), matchmaking, Puissance 4 + Morpion, statistiques | 3 j |
-| **2** | Motus : dictionnaire, mot du créneau, solo et barème par essai | 3 j |
 | **3** | Blackjack : moteur, sabot, croupier, transactions de jetons | 4 j |
 | **4** | Poker Hold'em : moteur + ~60 tests, UI de table, timers, sit-out | 8–10 j |
 | **5** | Profils, classements Elo, chat, modération, sauvegardes | 3 j |
@@ -322,8 +431,13 @@ Chaque lot se termine sur une version déployée et jouable sur le NAS.
 
 ```bash
 pnpm install
-pnpm dev            # API sur :3000 (PGlite), front sur :5173
+cp .env.example .env   # renseigner au moins SESSION_SECRET (32 caractères minimum)
+pnpm dev               # API sur :3000 (PGlite), front sur :5173
 ```
+
+Le script `dev` de l'API charge `.env` s'il existe. `SESSION_SECRET` n'a **pas** de valeur
+par défaut : une clé de signature implicite serait une faille silencieuse, l'API refuse
+donc de démarrer sans elle.
 
 Pour développer sur un vrai PostgreSQL :
 
@@ -344,7 +458,8 @@ pnpm build
 
 ```bash
 cp .env.example .env        # renseigner POSTGRES_PASSWORD et SESSION_SECRET
-docker compose up -d --build
+docker compose pull
+docker compose up -d
 docker compose ps           # les trois services doivent être "healthy"
 ```
 
@@ -366,11 +481,10 @@ Les migrations sont rejouées automatiquement au démarrage de l'API.
   en cas de conflit avec un autre conteneur.
 - **Volume PostgreSQL** sur le pool SSD/NVMe si disponible, **jamais** sur un partage
   réseau.
-- **Sauvegarde** : `pg_dump` quotidien vers un dossier du NAS déjà sauvegardé. À
-  mettre en place au lot 5, avant que la base ne contienne des comptes réels.
-- **Construction des images** : le CPU ARM compile lentement. Soit `docker compose
-  build` directement sur le NAS (5 à 10 min pour le front), soit un build croisé
-  `docker buildx --platform linux/arm64` depuis un PC équipé de Docker, poussé sur
-  GHCR puis récupéré par `docker compose pull`.
+- **Sauvegarde** : `pg_dump` quotidien vers un dossier du NAS déjà sauvegardé. Une
+  sauvegarde vérifiée est obligatoire avant le premier déploiement de la migration Motus.
+- **Construction des images** : le NAS ne compile rien. Le workflow GitHub Actions
+  vérifie typage et tests, construit en ARM64, puis publie sur GHCR ; le NAS ne fait que
+  `docker compose pull`.
 - **Limite mémoire** : le conteneur `api` est plafonné à 512 Mo, pour qu'une fuite
   dans une partie n'emporte pas le NAS entier.

@@ -2,7 +2,7 @@ import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { drizzle as drizzlePostgres, type PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
-import { env, isProduction } from "../env.js";
+import { env, isProduction, isTest } from "../env.js";
 import * as schema from "./schema.js";
 
 export { schema };
@@ -55,10 +55,15 @@ async function connectPglite(): Promise<Connection> {
     import("drizzle-orm/pglite/migrator"),
   ]);
 
-  // PGlite ne crée pas l'arborescence parente : sans ce mkdir récursif, un
-  // premier lancement sur un dépôt fraîchement cloné échoue en ENOENT.
-  const dataDir = path.resolve(process.cwd(), ".data/pglite");
-  mkdirSync(dataDir, { recursive: true });
+  // Chaque processus Vitest reçoit sa base en mémoire : un serveur `pnpm dev`
+  // peut rester ouvert sans que les tests et lui écrivent simultanément dans
+  // le même répertoire PGlite, configuration que ce pilote ne supporte pas.
+  const dataDir = isTest ? "memory://" : path.resolve(process.cwd(), ".data/pglite");
+  if (!isTest) {
+    // PGlite ne crée pas l'arborescence parente : sans ce mkdir récursif, un
+    // premier lancement sur un dépôt fraîchement cloné échoue en ENOENT.
+    mkdirSync(dataDir, { recursive: true });
+  }
 
   const client = new PGlite(dataDir);
   const db = drizzle(client, { schema });

@@ -1,0 +1,155 @@
+import { X } from "lucide-react";
+import { useEffect, useId, useRef, type ReactNode } from "react";
+import { cn } from "@/lib/cn";
+import { Button } from "./Button";
+
+type Variant = "lateral" | "feuille";
+
+interface ModalProps {
+  open: boolean;
+  onClose: () => void;
+  title: ReactNode;
+  /** Étiquette accessible quand le titre n'est pas du texte simple. */
+  label?: string;
+  /**
+   * `lateral` : panneau collé à droite, pleine hauteur (porte-monnaie).
+   * `feuille` : feuille basse sur téléphone, boîte centrée sur grand écran.
+   */
+  variant?: Variant;
+  children: ReactNode;
+  footer?: ReactNode;
+  className?: string;
+}
+
+/**
+ * Boîte de dialogue.
+ *
+ * Extraite du panneau de porte-monnaie, qui portait déjà tout le motif —
+ * `role="dialog"`, fond flouté cliquable, fermeture à l'échappement. Deux
+ * manques du panneau d'origine sont corrigés ici parce qu'ils se paient
+ * immédiatement au clavier :
+ *
+ * - le focus était laissé filer derrière la boîte ; il y est maintenant piégé ;
+ * - il n'était pas rendu à l'élément déclencheur à la fermeture, ce qui perd
+ *   complètement un utilisateur au clavier.
+ */
+export function Modal({
+  open,
+  onClose,
+  title,
+  label,
+  variant = "feuille",
+  children,
+  footer,
+  className,
+}: ModalProps) {
+  const panelRef = useRef<HTMLDivElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
+  const titleId = useId();
+
+  useEffect(() => {
+    if (!open) return;
+
+    // Élément qui avait le focus avant l'ouverture : on le lui rendra.
+    const opener = document.activeElement as HTMLElement | null;
+    closeRef.current?.focus();
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+        return;
+      }
+      if (event.key !== "Tab") return;
+
+      // Piège de focus : sans lui, la tabulation sort de la boîte et parcourt la
+      // page qu'elle est censée masquer.
+      const focusables = panelRef.current?.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), [href], input:not([disabled]), select, textarea, [tabindex]:not([tabindex="-1"])',
+      );
+      if (!focusables || focusables.length === 0) return;
+
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      if (!first || !last) return;
+
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      document.body.style.overflow = previousOverflow;
+      opener?.focus?.();
+    };
+  }, [open, onClose]);
+
+  if (!open) return null;
+
+  const lateral = variant === "lateral";
+
+  return (
+    <div
+      className={cn(
+        "fixed inset-0 z-50 flex",
+        lateral ? "justify-end" : "items-end justify-center sm:items-center",
+      )}
+    >
+      {/* Fond cliquable pour fermer. `aria-hidden` : le bouton de fermeture
+          dédié suffit aux technologies d'assistance. */}
+      <div aria-hidden onClick={onClose} className="absolute inset-0 bg-black/65 backdrop-blur-sm" />
+
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={label ? undefined : titleId}
+        aria-label={label}
+        className={cn(
+          "animate-rise relative flex flex-col overflow-y-auto bg-felt shadow-2xl",
+          lateral
+            ? "h-full w-full max-w-md border-l border-line"
+            : cn(
+                "max-h-[92dvh] w-full rounded-t-2xl border border-line",
+                "sm:max-w-lg sm:rounded-2xl",
+                // Zone sûre iOS : sans ce complément, la barre d'action d'une
+                // feuille basse passe sous la barre de gestes.
+                "pb-[env(safe-area-inset-bottom)] sm:pb-0",
+              ),
+          className,
+        )}
+      >
+        <header className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-line bg-felt/95 px-5 py-4 backdrop-blur">
+          <h2 id={titleId} className="font-display text-lg font-semibold text-cream">
+            {title}
+          </h2>
+          <Button
+            ref={closeRef}
+            variant="ghost"
+            onClick={onClose}
+            aria-label="Fermer"
+            className="px-2.5"
+          >
+            <X className="size-4" aria-hidden />
+          </Button>
+        </header>
+
+        <div className="flex-1 px-5 py-5">{children}</div>
+
+        {footer && (
+          <footer className="sticky bottom-0 border-t border-line bg-felt/95 px-5 py-4 backdrop-blur">
+            {footer}
+          </footer>
+        )}
+      </div>
+    </div>
+  );
+}

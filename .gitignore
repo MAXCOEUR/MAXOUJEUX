@@ -23,6 +23,9 @@ pnpm-debug.log*
 # Réglages locaux de Claude Code (permissions propres au poste)
 .claude/settings.local.json
 
+# Captures et journaux locaux générés par Playwright MCP
+.playwright-mcp/
+
 # Éditeurs / OS
 .vscode/*
 !.vscode/extensions.json

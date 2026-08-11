@@ -28,7 +28,7 @@ import { notifyWallet } from "../../realtime/notify.js";
  * Les deux exposent la même surface de requête ; ce type évite de dupliquer
  * chaque fonction en version « dans une transaction » et « hors transaction ».
  */
-type Executor = Pick<Database, "select" | "insert" | "update">;
+export type Executor = Pick<Database, "select" | "insert" | "update">;
 
 function assertValidAmount(amount: number): void {
   if (!Number.isInteger(amount) || amount <= 0) {
@@ -127,6 +127,25 @@ async function debitFrom(
 // ---------------------------------------------------------------------------
 // API publique
 // ---------------------------------------------------------------------------
+
+/**
+ * Crédit et débit **dans une transaction fournie par l'appelant**.
+ *
+ * Nécessaires au règlement d'une partie : débiter deux joueurs, écrire le
+ * résultat dans `match_players` et incrémenter `stats` doivent réussir ou
+ * échouer ensemble, ce que `credit`/`debit` ne permettent pas puisqu'ils
+ * ouvrent chacun leur propre transaction.
+ *
+ * Contrat de l'appelant, en deux points :
+ * 1. la transaction lui appartient — c'est lui qui la valide ou l'annule ;
+ * 2. c'est à lui d'appeler `notifyWallet` **après** le commit. Notifier depuis
+ *    l'intérieur diffuserait un solde qui pourrait ne jamais être écrit.
+ *
+ * Le SQL qui touche `wallets` reste ici : ce module demeure le seul endroit
+ * autorisé à écrire dans la table, comme l'exige `CLAUDE.md`.
+ */
+export const creditInTx = creditInto;
+export const debitInTx = debitFrom;
 
 export async function credit(
   userId: string,

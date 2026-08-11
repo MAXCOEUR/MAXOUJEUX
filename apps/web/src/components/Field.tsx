@@ -33,7 +33,12 @@ export function Field({ label, error, hint, className, type = "text", ...props }
           aria-invalid={error ? true : undefined}
           aria-describedby={describedBy}
           className={cn(
-            "w-full rounded-xl border bg-felt-deep/60 px-3.5 py-2.5 text-sm text-cream",
+            // 16 px sur téléphone, 14 px au-delà : Safari iOS zoome
+            // automatiquement à la mise au point de tout champ sous 16 px, et
+            // l'écran d'inscription partait alors de travers. Le remède n'est
+            // pas de brider le `viewport` — ce serait une régression
+            // d'accessibilité — mais de ne pas descendre sous le seuil.
+            "w-full rounded-xl border bg-felt-deep/60 px-3.5 py-2.5 text-base text-cream sm:text-sm",
             "placeholder:text-cream-faint transition-colors",
             "focus:border-brass focus:outline-none",
             isPassword && "pr-11",

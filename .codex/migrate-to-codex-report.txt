@@ -1,0 +1,18 @@
+Migration inventory:
+  active: instruction files - 2 found
+    - CLAUDE.md
+    - AGENTS.md
+  active: skills - 2 found
+    - migrate-radix-to-base
+    - webapp-testing
+  inactive: command sources - none found
+  inactive: subagents - none found
+Migration surfaces:
+  active: AGENTS.md - 1 instruction file(s) found.
+  active: skills - 2 skill(s) converted.
+  inactive: MCP config - No settings or MCP config found.
+  inactive: subagents - No subagents found.
+Migration report:
+  symlinked: AGENTS.md - Linked to CLAUDE.md.
+  rewritten: .agents/skills/migrate-radix-to-base/SKILL.md - Converted Claude skill.
+  rewritten: .agents/skills/webapp-testing/SKILL.md - Converted Claude skill; license preserved in LICENSE.txt.

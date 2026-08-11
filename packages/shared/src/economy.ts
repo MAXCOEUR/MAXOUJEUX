@@ -146,7 +146,11 @@ export function getStakeTier(id: string): StakeTier | undefined {
 export const WALLET_REASONS = [
   "signup_bonus",
   "daily_bonus",
+  "motus_stake",
   "motus_reward",
+  "match_stake",
+  "match_payout",
+  "match_refund",
   "poker_buyin",
   "poker_cashout",
   "blackjack_bet",
@@ -159,7 +163,11 @@ export type WalletReason = (typeof WALLET_REASONS)[number];
 export const WALLET_REASON_LABELS: Record<WalletReason, string> = {
   signup_bonus: "Bienvenue",
   daily_bonus: "Bonus quotidien",
-  motus_reward: "Motus",
+  motus_stake: "Mise Motus",
+  motus_reward: "Gain Motus",
+  match_stake: "Mise à table",
+  match_payout: "Gain de partie",
+  match_refund: "Mise remboursée",
   poker_buyin: "Cave de poker",
   poker_cashout: "Sortie de table",
   blackjack_bet: "Mise blackjack",
@@ -208,6 +216,45 @@ export function formatCoins(amount: number): string {
 export function formatCoinsDelta(delta: number): string {
   const sign = delta < 0 ? "−" : "+";
   return `${sign}${numberFormatter.format(Math.abs(delta))} ${COIN_SYMBOL}`;
+}
+
+/**
+ * Durée restante en toutes lettres : `3 h 12 min 40 s`, `12 min 40 s`, `40 s`.
+ *
+ * Les secondes sont **toujours** affichées, y compris à côté des heures : un
+ * compte à rebours dont le dernier chiffre ne bouge pas passe pour figé, et le
+ * joueur ne sait pas si la page est encore vivante. La classe `tabular` du front
+ * empêche la ligne de trembler à chaque seconde.
+ *
+ * L'arrondi est fait vers le haut : avec `Math.floor`, la dernière seconde
+ * afficherait `0 s` pendant une seconde entière avant l'échéance.
+ */
+export function formatDuration(ms: number): string {
+  const total = Math.ceil(Math.max(0, ms) / 1000);
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const seconds = total % 60;
+
+  const pad = (value: number) => String(value).padStart(2, "0");
+  if (hours > 0) return `${hours} h ${pad(minutes)} min ${pad(seconds)} s`;
+  if (minutes > 0) return `${minutes} min ${pad(seconds)} s`;
+  return `${seconds} s`;
+}
+
+/**
+ * Forme compacte : `0:12`, `4:07`, `1:02:30`.
+ * Pour les espaces contraints — au centre d'un anneau de temps, « 12 s » ne
+ * tient pas là où `0:12` tient.
+ */
+export function formatClock(ms: number): string {
+  const total = Math.ceil(Math.max(0, ms) / 1000);
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const seconds = total % 60;
+
+  const pad = (value: number) => String(value).padStart(2, "0");
+  if (hours > 0) return `${hours}:${pad(minutes)}:${pad(seconds)}`;
+  return `${minutes}:${pad(seconds)}`;
 }
 
 // ---------------------------------------------------------------------------

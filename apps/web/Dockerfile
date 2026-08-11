@@ -18,6 +18,7 @@ WORKDIR /app
 FROM base AS deps
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY packages/shared/package.json packages/shared/
+COPY packages/engines/package.json packages/engines/
 COPY apps/api/package.json apps/api/
 COPY apps/web/package.json apps/web/
 # `sharing=locked` par cohérence avec l'image de l'API : garantit qu'aucune
@@ -28,6 +29,7 @@ RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store,sharing=locked \
 FROM deps AS build
 COPY tsconfig.base.json ./
 COPY packages/shared packages/shared
+COPY packages/engines packages/engines
 COPY apps/web apps/web
 RUN pnpm --filter @maxoujeux/web build
 

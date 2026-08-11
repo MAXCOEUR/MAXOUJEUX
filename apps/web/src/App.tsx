@@ -1,12 +1,18 @@
+import type { CurrentUser } from "@maxoujeux/shared";
 import { Loader2 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { AuthPage } from "@/pages/AuthPage";
 import { LobbyPage } from "@/pages/LobbyPage";
+import { MotusPage } from "@/pages/MotusPage";
+import { SalonPage } from "@/pages/SalonPage";
+import { TablePage } from "@/pages/TablePage";
+import { useRoute, type Route } from "@/lib/route";
 import { useSession } from "@/lib/session";
 import { useRealtimeConnection } from "@/lib/socket";
 
 export function App() {
   const session = useSession();
+  const route = useRoute();
 
   // La socket suit l'état d'authentification : ouverte à la connexion,
   // fermée à la déconnexion, sans intervention des pages.
@@ -35,13 +41,29 @@ export function App() {
     );
   }
 
+  // Le portier de session passe avant le routeur : sans compte, aucune adresse
+  // ne mène ailleurs qu'à l'écran de connexion. L'adresse est conservée, le
+  // joueur retombe donc sur la page visée après s'être identifié.
   if (!session.data) {
     return <AuthPage />;
   }
 
   return (
     <AppShell user={session.data}>
-      <LobbyPage user={session.data} />
+      <Screen route={route} user={session.data} />
     </AppShell>
   );
+}
+
+function Screen({ route, user }: { route: Route; user: CurrentUser }) {
+  switch (route.name) {
+    case "salon":
+      return route.game === "motus"
+        ? <MotusPage user={user} />
+        : <SalonPage user={user} game={route.game} />;
+    case "table":
+      return <TablePage user={user} tableId={route.tableId} />;
+    case "lobby":
+      return <LobbyPage user={user} />;
+  }
 }

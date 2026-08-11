@@ -18,6 +18,20 @@ export interface GameWager {
   /** Bornes obligatoires, en MaxouCoin. Deux valeurs égales indiquent une mise fixe. */
   min: number;
   max: number;
+  /**
+   * Pas entre deux mises autorisées, en MaxouCoin.
+   * Absent pour une mise fixe ou pour une cave choisie librement.
+   */
+  step?: number;
+  /**
+   * Multiplicateur appliqué à la mise du vainqueur, mise comprise.
+   *
+   * Doublonne volontairement `payout`, qui est une phrase destinée à l'œil :
+   * ici c'est la valeur avec laquelle le serveur calcule réellement le
+   * versement. Absent pour les jeux dont le gain découle des règles (poker,
+   * blackjack) ou d'un barème (Motus).
+   */
+  winMultiplier?: number;
   /** Résumé du versement au gagnant lorsqu'il ne découle pas directement des règles. */
   payout?: string;
 }
@@ -33,6 +47,15 @@ export interface GameDefinition {
   usesChips: boolean;
   /** Mise obligatoire et toujours plafonnée. */
   wager: GameWager;
+  /**
+   * Nombre de parties simultanées autorisées sur le serveur.
+   *
+   * Plafond volontaire : le NAS n'a pas à encaisser un afflux de joueurs, et
+   * une partie en cours ne doit jamais être dégradée par une nouvelle. Le
+   * chiffre vit ici et non dans le serveur pour que le front puisse afficher
+   * « 3 / 10 » sans dupliquer la valeur.
+   */
+  maxTables: number;
   status: GameStatus;
   /** Lot du plan de développement qui livre ce jeu. */
   milestone: number;
@@ -58,6 +81,7 @@ export const GAMES: readonly GameDefinition[] = [
     maxPlayers: 9,
     usesChips: true,
     wager: { label: "Cave", min: 500, max: 10_000 },
+    maxTables: 1,
     status: "soon",
     milestone: 4,
     accent: "var(--color-game-poker)",
@@ -71,6 +95,7 @@ export const GAMES: readonly GameDefinition[] = [
     maxPlayers: 5,
     usesChips: true,
     wager: { label: "Mise", min: 10, max: 2500 },
+    maxTables: 1,
     status: "soon",
     milestone: 3,
     accent: "var(--color-game-blackjack)",
@@ -83,7 +108,8 @@ export const GAMES: readonly GameDefinition[] = [
     maxPlayers: 1,
     usesChips: true,
     wager: { label: "Mise", min: 100, max: 100, payout: "100 à 600 MC" },
-    status: "soon",
+    maxTables: 10,
+    status: "live",
     milestone: 2,
     accent: "var(--color-game-motus)",
   },
@@ -94,8 +120,9 @@ export const GAMES: readonly GameDefinition[] = [
     minPlayers: 2,
     maxPlayers: 2,
     usesChips: true,
-    wager: { label: "Mise", min: 10, max: 100, payout: "1,5 × la mise" },
-    status: "soon",
+    wager: { label: "Mise", min: 10, max: 100, step: 10, winMultiplier: 1.5, payout: "1,5 × la mise" },
+    maxTables: 10,
+    status: "live",
     milestone: 1,
     accent: "var(--color-game-connect4)",
   },
@@ -106,8 +133,9 @@ export const GAMES: readonly GameDefinition[] = [
     minPlayers: 2,
     maxPlayers: 2,
     usesChips: true,
-    wager: { label: "Mise", min: 10, max: 100, payout: "1,5 × la mise" },
-    status: "soon",
+    wager: { label: "Mise", min: 10, max: 100, step: 10, winMultiplier: 1.5, payout: "1,5 × la mise" },
+    maxTables: 10,
+    status: "live",
     milestone: 1,
     accent: "var(--color-game-tictactoe)",
   },

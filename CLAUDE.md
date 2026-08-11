@@ -11,13 +11,18 @@ Le cahier des charges complet est dans `CAHIER-DES-CHARGES.md`.
 ```bash
 pnpm install
 pnpm dev                 # API :3000 + front :5173 en parallèle
-pnpm typecheck           # tsc --noEmit sur les 3 paquets — à lancer avant tout commit
+pnpm typecheck           # tsc --noEmit sur les 4 paquets — à lancer avant tout commit
 pnpm build               # tsup (API) + tsc && vite build (front)
-pnpm test                # vitest : 32 tests d'économie + 18 tests de porte-monnaie
+pnpm test                # vitest : 122 tests (47 partagés, 31 moteurs, 44 API)
 pnpm db:generate         # OBLIGATOIRE après toute modification de src/db/schema.ts
 ```
 
 Un seul test : `pnpm --filter @maxoujeux/api test -- chemin/du/fichier.test.ts -t "nom du cas"`
+
+`SESSION_SECRET` est **obligatoire** au démarrage de l'API. Le script `dev` charge
+`.env` à la racine s'il existe (`tsx --env-file-if-exists`) ; en production, la variable
+vient de l'environnement du conteneur. Sans elle, `env.ts` refuse de démarrer — c'est
+voulu, une clé de signature par défaut serait une faille silencieuse.
 
 `pnpm dev` ne nécessite **aucune** installation de base de données (voir « Deux pilotes »
 ci-dessous). Mais **PGlite ne prouve rien sur la concurrence** : c'est une base à
@@ -119,39 +124,71 @@ Idempotence du bonus quotidien : la clé primaire `(user_id, day)` de `daily_cla
 Sur deux requêtes simultanées, la seconde viole la contrainte et devient un 409 — aucun
 verrou applicatif n'est nécessaire.
 
+Deux primitives supplémentaires, `creditInTx` / `debitInTx`, acceptent une **transaction
+fournie par l'appelant**. Elles existent pour le règlement d'une partie : verser le gain,
+écrire `match_players.result` et incrémenter `stats` doivent réussir ou échouer ensemble,
+ce que `credit` / `debit` ne permettent pas puisqu'ils ouvrent chacun leur transaction.
+
+Le SQL touchant `wallets` reste donc **entièrement** dans ce module ; l'appelant
+n'orchestre que l'ordre des écritures. Deux obligations pour lui : la transaction est la
+sienne, et c'est à lui d'appeler `notifyWallet` **après** le commit — notifier avant
+diffuserait un solde qui pourrait ne jamais être écrit.
+
 ### Les barèmes vivent dans le paquet partagé
 
 `packages/shared/src/economy.ts` est la source unique des montants (bonus quotidien et sa
 série, barème Motus, paliers de mise) **et** des calculs de date en heure de Paris.
+`packages/shared/src/tables.ts` porte de même les durées de jeu (`TURN_MS`, `GRACE_MS`,
+`WAITING_TTL_MS`) et le calcul des mises (`stakeOptions`, `isValidStake`, `winPayout`).
+
+Ces constantes sont partagées et non dupliquées : le serveur en arme ses minuteries, le
+front en dimensionne son anneau de temps. Deux valeurs séparées finiraient par diverger
+d'une seconde, et l'anneau se viderait avant le forfait — ou l'inverse.
+
+Le pas de mise (10 MC), le multiplicateur de gain (1,5) et le plafond de tables par jeu
+vivent dans `games.ts`, à côté du reste du catalogue. `isValidStake` est appelée par le
+front pour griser un bouton **et** rejouée par le serveur : un contrôle client seul ne
+protège de rien.
 
 Le fuseau passe par `Intl`, jamais par un décalage codé en dur : Paris est en UTC+1 six
 mois par an et UTC+2 les six autres. `parisDay()` et `currentMotusSlot()` sont couverts
 par des tests sur les deux week-ends de changement d'heure.
 
 **L'horloge du client ne décide de rien.** Les comptes à rebours du front sont décoratifs ;
-c'est le serveur qui calcule le jour civil et l'éligibilité au bonus.
+c'est le serveur qui calcule le jour civil, l'éligibilité au bonus et l'expiration d'un
+tour. Le front corrige tout de même l'écart d'affichage via `apps/web/src/lib/clock.ts`,
+recalé par le champ `now` de chaque état reçu : un téléphone réglé trente secondes en
+avance annoncerait sinon un tour déjà expiré alors que le serveur attend encore.
 
 ## Architecture
 
 ```
 packages/shared    Contrat front/back : types + schémas Zod + catalogue des jeux
+packages/engines   Règles des jeux, fonctions pures (Puissance 4, Morpion)
 apps/api           Fastify 5 + Socket.IO + Drizzle + PostgreSQL
 apps/web           React 18 + Vite + Tailwind v4, servi par nginx
-packages/engines   (lot 1) règles des jeux, fonctions pures
 ```
 
 ### Le serveur est autoritaire
 
-Le client émet des **intentions** (`action:bet`, `motus:guess`), jamais des résultats. Le
+Le client émet des **intentions** (`match:play`, `tables:join`), jamais des résultats. Le
 serveur valide contre l'état et le tour courant, applique, puis diffuse un état **filtré
 par destinataire**. Les cartes fermées d'un adversaire ne transitent jamais sur le réseau.
 
 C'est la seule protection anti-triche viable. Ne jamais placer une règle de jeu dans un
 gestionnaire de socket ou dans un composant React.
 
+Corollaire côté front : **aucun coup n'est appliqué localement.** Le plateau se verrouille
+le temps de l'aller-retour (`useGame.pending`) et attend l'état du serveur. Un « appliquer
+puis réconcilier » ferait clignoter un plateau désynchronisé.
+
+Chaque intention porte la `version` de l'état sur lequel le joueur a cliqué ; le serveur
+refuse un coup calculé sur un plateau périmé (`STALE_STATE`) plutôt que de l'appliquer à
+l'aveugle sur une case qui n'est plus celle visée.
+
 ### Moteurs de jeu = fonctions pures
 
-À partir du lot 1, chaque jeu vit dans `packages/engines` sans I/O, sans socket, sans base :
+Chaque jeu vit dans `packages/engines` sans I/O, sans socket, sans base :
 
 ```
 reduce(state, action) -> { state, events[] }
@@ -160,6 +197,55 @@ view(state, playerId) -> état public, information cachée masquée
 
 Les règles du poker se testent alors en millisecondes sans lancer de serveur. La couche
 Socket.IO n'est qu'un transport autour.
+
+La grille est un **tableau plat** (`index = ligne × cols + colonne`), pas un tableau de
+tableaux : `noUncheckedIndexedAccess` étant actif, `grid[r][c]` imposerait deux gardes par
+lecture. Un tableau plat en demande une, et sérialise directement pour le réseau.
+
+Un coup refusé lève `IllegalMove`, propre au paquet — un moteur n'a pas à connaître
+`AppError`, qui est une erreur HTTP. C'est la couche transport qui traduit.
+
+Le front **importe** ces moteurs (`dropRow` pour l'aperçu au survol, `legalMoves` pour
+griser une colonne pleine) au lieu de réécrire la règle dans un composant.
+
+### Gestionnaire de tables : réserver en mémoire, écrire ensuite
+
+`apps/api/src/modules/tables/manager.ts` tient l'état des tables en mémoire — une table en
+attente n'a aucun intérêt à survivre à un redémarrage. Il ne connaît pas Socket.IO : il
+reçoit un notifieur, comme le service de porte-monnaie (`setTableNotifier`).
+
+**La règle à ne pas enfreindre en le modifiant :** Node est mono-thread, donc tout bloc
+synchrone est atomique — mais le premier `await` rend la main. On contrôle et on réserve
+**synchroniquement** (plafond de tables, siège libre, index « une seule partie par
+joueur »), puis on écrit en base ; en cas d'échec, on relâche la réservation.
+
+Contrôler le plafond puis attendre un débit laisserait deux créations simultanées passer
+le même contrôle, et deux `tables:join` verraient tous les deux un siège libre.
+
+L'index `tableByUser` **est** la garantie « une seule partie active à la fois, quel que
+soit le nombre d'onglets ou d'appareils » : rien en base ne l'assure.
+
+Minuteries : tour (30 s → forfait), sursis de déconnexion (45 s → abandon), table en
+attente (10 min → annulation et remboursement). Toute transition d'état les annule, et
+chaque rappel vérifie une **garde de version** — un `setTimeout` déjà en file d'attente
+s'exécute même après `clearTimeout`. Un rappel orphelin garde en vie la partie qu'il
+référence : sur un conteneur plafonné à 512 Mo, c'est une fuite qui finit par tuer l'API.
+`shutdown()` les purge et est branché sur l'arrêt propre.
+
+Une table terminée reste consultable deux minutes pour l'affichage du résultat, mais sa
+place au plafond et la contrainte « une seule partie » sont libérées immédiatement.
+
+### Gestion des erreurs côté socket
+
+Socket.IO n'a **aucun** équivalent de `registerErrorHandler` : une `AppError` levée dans un
+gestionnaire remonterait dans la bibliothèque et se perdrait, laissant le joueur devant un
+bouton sans réponse. `apps/api/src/realtime/guard.ts` (`withAck`) est le pendant temps
+réel, avec la même hiérarchie : `AppError` → code métier, `IllegalMove` → message de règle,
+`ZodError` → `VALIDATION_ERROR`, le reste → journalisé et renvoyé en `INTERNAL_ERROR`.
+
+Les intentions refusables passent par un **accusé de réception** et non par `error:app` :
+le front doit savoir *quelle* action a échoué pour afficher le message sous le bouton
+cliqué. `error:app` ne sert qu'aux erreurs arrivant hors de tout geste du joueur.
 
 ### Authentification : session en base, pas de JWT
 
@@ -203,38 +289,73 @@ immédiat) **et** rejoués par l'API. Ne jamais supposer qu'un contrôle client 
 
 ## Conventions
 
-- `packages/shared` exporte du **TypeScript source** (`"exports": "./src/index.ts"`), sans
-  étape de build. Vite et tsup le consomment directement ; `tsup.config.ts` l'inline via
-  `noExternal` pour que l'image runtime n'ait aucun lien d'atelier à résoudre.
+- `packages/shared` et `packages/engines` exportent du **TypeScript source**
+  (`"exports": "./src/index.ts"`), sans étape de build. Vite et tsup les consomment
+  directement ; `tsup.config.ts` les inline via `noExternal` pour que l'image runtime
+  n'ait aucun lien d'atelier à résoudre.
 - **Tailwind v4, configuration en CSS** : tous les jetons sont dans le bloc `@theme` de
-  `apps/web/src/index.css`. Il n'y a pas de `tailwind.config.js`.
-  Le jeton de fond s'appelle `night` et non `base` : `--color-base` produirait l'utilitaire
+  `apps/web/src/index.css`. Il n'y a pas de `tailwind.config.js`. Le fond s'appelle
+  `felt-deep` : la palette est nommée d'après la matière (feutre, laiton, crème), jamais
+  par un rôle abstrait comme `base` — `--color-base` produirait d'ailleurs l'utilitaire
   `text-base`, en collision avec la taille de police du même nom.
+- **Le laiton est réservé aux jetons, aux gains et à l'action principale** — jamais
+  décoratif, sinon il perd sa fonction de repère. Un seul bouton en laiton par écran ; le
+  tour actif est en `win`, une erreur en `danger`, un état neutre en `plaque`.
 - **Ajouter un jeu** commence par `packages/shared/src/games.ts` : ce catalogue est la
-  source de vérité du lobby et de la validation des codes de jeu côté API.
+  source de vérité du lobby, du plafond de tables et de la validation côté API.
 - Événements Socket.IO nommés `namespace:verbe`, typés dans
   `packages/shared/src/realtime.ts` (`ServerToClientEvents` / `ClientToServerEvents`).
 - Chaque socket rejoint une room `user:<id>` à la connexion : c'est ainsi qu'on adresse un
-  joueur sur tous ses appareils. Le service de porte-monnaie n'importe pas Socket.IO, il
-  passe par `apps/api/src/realtime/notify.ts` — sans quoi il deviendrait intestable sans
-  serveur.
+  joueur sur tous ses appareils, **y compris pour l'état des parties** — il n'existe
+  volontairement aucune room par table, qu'il faudrait rejoindre et quitter à chaque
+  reconnexion pour le même résultat. Le service de porte-monnaie et le gestionnaire de
+  tables n'importent pas Socket.IO, ils passent par un notifieur injecté
+  (`realtime/notify.ts`, `setTableNotifier`) — sans quoi ils deviendraient intestables
+  sans serveur.
 - La socket vit dans un store Zustand **hors React** (`apps/web/src/lib/socket.ts`) :
-  naviguer du lobby vers une table ne doit jamais couper la connexion d'une partie.
+  naviguer du lobby vers une table ne doit jamais couper la connexion d'une partie. Tous
+  les `socket.on` sont enregistrés **une seule fois** dans `connect()` ; un abonnement dans
+  un composant perdrait les événements pendant que le joueur consulte le lobby, et
+  s'abonnerait deux fois en `StrictMode`.
+- **Une reconnexion fournit un nouvel identifiant de socket, donc plus aucune room.** Le
+  gestionnaire `connect` doit réémettre `presence:sync`, `match:sync` et réabonner les
+  salons observés. C'est le bug numéro un de cette architecture, et il ne se voit qu'en
+  coupant le réseau.
+- Navigation : routeur maison dans `apps/web/src/lib/route.ts`, adossé à l'API History.
+  Pas de `react-router` — c'est le **serveur** qui décide quand une partie démarre, et le
+  gestionnaire de socket doit pouvoir amener le joueur sur `/table/:id` hors de React. Le
+  repli SPA est déjà assuré par `nginx.conf` et par Vite.
+- Animations en CSS uniquement, déclarées dans le bloc `@theme`. Le réglage
+  `prefers-reduced-motion` est neutralisé globalement dans `index.css`, mais cette règle
+  porte un `!important` qui **bat les styles en ligne** : une animation dont la durée est
+  fournie en ligne (l'anneau de temps) doit passer par `useReducedMotion()` et rendre autre
+  chose, sinon elle mentirait.
 - Code, commentaires et documentation en **français**. Les commentaires expliquent le
   *pourquoi*, en particulier les pièges déjà rencontrés.
 
 ## À faire
 
-Lot 1 : couche temps réel générique (RoomManager, timers, reconnexion), matchmaking,
-Puissance 4 + Morpion de bout en bout, écriture des statistiques. Voir la section
-« État d'avancement » de `CAHIER-DES-CHARGES.md`.
+Lot 3 : Blackjack — moteur, sabot, croupier et transactions de jetons. Voir la
+section « État d'avancement » de `CAHIER-DES-CHARGES.md`.
 
-Branchements de l'économie déjà en place, à consommer sans les réécrire :
+Ce qui est déjà en place et **à consommer sans le réécrire** :
 
-- **Motus** (lot 2) : remplir `motus_slots` avec le mot du créneau calculé par
-  `currentMotusSlot()`, puis `credit(userId, motusReward(essais, trouvé), "motus_reward")`.
-  Le mot ne doit **jamais** être envoyé au client — seules les couleurs le sont, sinon il
-  suffit d'ouvrir l'onglet Réseau pour tricher.
+- **Motus** est livré dans `modules/motus/` : son registre d'activité commun, son modèle
+  de notifieur injecté et son transport `withAck` servent de patron aux prochains jeux
+  solo. Le secret reste exclusivement dans `motus_slots` et ne rejoint jamais une vue.
 - **Blackjack** (lot 3) et **poker** (lot 4) : `debit` / `credit` avec les codes
   `blackjack_bet`, `blackjack_payout`, `poker_buyin`, `poker_cashout`, et les caves de
-  `STAKE_TIERS`.
+  `STAKE_TIERS`. Pour tout règlement touchant plusieurs écritures, passer par
+  `creditInTx` / `debitInTx` dans une transaction unique, comme
+  `modules/tables/settle.ts`.
+- **Elo** : la colonne `stats.elo` existe et reste à 1 000. Le classement est au lot 5 ;
+  `settle.ts` ne doit pas y toucher avant.
+
+Dette assumée, à traiter le jour où elle gêne :
+
+- Aucun harnais de test côté front. La logique testable a été déplacée là où un runner
+  existe déjà : formatage des durées dans `packages/shared`, règles de plateau dans
+  `packages/engines`. À reconsidérer si l'interface de poker devient complexe.
+- Le parcours à deux joueurs se vérifie à la main (deux navigateurs) ou avec un script
+  pilotant deux clients `socket.io-client`. Il n'y a pas de test d'intégration WebSocket
+  automatisé.

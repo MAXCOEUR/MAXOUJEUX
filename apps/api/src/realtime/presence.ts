@@ -42,6 +42,18 @@ export function removeConnection(userId: string): boolean {
   return true;
 }
 
+/**
+ * Nombre de sockets ouvertes pour ce compte.
+ *
+ * Le gestionnaire de tables en a besoin : quand un joueur s'assied, il faut
+ * savoir combien d'onglets il a déjà ouverts, sinon fermer le deuxième onglet
+ * ferait tomber le compteur du siège à zéro et armerait un sursis d'abandon
+ * alors que le joueur est toujours devant sa partie.
+ */
+export function connectionCount(userId: string): number {
+  return entries.get(userId)?.sockets ?? 0;
+}
+
 export function presenceSnapshot(): PresenceSnapshot {
   const players = [...entries.values()]
     .map((entry) => entry.player)

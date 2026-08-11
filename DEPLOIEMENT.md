@@ -112,6 +112,22 @@ docker compose up -d
 `pull` télécharge les nouvelles images, `up -d` ne recrée que les conteneurs dont l'image
 a changé. La base de données n'est pas touchée : elle vit dans le volume `pgdata`.
 
+### Avant le premier déploiement du Lot 2
+
+La migration Motus ajoute le dictionnaire embarqué (60 024 mots) et modifie les tables
+de tentatives. Comme un retour arrière d'image ne défait pas une migration, effectuer
+et vérifier une sauvegarde **avant** `docker compose up -d` :
+
+```bash
+mkdir -p sauvegardes
+docker compose exec -T db pg_dump -U maxoujeux -d maxoujeux -Fc \
+  > sauvegardes/avant-motus.dump
+test -s sauvegardes/avant-motus.dump
+```
+
+Copier ensuite ce fichier hors du volume Docker, dans un emplacement du NAS déjà
+sauvegardé. Sans fichier non vide et externalisé, ne pas lancer cette mise à jour.
+
 Compter une trentaine de secondes de coupure. Les joueurs en partie sont déconnectés — le
 client se reconnecte seul, mais l'état des parties en mémoire est perdu tant que la
 persistance des tables n'existe pas.
@@ -168,7 +184,7 @@ docker image prune -a --filter "until=336h"    # supprime les images inutilisée
 
 ## À prévoir avant d'ouvrir le site
 
-- **Sauvegarde `pg_dump`** — les comptes et les MaxouCoin des joueurs ne se recréent pas.
-  Volontairement remis à plus tard, mais c'est le premier manque de cette installation.
+- **Sauvegarde `pg_dump` quotidienne** — le premier export est obligatoire avant le Lot 2 ;
+  l'automatiser ensuite, car les comptes et les MaxouCoin ne se recréent pas.
 - **Tests de concurrence sur un vrai PostgreSQL** — voir `CLAUDE.md`. PGlite sérialise les
   requêtes et ne prouve rien sur les débits simultanés.
