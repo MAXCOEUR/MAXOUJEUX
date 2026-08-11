@@ -14,6 +14,7 @@
 
 import { z } from "zod";
 import { getGame, type GameCode } from "./games.js";
+import type { BlackjackView } from "./blackjack.js";
 
 /** Temps accordé pour jouer un coup. Passé ce délai, le joueur perd la partie. */
 export const TURN_MS = 30_000;
@@ -46,7 +47,8 @@ export type TableStatus = "waiting" | "playing" | "finished" | "cancelled";
 export type EndReason = "line" | "draw" | "timeout" | "abandon";
 
 export interface TableSeat {
-  seat: Seat;
+  /** 0–1 pour un duel, 0–4 pour le Blackjack. */
+  seat: number;
   userId: string;
   pseudo: string;
   avatarSeed: string;
@@ -61,7 +63,8 @@ export interface TableSeat {
 export interface TableSummary {
   id: string;
   game: GameCode;
-  stake: number;
+  /** Null lorsque chaque joueur choisit sa mise à chaque manche (Blackjack). */
+  stake: number | null;
   status: TableStatus;
   seats: TableSeat[];
   maxSeats: number;
@@ -120,7 +123,7 @@ export interface MatchOutcome {
  */
 export interface MatchView {
   id: string;
-  game: GameCode;
+  game: DuelGame;
   stake: number;
   /** Somme engagée sur la table, en MaxouCoin. */
   pot: number;
@@ -157,6 +160,9 @@ export interface MatchView {
   version: number;
   now: string;
 }
+
+/** Vue autoritaire de la partie active, discriminée par `game`. */
+export type ActiveMatchView = MatchView | BlackjackView;
 
 // ---------------------------------------------------------------------------
 // Codes d'erreur métier
@@ -212,11 +218,13 @@ export type ActionReply<T = null> =
 /** Jeux ouverts au lot 1. Les autres codes sont refusés par le serveur. */
 export const DUEL_GAMES = ["connect4", "tictactoe"] as const;
 export type DuelGame = (typeof DUEL_GAMES)[number];
+export const TABLE_GAMES = ["connect4", "tictactoe", "blackjack"] as const;
+export type TableGame = (typeof TABLE_GAMES)[number];
 
-export const createTableSchema = z.object({
-  game: z.enum(DUEL_GAMES),
-  stake: z.number().int(),
-});
+export const createTableSchema = z.discriminatedUnion("game", [
+  z.object({ game: z.enum(DUEL_GAMES), stake: z.number().int() }),
+  z.object({ game: z.literal("blackjack") }),
+]);
 
 export const tableRefSchema = z.object({
   tableId: z.string().uuid(),
@@ -229,9 +237,7 @@ export const playSchema = tableRefSchema.extend({
   version: z.number().int().nonnegative(),
 });
 
-export const watchSchema = z.object({
-  game: z.enum(DUEL_GAMES),
-});
+export const watchSchema = z.object({ game: z.enum(TABLE_GAMES) });
 
 export type CreateTableInput = z.infer<typeof createTableSchema>;
 export type TableRefInput = z.infer<typeof tableRefSchema>;

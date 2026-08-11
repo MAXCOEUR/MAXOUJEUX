@@ -1,4 +1,5 @@
 export * from "./auth.js";
+export * from "./blackjack.js";
 export * from "./economy.js";
 export * from "./games.js";
 export * from "./motus.js";

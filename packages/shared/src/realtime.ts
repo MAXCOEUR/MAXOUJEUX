@@ -16,6 +16,7 @@
 import type {
   ActionReply,
   CreateTableInput,
+  ActiveMatchView,
   MatchView,
   PlayInput,
   SalonSnapshot,
@@ -24,6 +25,7 @@ import type {
 } from "./tables.js";
 import type { GameCode } from "./games.js";
 import type { MotusGuessInput, MotusView } from "./motus.js";
+import type { BlackjackActionInput, BlackjackBetInput, BlackjackInsuranceInput, BlackjackView } from "./blackjack.js";
 
 export interface PresencePlayer {
   userId: string;
@@ -66,6 +68,8 @@ export interface ServerToClientEvents {
   "match:none": () => void;
   /** État Motus filtré : le mot du créneau n'appartient jamais à ce contrat. */
   "motus:state": (view: MotusView) => void;
+  /** État Blackjack : cartes des joueurs publiques, carte fermée du croupier masquée. */
+  "blackjack:state": (view: BlackjackView) => void;
 }
 
 /** Événements client → serveur. */
@@ -95,7 +99,7 @@ export interface ClientToServerEvents {
    * nouvel identifiant de socket, donc plus aucune room. Sans cette demande, un
    * joueur reconnecté ne reçoit plus rien de sa propre partie.
    */
-  "match:sync": (ack: (reply: ActionReply<MatchView | null>) => void) => void;
+  "match:sync": (ack: (reply: ActionReply<ActiveMatchView | null>) => void) => void;
   "match:play": (payload: PlayInput, ack: (reply: ActionReply) => void) => void;
   /** Quitter la table : abandon si la partie a commencé, remboursement sinon. */
   "match:leave": (payload: TableRefInput, ack: (reply: ActionReply) => void) => void;
@@ -107,6 +111,10 @@ export interface ClientToServerEvents {
   "motus:start": (ack: (reply: ActionReply) => void) => void;
   "motus:guess": (payload: MotusGuessInput, ack: (reply: ActionReply) => void) => void;
   "motus:abandon": (ack: (reply: ActionReply) => void) => void;
+
+  "blackjack:bet": (payload: BlackjackBetInput, ack: (reply: ActionReply) => void) => void;
+  "blackjack:insurance": (payload: BlackjackInsuranceInput, ack: (reply: ActionReply) => void) => void;
+  "blackjack:act": (payload: BlackjackActionInput, ack: (reply: ActionReply) => void) => void;
 }
 
 /** Données attachées à la socket côté serveur, résolues au handshake. */

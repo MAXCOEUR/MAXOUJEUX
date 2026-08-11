@@ -9,6 +9,7 @@
 export * from "./types.js";
 export * from "./grid.js";
 export * from "./connect4.js";
+export * from "./blackjack.js";
 export * from "./motus.js";
 export * from "./tictactoe.js";
 
