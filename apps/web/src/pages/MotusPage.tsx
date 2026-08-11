@@ -1,12 +1,13 @@
 import { normalizeMotusDraft } from "@maxoujeux/engines";
 import {
   formatCoins,
+  formatMotusShare,
   MOTUS_MAX_ATTEMPTS,
   MOTUS_REWARDS,
   type CurrentUser,
   type MotusView,
 } from "@maxoujeux/shared";
-import { ArrowLeft, CircleCheck, CircleHelp, Loader2, Send, Trophy } from "lucide-react";
+import { ArrowLeft, CircleCheck, CircleHelp, Loader2, Send, Share2, Trophy } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { Button } from "@/components/Button";
 import { Countdown } from "@/components/Countdown";
@@ -18,6 +19,8 @@ import { MotusBoard } from "@/components/games/MotusBoard";
 import { cn } from "@/lib/cn";
 import { useMotus } from "@/lib/motus";
 import { request, useRealtime, watchMotus } from "@/lib/socket";
+import { shareText } from "@/lib/share";
+import { pushToast } from "@/lib/toast";
 
 export function MotusPage({ user }: { user: CurrentUser }) {
   const view = useMotus((state) => state.view);
@@ -297,6 +300,21 @@ function RewardScale({ compact = false, used = 0 }: { compact?: boolean; used?: 
 
 function Result({ view, pending, error, onStart }: { view: MotusView; pending: boolean; error?: string; onStart: () => void }) {
   const won = view.status === "won";
+  const [sharing, setSharing] = useState(false);
+
+  async function partager() {
+    setSharing(true);
+    try {
+      const text = formatMotusShare(view, window.location.origin);
+      const outcome = await shareText("MaxouJeux Motus", text);
+      if (outcome === "copied") pushToast("info", "Résultat copié");
+    } catch {
+      pushToast("erreur", "Impossible de partager le résultat. Réessaie.");
+    } finally {
+      setSharing(false);
+    }
+  }
+
   return (
     <div className="mx-auto mt-6 max-w-xl border-t border-line pt-5 text-center">
       {won ? <CircleCheck className="mx-auto size-8 text-win" aria-hidden /> : <CircleHelp className="mx-auto size-8 text-cream-faint" aria-hidden />}
@@ -307,11 +325,18 @@ function Result({ view, pending, error, onStart }: { view: MotusView; pending: b
         <div><p className="text-xs text-cream-faint">Gain brut</p><p className="tabular mt-1 text-xl font-bold text-brass-bright">{formatCoins(view.payout)}</p></div>
         <div><p className="text-xs text-cream-faint">Bilan net</p><p className={cn("tabular mt-1 text-xl font-bold", view.net > 0 ? "text-win" : "text-danger")}>{view.net > 0 ? "+" : ""}{formatCoins(view.net)}</p></div>
       </div>
-      {view.canStartCurrent ? (
-        <Button onClick={onStart} loading={pending} className="mt-5">Jouer le mot actuel</Button>
-      ) : (
+      {!view.canStartCurrent && (
         <p className="mt-5 text-sm text-cream-dim">Prochain mot dans <Countdown to={view.nextSlotAt} className="text-game-motus" fallback="quelques instants" />.</p>
       )}
+      <div className="mt-5 flex flex-wrap justify-center gap-2">
+        {view.canStartCurrent && (
+          <Button onClick={onStart} loading={pending}>Jouer le mot actuel</Button>
+        )}
+        <Button variant="outline" onClick={partager} loading={sharing}>
+          <Share2 className="size-4" aria-hidden />
+          Partager le résultat
+        </Button>
+      </div>
       {error && <p role="alert" className="mt-2 text-sm text-danger">{error}</p>}
       <p className="mt-3 text-xs text-cream-faint">Le mot secret reste caché, même après une défaite.</p>
     </div>
