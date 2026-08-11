@@ -2,59 +2,85 @@
 
 /* Polices auto-hébergées via npm : aucun appel à un CDN externe, le site
    fonctionne donc aussi sur un réseau local coupé d'Internet. */
-@import "@fontsource-variable/inter";
-@import "@fontsource-variable/outfit";
+@import "@fontsource-variable/bricolage-grotesque";
+@import "@fontsource-variable/figtree";
+@import "@fontsource-variable/jetbrains-mono";
 
 /* ---------------------------------------------------------------------------
-   Thème MaxouJeux — arcade feutrée.
-   Fond très sombre, surfaces légèrement bleutées, accents néon réservés aux
-   éléments actifs. Le doré ne sert qu'aux gains et aux jetons, jamais à la
-   décoration : il doit rester un signal.
+   Thème MaxouJeux — salle de jeux.
+
+   Les cinq jeux se jouent sur une table : tapis de feutre, jetons, cartes,
+   plateau. La palette vient de cette matière — feutre vert très sombre, laiton
+   des pièces, crème du dos des cartes — et non du néon qu'on met par réflexe
+   sur tout fond noir.
+
+   Le laiton est la seule couleur chaude de l'interface : il signale l'argent
+   (MaxouCoin) et l'action principale. Jamais de décoration en laiton, sinon il
+   cesse d'être un signal.
    --------------------------------------------------------------------------- */
 @theme {
-  /* Nommé `night` et non `base` : `--color-base` produirait l'utilitaire
-     `text-base`, qui entre en collision avec la taille de police du même nom. */
-  --color-night: #0f1115;
-  --color-surface: #181b22;
-  --color-surface-2: #21252e;
-  --color-surface-3: #2b313c;
+  /* Feutre — du plus profond au plus éclairé */
+  --color-felt-deep: #0b1410;
+  --color-felt: #122019;
+  --color-felt-raised: #1a2e23;
+  --color-felt-high: #24402f;
 
-  --color-line: #2e3440;
-  --color-line-strong: #3d4557;
+  --color-line: #263d2f;
+  --color-line-strong: #4c745c;
 
-  --color-ink: #e9ebf2;
-  --color-ink-muted: #99a1b3;
-  --color-ink-faint: #6b7386;
+  /* Crème — dos de carte, texte */
+  --color-cream: #f2ede0;
+  --color-cream-dim: #a6b7aa;
+  --color-cream-faint: #788b7e;
 
-  --color-accent-violet: #a78bfa;
-  --color-accent-cyan: #22d3ee;
-  --color-accent-amber: #fbbf24;
-  --color-accent-emerald: #34d399;
-  --color-accent-rose: #fb7185;
-  --color-gold: #d4af37;
+  /* Laiton */
+  --color-brass: #c8a250;
+  --color-brass-bright: #e8cd8a;
+  --color-brass-deep: #8a6a28;
 
-  --color-danger: #f87171;
-  --color-success: #4ade80;
+  /* Couleurs propres à chaque jeu, prises dans le jeu lui-même :
+     le rouge des cœurs, le jaune de la grille Motus, le rouge des disques. */
+  --color-game-poker: #b8453a;
+  --color-game-blackjack: #c8a250;
+  --color-game-motus: #f0c02c;
+  --color-game-connect4: #e05a45;
+  --color-game-tictactoe: #d8d2c4;
 
-  --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Outfit Variable", "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+  --color-win: #58c98a;
+  --color-danger: #e8756a;
 
-  --radius-card: 1rem;
+  --font-display: "Bricolage Grotesque Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Figtree Variable", ui-sans-serif, system-ui, sans-serif;
+  /* Le monospace n'est pas décoratif : les soldes et les comptes à rebours
+     changent en place, des chiffres de largeur fixe évitent que la ligne
+     tremble à chaque seconde. */
+  --font-mono: "JetBrains Mono Variable", ui-monospace, monospace;
 
+  --radius-panel: 0.875rem;
+
+  /* `backwards` laisse les transformations propres aux artefacts et le hover
+     des cartes reprendre la main une fois la distribution terminée. */
+  --animate-deal: deal 0.55s cubic-bezier(0.16, 1, 0.3, 1) backwards;
   --animate-rise: rise 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
   --animate-pulse-soft: pulse-soft 2.4s ease-in-out infinite;
+  --animate-flip-up: flip-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
-/* Les variables `--accent-*` sont référencées par le catalogue de jeux
-   (packages/shared) pour colorer chaque vignette du lobby. */
 :root {
-  --accent-violet: var(--color-accent-violet);
-  --accent-cyan: var(--color-accent-cyan);
-  --accent-amber: var(--color-accent-amber);
-  --accent-emerald: var(--color-accent-emerald);
-  --accent-rose: var(--color-accent-rose);
-
   color-scheme: dark;
+}
+
+/* Distribution : les éléments arrivent comme une carte posée sur le tapis,
+   légèrement de biais puis à plat. */
+@keyframes deal {
+  from {
+    opacity: 0;
+    transform: translateY(18px) rotate(-1.5deg) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 @keyframes rise {
@@ -78,34 +104,55 @@
   }
 }
 
+/* Retournement d'une tuile Motus / d'un gain qui s'inscrit. */
+@keyframes flip-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px) rotateX(-60deg);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 @layer base {
   html {
     -webkit-text-size-adjust: 100%;
   }
 
   body {
-    background-color: var(--color-night);
-    color: var(--color-ink);
+    background-color: var(--color-felt-deep);
+    color: var(--color-cream);
     font-family: var(--font-sans);
-    /* Halos discrets en haut de page : donne de la profondeur au fond plat
-       sans image de fond à télécharger. */
-    background-image:
-      radial-gradient(60rem 40rem at 15% -10%, color-mix(in oklab, var(--color-accent-violet) 14%, transparent), transparent),
-      radial-gradient(50rem 35rem at 85% -5%, color-mix(in oklab, var(--color-accent-cyan) 10%, transparent), transparent);
-    background-attachment: fixed;
     min-height: 100dvh;
+
+    /* Trois couches : la lumière au-dessus de la table, la profondeur dans les
+       coins, et la trame du feutre. La trame est à très faible opacité — elle
+       ne se voit pas, elle s'aperçoit. */
+    background-image:
+      radial-gradient(75rem 45rem at 50% -18%, oklch(0.75 0.1 85 / 0.14), transparent 68%),
+      radial-gradient(55rem 35rem at 12% 108%, oklch(0.52 0.07 158 / 0.28), transparent 70%),
+      radial-gradient(45rem 30rem at 92% 8%, oklch(0.5 0.06 150 / 0.2), transparent 72%),
+      repeating-linear-gradient(45deg, rgb(255 255 255 / 0.014) 0 1px, transparent 1px 4px);
+    background-attachment: fixed;
   }
 
   h1,
   h2,
   h3 {
     font-family: var(--font-display);
-    letter-spacing: -0.02em;
+    letter-spacing: -0.015em;
   }
 
   :focus-visible {
-    outline: 2px solid var(--color-accent-cyan);
+    outline: 2px solid var(--color-brass);
     outline-offset: 2px;
+  }
+
+  ::selection {
+    background: var(--color-brass-deep);
+    color: var(--color-cream);
   }
 
   /* Respect du réglage système : les animations décoratives disparaissent. */
@@ -121,10 +168,29 @@
 }
 
 @layer components {
-  .card-surface {
-    background-color: color-mix(in oklab, var(--color-surface) 85%, transparent);
+  /* Surface de base : un panneau posé sur le tapis. La bordure claire en haut
+     imite la tranche éclairée d'un objet sur une table. */
+  .panel {
+    background-color: color-mix(in oklab, var(--color-felt) 88%, transparent);
     border: 1px solid var(--color-line);
-    border-radius: var(--radius-card);
-    backdrop-filter: blur(12px);
+    border-radius: var(--radius-panel);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.04),
+      0 12px 32px -20px rgb(0 0 0 / 0.9);
+    backdrop-filter: blur(10px);
+  }
+
+  /* Plaque gravée : sert aux étiquettes d'état (verrouillé, lot à venir). */
+  .plaque {
+    background-color: color-mix(in oklab, var(--color-felt-high) 70%, transparent);
+    border: 1px solid var(--color-line-strong);
+    color: var(--color-cream-dim);
+  }
+
+  /* Chiffres de scoreboard : largeur fixe, léger resserrement. */
+  .tabular {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
   }
 }

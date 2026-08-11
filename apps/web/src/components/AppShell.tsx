@@ -1,5 +1,5 @@
 import { COIN_NAME, formatCoins, type CurrentUser } from "@maxoujeux/shared";
-import { Coins, LogOut } from "lucide-react";
+import { LogOut } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { Avatar } from "./Avatar";
 import { Button } from "./Button";
@@ -19,26 +19,41 @@ export function AppShell({ user, children }: AppShellProps) {
 
   return (
     <div className="flex min-h-dvh flex-col">
-      <header className="sticky top-0 z-20 border-b border-line bg-night/80 backdrop-blur-md">
-        <div className="mx-auto flex h-16 w-full max-w-6xl items-center gap-3 px-4">
-          <Logo />
+      <header className="sticky top-0 z-20 border-b border-line bg-felt-deep/85 backdrop-blur-md">
+        <div className="mx-auto flex h-16 w-full max-w-6xl items-center gap-3 px-4 sm:px-6">
+          <Logo className="text-xl" />
           <ConnectionBadge className="hidden sm:flex" />
 
-          <div className="ml-auto flex items-center gap-3">
+          <div className="ml-auto flex items-center gap-2 sm:gap-3">
+            {/* Le solde est un bouton : c'est le point d'entrée du porte-monnaie,
+                et l'endroit où l'œil va naturellement chercher son argent. */}
             <button
               type="button"
               onClick={() => setWalletOpen(true)}
               aria-label={`Ouvrir mon porte-monnaie ${COIN_NAME}`}
-              className="flex items-center gap-1.5 rounded-full border border-line bg-surface-2/70 px-3 py-1.5 transition-colors hover:border-gold/50 hover:bg-surface-3"
+              className="group flex items-center gap-2 rounded-full border border-brass/30 bg-brass/10 px-3 py-1.5 transition-colors hover:border-brass/70 hover:bg-brass/15"
             >
-              <Coins className="size-4 text-gold" aria-hidden />
-              <span className="font-display text-sm font-semibold tabular-nums text-ink">
+              {/* Jeton dessiné plutôt qu'icône générique : deux cercles suffisent. */}
+              <span
+                aria-hidden
+                className="grid size-4 place-items-center rounded-full bg-brass"
+              >
+                <span className="size-1.5 rounded-full bg-brass-deep" />
+              </span>
+              <span className="tabular text-sm font-semibold text-brass-bright">
                 {formatCoins(user.balance)}
               </span>
             </button>
 
-            <Avatar seed={user.avatarSeed} pseudo={user.pseudo} />
-            <span className="hidden text-sm font-medium text-ink md:inline">{user.pseudo}</span>
+            <span className="hidden items-center gap-2 md:flex">
+              <Avatar seed={user.avatarSeed} pseudo={user.pseudo} className="size-8" />
+              <span className="text-sm font-medium text-cream">{user.pseudo}</span>
+            </span>
+            <Avatar
+              seed={user.avatarSeed}
+              pseudo={user.pseudo}
+              className="size-8 md:hidden"
+            />
 
             <Button
               variant="ghost"
@@ -53,10 +68,10 @@ export function AppShell({ user, children }: AppShellProps) {
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8">{children}</main>
+      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 sm:px-6 sm:py-10">{children}</main>
 
-      <footer className="border-t border-line px-4 py-6 text-center text-xs text-ink-faint">
-        MaxouJeux — {COIN_NAME} sans valeur monétaire, ni achat ni conversion possible.
+      <footer className="border-t border-line px-4 py-6 text-center text-xs text-cream-faint">
+        MaxouJeux — les {COIN_NAME} sont des jetons de jeu, sans valeur monétaire.
       </footer>
 
       <WalletPanel open={walletOpen} onClose={() => setWalletOpen(false)} />

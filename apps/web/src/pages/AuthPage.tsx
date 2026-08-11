@@ -10,6 +10,7 @@ import type { ZodError } from "zod";
 import { Button } from "@/components/Button";
 import { Field } from "@/components/Field";
 import { Logo } from "@/components/Logo";
+import { TableScene } from "@/components/TableScene";
 import { ApiClientError } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { useLogin, useRegister } from "@/lib/session";
@@ -74,21 +75,55 @@ export function AuthPage() {
   }
 
   return (
-    <div className="grid min-h-dvh place-items-center px-4 py-10">
-      <div className="w-full max-w-md animate-rise">
-        <div className="mb-8 text-center">
-          <Logo className="text-3xl" />
-          <p className="mt-2 text-sm text-ink-muted">
-            Poker, Blackjack, Motus et Puissance 4 entre amis.
-          </p>
+    <div className="grid min-h-dvh lg:grid-cols-[1.15fr_1fr]">
+      {/* --- Panneau de gauche : la table --------------------------------- */}
+      {/* Masqué sous lg : sur un téléphone, la table volerait la place du
+          formulaire, qui est la seule chose à faire sur cet écran. */}
+      <aside className="relative hidden overflow-hidden border-r border-line lg:flex lg:flex-col lg:justify-between lg:p-12">
+        <Logo className="relative text-2xl" />
+
+        <div className="relative -my-8 flex-1">
+          <TableScene />
         </div>
 
-        <div className="card-surface p-6 sm:p-8">
-          {/* Bascule connexion / inscription */}
+        <div className="relative max-w-md">
+          <h1 className="font-display text-4xl leading-[1.05] font-extrabold text-cream">
+            La salle de jeux
+            <br />
+            <span className="text-brass">de la maison.</span>
+          </h1>
+          <p className="mt-4 text-sm leading-relaxed text-cream-dim">
+            Poker, blackjack, Motus, Puissance&nbsp;4 et morpion. Entre vous, à vos horaires,
+            sur un serveur qui vous appartient.
+          </p>
+        </div>
+      </aside>
+
+      {/* --- Panneau de droite : le formulaire ---------------------------- */}
+      <main className="flex items-center justify-center px-5 py-12 sm:px-10">
+        <div className="w-full max-w-sm animate-rise">
+          {/* Sur mobile, le logo revient ici : sans lui, la page démarre sur
+              un champ email sans dire de quel site il s'agit. */}
+          <div className="mb-8 lg:hidden">
+            <Logo className="text-3xl" />
+            <p className="mt-2 text-sm text-cream-dim">
+              Poker, blackjack, Motus et Puissance 4 entre amis.
+            </p>
+          </div>
+
+          <h2 className="font-display text-2xl font-bold text-cream">
+            {mode === "login" ? "Reprends ta place" : "Prends une place"}
+          </h2>
+          <p className="mt-1 mb-6 text-sm text-cream-dim">
+            {mode === "login"
+              ? "Ton tapis t'attend là où tu l'as laissé."
+              : `${formatCoins(SIGNUP_BONUS)} sur la table pour commencer.`}
+          </p>
+
           <div
             role="tablist"
             aria-label="Mode d'accès"
-            className="mb-6 grid grid-cols-2 gap-1 rounded-xl bg-surface-2/60 p-1"
+            className="mb-6 grid grid-cols-2 gap-1 rounded-xl border border-line bg-felt-deep/60 p-1"
           >
             {(["login", "register"] as const).map((value) => (
               <button
@@ -100,8 +135,8 @@ export function AuthPage() {
                 className={cn(
                   "rounded-lg px-3 py-2 text-sm font-medium transition-colors",
                   mode === value
-                    ? "bg-surface-3 text-ink shadow-sm"
-                    : "text-ink-muted hover:text-ink",
+                    ? "bg-felt-high text-cream shadow-[inset_0_1px_0_rgb(255_255_255/0.06)]"
+                    : "text-cream-faint hover:text-cream",
                 )}
               >
                 {value === "login" ? "Connexion" : "Créer un compte"}
@@ -129,7 +164,7 @@ export function AuthPage() {
                 placeholder="Maxou"
                 required
                 error={fieldErrors.pseudo}
-                hint="Visible par les autres joueurs. Lettres, chiffres, tiret, underscore."
+                hint="C'est le nom que verront les autres joueurs."
               />
             )}
 
@@ -145,7 +180,10 @@ export function AuthPage() {
             />
 
             {globalError && (
-              <p role="alert" className="rounded-lg bg-danger/10 px-3 py-2 text-sm text-danger">
+              <p
+                role="alert"
+                className="rounded-lg border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger"
+              >
                 {globalError}
               </p>
             )}
@@ -154,13 +192,13 @@ export function AuthPage() {
               {mode === "login" ? "Se connecter" : "Créer mon compte"}
             </Button>
           </form>
-        </div>
 
-        <p className="mt-6 text-center text-xs text-ink-faint">
-          {formatCoins(SIGNUP_BONUS)} offerts à l'inscription. Aucun achat, aucune conversion en
-          argent réel.
-        </p>
-      </div>
+          <p className="mt-8 border-t border-line pt-5 text-xs leading-relaxed text-cream-faint">
+            Les MaxouCoin sont des jetons de jeu. Ils ne s'achètent pas, ne se convertissent pas
+            et ne se transfèrent pas entre comptes.
+          </p>
+        </div>
+      </main>
     </div>
   );
 }

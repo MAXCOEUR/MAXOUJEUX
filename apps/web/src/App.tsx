@@ -17,7 +17,7 @@ export function App() {
   if (session.isPending) {
     return (
       <div className="grid min-h-dvh place-items-center">
-        <Loader2 className="size-6 animate-spin text-ink-faint" aria-label="Chargement" />
+        <Loader2 className="size-6 animate-spin text-cream-faint" aria-label="Chargement" />
       </div>
     );
   }
@@ -25,9 +25,9 @@ export function App() {
   if (session.isError) {
     return (
       <div className="grid min-h-dvh place-items-center px-4">
-        <div className="card-surface max-w-sm p-6 text-center">
-          <p className="text-sm text-ink">Impossible de joindre le serveur.</p>
-          <p className="mt-1 text-xs text-ink-faint">
+        <div className="panel max-w-sm p-6 text-center">
+          <p className="text-sm text-cream">Impossible de joindre le serveur.</p>
+          <p className="mt-1 text-xs text-cream-faint">
             Vérifie que l'API tourne, puis recharge la page.
           </p>
         </div>
@@ -41,7 +41,7 @@ export function App() {
 
   return (
     <AppShell user={session.data}>
-      <LobbyPage />
+      <LobbyPage user={session.data} />
     </AppShell>
   );
 }

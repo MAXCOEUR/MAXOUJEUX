@@ -1,6 +1,5 @@
 import {
   COIN_NAME,
-  DAILY_BONUS_CAP_STREAK,
   formatCoins,
   formatCoinsDelta,
   MOTUS_REWARDS,
@@ -15,6 +14,7 @@ import { cn } from "@/lib/cn";
 import { formatDuration, useCountdown } from "@/lib/countdown";
 import { useClaimDailyBonus, useWallet, useWalletHistory } from "@/lib/wallet";
 import { Button } from "./Button";
+import { StreakStrip } from "./StreakStrip";
 
 interface WalletPanelProps {
   open: boolean;
@@ -54,7 +54,7 @@ export function WalletPanel({ open, onClose }: WalletPanelProps) {
       <div
         aria-hidden
         onClick={onClose}
-        className="absolute inset-0 bg-night/70 backdrop-blur-sm"
+        className="absolute inset-0 bg-black/65 backdrop-blur-sm"
       />
 
       <aside
@@ -63,12 +63,12 @@ export function WalletPanel({ open, onClose }: WalletPanelProps) {
         aria-label={COIN_NAME}
         className={cn(
           "relative flex h-full w-full max-w-md flex-col overflow-y-auto",
-          "border-l border-line bg-surface shadow-2xl animate-rise",
+          "animate-rise border-l border-line bg-felt shadow-2xl",
         )}
       >
-        <header className="sticky top-0 flex items-center justify-between border-b border-line bg-surface/95 px-5 py-4 backdrop-blur">
-          <h2 className="flex items-center gap-2 text-lg font-semibold text-ink">
-            <Coins className="size-5 text-gold" aria-hidden />
+        <header className="sticky top-0 z-10 flex items-center justify-between border-b border-line bg-felt/95 px-5 py-4 backdrop-blur">
+          <h2 className="flex items-center gap-2 font-display text-lg font-semibold text-cream">
+            <Coins className="size-5 text-brass" aria-hidden />
             {COIN_NAME}
           </h2>
           <Button ref={closeRef} variant="ghost" onClick={onClose} aria-label="Fermer" className="px-2.5">
@@ -79,7 +79,7 @@ export function WalletPanel({ open, onClose }: WalletPanelProps) {
         <div className="space-y-5 px-5 py-5">
           {wallet.isPending && (
             <div className="grid place-items-center py-10">
-              <Loader2 className="size-5 animate-spin text-ink-faint" aria-label="Chargement" />
+              <Loader2 className="size-5 animate-spin text-cream-faint" aria-label="Chargement" />
             </div>
           )}
 
@@ -99,7 +99,7 @@ export function WalletPanel({ open, onClose }: WalletPanelProps) {
 
           <HistorySection entries={history.data?.entries} loading={history.isPending} />
 
-          <p className="pt-2 text-xs text-ink-faint">
+          <p className="pt-2 text-xs leading-relaxed text-cream-faint">
             Les {COIN_NAME} n'ont aucune valeur monétaire. Ils ne peuvent être ni achetés, ni
             convertis, ni transférés entre comptes.
           </p>
@@ -111,9 +111,9 @@ export function WalletPanel({ open, onClose }: WalletPanelProps) {
 
 function BalanceCard({ balance }: { balance: number }) {
   return (
-    <div className="card-surface px-5 py-6 text-center">
-      <p className="text-xs uppercase tracking-wide text-ink-faint">Solde</p>
-      <p className="mt-1 font-display text-4xl font-bold text-gold tabular-nums">
+    <div className="panel px-5 py-6 text-center">
+      <p className="text-xs font-semibold uppercase tracking-[0.08em] text-cream-faint">Solde</p>
+      <p className="tabular mt-1 text-4xl font-bold text-brass-bright">
         {formatCoins(balance)}
       </p>
     </div>
@@ -138,9 +138,9 @@ function DailyBonusCard({ summary }: { summary: WalletSummary }) {
   const error = claim.error instanceof ApiClientError ? claim.error.message : null;
 
   return (
-    <section className="card-surface relative overflow-hidden p-5">
-      <h3 className="flex items-center gap-2 text-sm font-semibold text-ink">
-        <Gift className="size-4 text-accent-violet" aria-hidden />
+    <section className="panel relative overflow-hidden p-5">
+      <h3 className="flex items-center gap-2 text-sm font-semibold text-cream">
+        <Gift className="size-4 text-brass" aria-hidden />
         Bonus quotidien
       </h3>
 
@@ -148,27 +148,29 @@ function DailyBonusCard({ summary }: { summary: WalletSummary }) {
       {flash !== null && (
         <span
           aria-hidden
-          className="pointer-events-none absolute right-5 top-4 font-display text-lg font-bold text-success animate-rise"
+          className="animate-rise pointer-events-none absolute right-5 top-4 font-display text-lg font-bold text-win"
         >
           {formatCoinsDelta(flash)}
         </span>
       )}
 
-      <StreakPips streak={summary.streak} />
+      <div className="mt-4">
+        <StreakStrip streak={summary.streak} currentAmount={summary.claimableAmount} />
+      </div>
 
       {summary.canClaim ? (
         <>
           <Button onClick={handleClaim} loading={claim.isPending} className="mt-4 w-full">
             Encaisser {formatCoins(summary.claimableAmount)}
           </Button>
-          <p className="mt-2 text-xs text-ink-faint">
+          <p className="mt-2 text-xs text-cream-faint">
             Demain, si tu reviens : {formatCoins(summary.nextDayAmount)}
           </p>
         </>
       ) : (
-        <div className="mt-4 rounded-xl border border-line bg-surface-2/60 px-3 py-2.5 text-center">
-          <p className="text-sm text-ink">Déjà encaissé aujourd'hui</p>
-          <p className="mt-0.5 text-xs text-ink-muted">
+        <div className="mt-4 rounded-xl border border-line bg-felt-deep/50 px-3 py-2.5 text-center">
+          <p className="text-sm text-cream">Déjà encaissé aujourd'hui</p>
+          <p className="mt-0.5 text-xs text-cream-dim">
             Prochain bonus dans {formatDuration(remaining)} ·{" "}
             {formatCoins(summary.nextDayAmount)}
           </p>
@@ -184,55 +186,25 @@ function DailyBonusCard({ summary }: { summary: WalletSummary }) {
   );
 }
 
-/**
- * Progression de la série jusqu'au plafond. Onze pastilles : c'est au 11e jour
- * consécutif que le bonus atteint son maximum.
- */
-function StreakPips({ streak }: { streak: number }) {
-  const total = DAILY_BONUS_CAP_STREAK;
-  const filled = Math.min(streak, total);
-
-  return (
-    <div className="mt-3">
-      <div className="flex items-center gap-1.5" role="img" aria-label={`Série de ${streak} jours`}>
-        {Array.from({ length: total }, (_, index) => (
-          <span
-            key={index}
-            className={cn(
-              "h-1.5 flex-1 rounded-full",
-              index < filled ? "bg-accent-violet" : "bg-surface-3",
-            )}
-          />
-        ))}
-      </div>
-      <p className="mt-2 text-xs text-ink-muted">
-        {streak === 0
-          ? "Aucune série en cours"
-          : `Série de ${streak} jour${streak > 1 ? "s" : ""}${filled >= total ? " · plafond atteint" : ""}`}
-      </p>
-    </div>
-  );
-}
-
 function MotusCard({ nextSlotAt }: { nextSlotAt: string }) {
   const remaining = useCountdown(nextSlotAt);
   const best = Math.max(...MOTUS_REWARDS);
   const worst = Math.min(...MOTUS_REWARDS);
 
   return (
-    <section className="card-surface p-5">
-      <h3 className="flex items-center gap-2 text-sm font-semibold text-ink">
-        <Puzzle className="size-4 text-accent-amber" aria-hidden />
+    <section className="panel p-5">
+      <h3 className="flex items-center gap-2 text-sm font-semibold text-cream">
+        <Puzzle className="size-4 text-game-motus" aria-hidden />
         Prochain mot Motus
       </h3>
-      <p className="mt-2 font-display text-2xl font-bold tabular-nums text-ink">
+      <p className="tabular mt-2 text-2xl font-bold text-cream">
         {formatDuration(remaining)}
       </p>
-      <p className="mt-1 text-xs text-ink-muted">
+      <p className="mt-1 text-xs text-cream-dim">
         Un mot toutes les 6 h. De {worst} à {best} MC selon le nombre d'essais — bien jouer
         rapporte davantage.
       </p>
-      <p className="mt-2 text-xs text-ink-faint">Disponible au lot 2.</p>
+      <p className="mt-2 text-xs text-cream-faint">Disponible au lot 2.</p>
     </section>
   );
 }
@@ -246,12 +218,12 @@ function HistorySection({
 }) {
   return (
     <section>
-      <h3 className="mb-2 text-sm font-semibold text-ink">Derniers mouvements</h3>
+      <h3 className="mb-2 text-sm font-semibold text-cream">Derniers mouvements</h3>
 
-      {loading && <p className="text-xs text-ink-faint">Chargement…</p>}
+      {loading && <p className="text-xs text-cream-faint">Chargement…</p>}
 
       {entries && entries.length === 0 && (
-        <p className="text-xs text-ink-faint">Aucun mouvement pour l'instant.</p>
+        <p className="text-xs text-cream-faint">Aucun mouvement pour l'instant.</p>
       )}
 
       {entries && entries.length > 0 && (
@@ -259,10 +231,10 @@ function HistorySection({
           {entries.map((entry) => (
             <li key={entry.id} className="flex items-center justify-between gap-3 px-3.5 py-2.5">
               <div className="min-w-0">
-                <p className="truncate text-sm text-ink">
+                <p className="truncate text-sm text-cream">
                   {WALLET_REASON_LABELS[entry.reason] ?? entry.reason}
                 </p>
-                <p className="text-xs text-ink-faint">
+                <p className="text-xs text-cream-faint">
                   {new Date(entry.createdAt).toLocaleString("fr-FR", {
                     day: "2-digit",
                     month: "2-digit",
@@ -273,8 +245,8 @@ function HistorySection({
               </div>
               <span
                 className={cn(
-                  "shrink-0 font-display text-sm font-semibold tabular-nums",
-                  entry.delta < 0 ? "text-danger" : "text-success",
+                  "tabular shrink-0 text-sm font-semibold",
+                  entry.delta < 0 ? "text-danger" : "text-win",
                 )}
               >
                 {formatCoinsDelta(entry.delta)}

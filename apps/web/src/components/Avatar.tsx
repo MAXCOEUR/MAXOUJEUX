@@ -18,37 +18,44 @@ function hash(value: string): number {
 }
 
 /**
- * Avatar procédural : deux teintes dérivées de la graine et l'initiale du pseudo.
- * Évite d'héberger des images et le lot de contraintes qui va avec (upload,
- * stockage, modération).
+ * Avatar procédural, dessiné comme un jeton de casino : anneau extérieur plus
+ * clair, disque intérieur, initiale gravée. Évite d'héberger des images et le
+ * lot de contraintes qui va avec (envoi, stockage, modération).
+ *
+ * Les teintes sont contraintes en chroma et en clarté pour rester dans la
+ * gamme du tapis : un avatar fluo casserait l'ensemble.
  */
 export function Avatar({ seed, pseudo, className }: AvatarProps) {
-  const { from, to } = useMemo(() => {
-    const h = hash(seed);
-    const hue = h % 360;
+  const { ring, face } = useMemo(() => {
+    const hue = hash(seed) % 360;
     return {
-      from: `oklch(0.72 0.17 ${hue})`,
-      to: `oklch(0.65 0.16 ${(hue + 55) % 360})`,
+      ring: `oklch(0.68 0.11 ${hue})`,
+      face: `oklch(0.52 0.09 ${hue})`,
     };
   }, [seed]);
 
   const initial = pseudo.charAt(0).toUpperCase();
 
   return (
-    <div
+    <span
       className={cn(
-        "grid size-9 shrink-0 place-items-center rounded-full",
-        "font-display text-sm font-semibold",
+        "relative grid size-9 shrink-0 place-items-center rounded-full",
+        "font-display text-sm font-bold",
         className,
       )}
-      style={{ backgroundImage: `linear-gradient(135deg, ${from}, ${to})` }}
+      style={{ backgroundColor: ring }}
       title={pseudo}
     >
-      {/* Texte sombre imposé : les deux teintes générées sont toujours claires. */}
-      <span aria-hidden className="text-night">
+      {/* Disque intérieur : c'est ce qui fait lire un jeton plutôt qu'une bille. */}
+      <span
+        aria-hidden
+        className="absolute inset-[3px] rounded-full"
+        style={{ backgroundColor: face }}
+      />
+      <span aria-hidden className="relative text-cream">
         {initial}
       </span>
       <span className="sr-only">{pseudo}</span>
-    </div>
+    </span>
   );
 }
