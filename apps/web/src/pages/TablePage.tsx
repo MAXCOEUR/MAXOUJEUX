@@ -2,6 +2,7 @@ import {
   formatCoins,
   getGame,
   type CurrentUser,
+  type ActiveMatchView,
   type MatchView,
   type Seat,
 } from "@maxoujeux/shared";
@@ -16,9 +17,11 @@ import { ResultOverlay } from "@/components/games/ResultOverlay";
 import { TicTacToeBoard } from "@/components/games/TicTacToeBoard";
 import { cn } from "@/lib/cn";
 import { useGame } from "@/lib/game";
+import { useBlackjack } from "@/lib/blackjack";
 import { navigate } from "@/lib/route";
 import { request, useRealtime } from "@/lib/socket";
 import { pushToast } from "@/lib/toast";
+import { BlackjackTablePage } from "@/pages/BlackjackTablePage";
 
 /**
  * Table de jeu.
@@ -29,16 +32,21 @@ import { pushToast } from "@/lib/toast";
  */
 export function TablePage({ user, tableId }: { user: CurrentUser; tableId: string }) {
   const match = useGame((state) => state.match);
+  const blackjack = useBlackjack((state) => state.view);
   const status = useRealtime((state) => state.status);
 
   // Demande de resynchronisation à l'arrivée : le joueur a pu ouvrir cette
   // adresse directement, ou recharger sa page en pleine partie.
   useEffect(() => {
-    if (match?.id === tableId) return;
-    void request<MatchView | null>((socket, ack) => socket.emit("match:sync", ack)).then((reply) => {
-      if (reply.ok && reply.data) useGame.getState().apply(reply.data);
+    if (match?.id === tableId || blackjack?.id === tableId) return;
+    void request<ActiveMatchView | null>((socket, ack) => socket.emit("match:sync", ack)).then((reply) => {
+      if (!reply.ok || !reply.data) return;
+      if (reply.data.game === "blackjack") useBlackjack.getState().apply(reply.data);
+      else useGame.getState().apply(reply.data);
     });
-  }, [tableId, match?.id]);
+  }, [tableId, match?.id, blackjack?.id]);
+
+  if (blackjack?.id === tableId) return <BlackjackTablePage user={user} view={blackjack} />;
 
   // Garde séparé du contenu : tout ce qui suit a besoin d'une partie chargée, et
   // la passer en propriété évite de la revérifier dans chaque gestionnaire.

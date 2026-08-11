@@ -5,16 +5,17 @@ import { env, isProduction } from "../env.js";
 import { SESSION_COOKIE, resolveSession } from "../modules/auth/session.js";
 import {
   attach,
+  activeViewFor,
   detach,
   setTableLogger,
   setTableNotifier,
-  viewFor,
 } from "../modules/tables/manager.js";
 import { setRealtimeLogger } from "./guard.js";
 import { createMotusNotifier, registerMotusHandlers } from "./motus.js";
 import { setWalletNotifier } from "./notify.js";
 import { addConnection, presenceSnapshot, removeConnection } from "./presence.js";
 import { createTableNotifier, registerTableHandlers } from "./tables.js";
+import { registerBlackjackHandlers } from "./blackjack.js";
 import { userRoom, type GameServer } from "./types.js";
 import { setMotusNotifier, unwatch as unwatchMotus } from "../modules/motus/service.js";
 
@@ -102,6 +103,7 @@ export function attachRealtime(app: FastifyInstance): GameServer {
     });
 
     registerTableHandlers(socket);
+    registerBlackjackHandlers(socket);
     registerMotusHandlers(socket);
 
     /**
@@ -114,8 +116,9 @@ export function attachRealtime(app: FastifyInstance): GameServer {
      */
     const resumed = attach(player.userId);
     if (resumed) {
-      const view = viewFor(resumed, player.userId);
-      if (view) socket.emit("match:state", view);
+      const view = activeViewFor(resumed, player.userId);
+      if (view?.game === "blackjack") socket.emit("blackjack:state", view);
+      else if (view) socket.emit("match:state", view);
     }
 
     socket.on("disconnect", () => {

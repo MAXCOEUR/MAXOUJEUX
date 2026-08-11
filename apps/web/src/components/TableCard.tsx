@@ -36,9 +36,9 @@ export function TableCard({
   const host = table.seats.find((seat) => seat.seat === 0);
   const enCours = table.status === "playing";
   const complete = table.seats.length >= table.maxSeats;
-  const tropCher = table.stake > balance;
+  const tropCher = table.stake !== null && table.stake > balance;
 
-  const joignable = !enCours && !complete && !mine && !busy && !tropCher;
+  const joignable = (!enCours || table.game === "blackjack") && !complete && !mine && !busy && !tropCher;
 
   return (
     <article
@@ -76,12 +76,14 @@ export function TableCard({
       <dl className="flex items-end justify-between gap-3">
         <div>
           <dt className="text-xs text-cream-faint">Mise</dt>
-          <dd className="tabular text-sm font-semibold text-brass">{formatCoins(table.stake)}</dd>
+          <dd className="tabular text-sm font-semibold text-brass">
+            {table.stake === null ? "10 – 2 500 MC" : formatCoins(table.stake)}
+          </dd>
         </div>
         <div className="text-right">
           <dt className="text-xs text-cream-faint">Gain si victoire</dt>
           <dd className="tabular text-sm font-semibold text-cream">
-            {formatCoins(winPayout(table.game, table.stake))}
+            {table.stake === null ? "Blackjack 3:2" : formatCoins(winPayout(table.game, table.stake))}
           </dd>
         </div>
       </dl>
@@ -115,7 +117,7 @@ export function TableCard({
         <Button variant="outline" onClick={() => onReprendre(table)} className="w-full">
           Revenir à ma table
         </Button>
-      ) : enCours ? null : (
+      ) : enCours && table.game !== "blackjack" ? null : (
         <Button
           onClick={() => onJoin(table)}
           loading={joining}

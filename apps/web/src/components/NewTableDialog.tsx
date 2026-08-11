@@ -33,6 +33,7 @@ export function NewTableDialog({
 
   const payout = winPayout(game.code, stake);
   const affordable = stake <= balance;
+  const blackjack = game.code === "blackjack";
 
   return (
     <Modal
@@ -47,7 +48,7 @@ export function NewTableDialog({
           <Button
             onClick={() => onCreate(stake)}
             loading={loading}
-            disabled={!affordable}
+            disabled={!blackjack && !affordable}
             className="flex-1"
           >
             Ouvrir la table
@@ -55,20 +56,17 @@ export function NewTableDialog({
         </div>
       }
     >
-      <p className="text-xs font-semibold uppercase tracking-[0.08em] text-cream-faint">
-        Ta mise
-      </p>
-
-      <StakePicker
-        options={options}
-        value={stake}
-        onChange={setStake}
-        balance={balance}
-        disabled={loading}
-        className="mt-3"
-      />
+      {!blackjack && <>
+        <p className="text-xs font-semibold uppercase tracking-[0.08em] text-cream-faint">Ta mise</p>
+        <StakePicker options={options} value={stake} onChange={setStake} balance={balance} disabled={loading} className="mt-3" />
+      </>}
 
       <div className="mt-5 space-y-1.5 rounded-xl border border-line bg-felt-deep/50 px-4 py-3 text-sm">
+        {blackjack ? <>
+          <p className="text-cream">La table accueille jusqu’à cinq joueurs face au croupier.</p>
+          <p className="text-cream-dim">Chacun choisit sa mise, de 10 à 2 500 MC, au début de chaque manche.</p>
+          <p className="text-xs text-cream-faint">Ouvrir ou rejoindre la table ne débite aucun jeton.</p>
+        </> : <>
         <p className="text-cream-dim">
           Les deux joueurs misent{" "}
           <span className="tabular text-brass">{formatCoins(stake)}</span>.
@@ -80,9 +78,10 @@ export function NewTableDialog({
         <p className="text-xs text-cream-faint">
           Égalité : chacun récupère sa mise. Abandon ou temps écoulé : la mise est perdue.
         </p>
+        </>}
       </div>
 
-      {!affordable && (
+      {!blackjack && !affordable && (
         <p role="alert" className="mt-3 text-xs text-danger">
           Il te manque {formatCoins(stake - balance)}.
         </p>

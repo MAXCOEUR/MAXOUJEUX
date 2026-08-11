@@ -19,6 +19,7 @@ import { Plaque } from "@/components/Plaque";
 import { TableCard } from "@/components/TableCard";
 import { cn } from "@/lib/cn";
 import { useGame } from "@/lib/game";
+import { useBlackjack } from "@/lib/blackjack";
 import { navigate } from "@/lib/route";
 import { request, useRealtime, watchSalon } from "@/lib/socket";
 import { useTables } from "@/lib/tables";
@@ -62,6 +63,7 @@ function SalonContent({
   const game = definition.code;
   const salon = useTables((state) => state.salons[game]);
   const match = useGame((state) => state.match);
+  const blackjack = useBlackjack((state) => state.view);
   const status = useRealtime((state) => state.status);
 
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -80,7 +82,7 @@ function SalonContent({
   const plein = used >= max;
   // Une partie en cours interdit d'en ouvrir une seconde : le serveur le refuse
   // de toute façon, autant ne pas proposer le geste.
-  const busy = match !== null && match.status !== "finished";
+  const busy = (match !== null && match.status !== "finished") || blackjack !== null;
   const attente = tables.filter((table) => table.status === "waiting");
   const enCours = tables.filter((table) => table.status === "playing");
 
@@ -89,7 +91,9 @@ function SalonContent({
     setCreateError(undefined);
 
     const reply = await request<{ tableId: string }>((socket, ack) =>
-      socket.emit("tables:create", { game: game as DuelGame, stake }, ack),
+      game === "blackjack"
+        ? socket.emit("tables:create", { game: "blackjack" }, ack)
+        : socket.emit("tables:create", { game: game as DuelGame, stake }, ack),
     );
 
     setCreating(false);

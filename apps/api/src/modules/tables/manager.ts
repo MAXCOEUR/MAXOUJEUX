@@ -32,6 +32,7 @@ import {
   type TableSeat,
   type TableStatus,
   type TableSummary,
+  type TableGame,
 } from "@maxoujeux/shared";
 import { getEngine, type GridState } from "@maxoujeux/engines";
 import { eq } from "drizzle-orm";
@@ -43,6 +44,22 @@ import { connectionCount } from "../../realtime/presence.js";
 import { releaseActivity, reserveActivity } from "../games/activity.js";
 import { debitInTx } from "../wallet/service.js";
 import { cancelMatch, settleMatch, type PlayerResult } from "./settle.js";
+import {
+  attachBlackjack,
+  blackjackCounts,
+  blackjackPlayersOf,
+  blackjackSalonSnapshot,
+  blackjackTableOf,
+  createBlackjackTable,
+  detachBlackjack,
+  hasBlackjackTable,
+  joinBlackjackTable,
+  leaveBlackjack,
+  resetBlackjackForTests,
+  setBlackjackNotifier,
+  shutdownBlackjack,
+  viewBlackjack,
+} from "../blackjack/service.js";
 
 /**
  * Durée pendant laquelle une table terminée reste consultable.
@@ -117,7 +134,7 @@ interface Table {
 
 export interface TableNotifier {
   /** La liste des tables d'un jeu a changé. */
-  salon(game: DuelGame): void;
+  salon(game: TableGame): void;
   /** L'état d'une table a changé : à diffuser à ses joueurs. */
   match(tableId: string): void;
   /** Les comptages du lobby ont changé. */
@@ -130,6 +147,11 @@ let notifier: TableNotifier = NO_NOTIFIER;
 
 export function setTableNotifier(next: TableNotifier): void {
   notifier = next;
+  setBlackjackNotifier({
+    table: next.match,
+    salon: () => next.salon("blackjack"),
+    counts: next.counts,
+  });
 }
 
 /** Journalisation d'une erreur survenue dans une minuterie, sans dépendre de Fastify. */
@@ -292,9 +314,11 @@ function opponentSeat(seat: Seat): Seat {
  */
 export async function createTable(
   player: PlayerIdentity,
-  game: DuelGame,
-  stake: number,
+  game: TableGame,
+  stake?: number,
 ): Promise<string> {
+  if (game === "blackjack") return createBlackjackTable(player);
+  if (stake === undefined) fail("STAKE_INVALID", "Cette mise n'est pas autorisée.", 400);
   if (!isValidStake(game, stake)) {
     fail("STAKE_INVALID", "Cette mise n'est pas autorisée.", 400);
   }
@@ -383,6 +407,7 @@ export async function createTable(
  */
 export async function joinTable(player: PlayerIdentity, tableId: string): Promise<string> {
   const table = tables.get(tableId);
+  if (!table && hasBlackjackTable(tableId)) return joinBlackjackTable(player, tableId);
 
   // --- Réservation synchrone. ---
   if (!table || !isLive(table)) fail("TABLE_GONE", "Cette table n'existe plus.", 404);
@@ -496,6 +521,7 @@ export async function play(
  */
 export async function leave(userId: string, tableId: string): Promise<void> {
   const table = tables.get(tableId);
+  if (!table && hasBlackjackTable(tableId)) return leaveBlackjack(userId, tableId);
   if (!table || !isLive(table)) fail("TABLE_GONE", "Cette table n'existe plus.", 404);
 
   const occupant = occupantOf(table, userId);
@@ -599,7 +625,7 @@ async function cancel(table: Table): Promise<void> {
  */
 export function attach(userId: string): string | null {
   const tableId = tableByUser.get(userId);
-  if (!tableId) return null;
+  if (!tableId) return attachBlackjack(userId);
 
   const table = tables.get(tableId);
   if (!table) return null;
@@ -621,7 +647,10 @@ export function attach(userId: string): string | null {
 /** Une socket du joueur se ferme. Le sursis n'est armé qu'à la dernière. */
 export function detach(userId: string): void {
   const tableId = tableByUser.get(userId);
-  if (!tableId) return;
+  if (!tableId) {
+    detachBlackjack(userId);
+    return;
+  }
 
   const table = tables.get(tableId);
   if (!table || !isLive(table)) return;
@@ -643,16 +672,16 @@ export function detach(userId: string): void {
 // ---------------------------------------------------------------------------
 
 export function tableOf(userId: string): string | null {
-  return tableByUser.get(userId) ?? null;
+  return tableByUser.get(userId) ?? blackjackTableOf(userId);
 }
 
-export function gameOf(tableId: string): DuelGame | null {
-  return tables.get(tableId)?.game ?? null;
+export function gameOf(tableId: string): TableGame | null {
+  return tables.get(tableId)?.game ?? (hasBlackjackTable(tableId) ? "blackjack" : null);
 }
 
 export function playersOf(tableId: string): string[] {
   const table = tables.get(tableId);
-  return table ? occupants(table).map((seat) => seat.userId) : [];
+  return table ? occupants(table).map((seat) => seat.userId) : blackjackPlayersOf(tableId);
 }
 
 function toTableSeat(occupant: Occupant): TableSeat {
@@ -715,7 +744,21 @@ export function viewFor(tableId: string, userId: string | null): MatchView | nul
   };
 }
 
-export function salonSnapshot(game: DuelGame): SalonSnapshot {
+export function activeViewFor(tableId: string, userId: string | null): import("@maxoujeux/shared").ActiveMatchView | null {
+  return viewFor(tableId, userId) ?? viewBlackjack(tableId, userId);
+}
+
+export function salonSnapshot(game: TableGame): SalonSnapshot {
+  if (game === "blackjack") {
+    const table = blackjackSalonSnapshot();
+    return {
+      game,
+      tables: table ? [table] : [],
+      used: table ? 1 : 0,
+      max: getGame("blackjack")?.maxTables ?? 1,
+      now: new Date().toISOString(),
+    };
+  }
   const summaries: TableSummary[] = [];
 
   for (const table of tables.values()) {
@@ -754,6 +797,7 @@ export function tableCounts(): Partial<Record<GameCode, TableCounts>> {
   for (const game of ["connect4", "tictactoe"] as const) {
     counts[game] = { waiting: 0, playing: 0, max: maxTables(game) };
   }
+  counts.blackjack = blackjackCounts();
 
   for (const table of tables.values()) {
     const entry = counts[table.game];
@@ -783,6 +827,7 @@ export function shutdown(): void {
       table.removalTimer = null;
     }
   }
+  shutdownBlackjack();
 }
 
 /** Remet le gestionnaire à zéro. Réservé aux tests. */
@@ -796,6 +841,7 @@ export function resetForTests(): void {
   tables.clear();
   tableByUser.clear();
   notifier = NO_NOTIFIER;
+  resetBlackjackForTests();
 }
 
 /** Nombre de minuteries encore armées. Réservé aux tests. */

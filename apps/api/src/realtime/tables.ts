@@ -16,19 +16,19 @@ import {
   playSchema,
   tableRefSchema,
   watchSchema,
-  type MatchView,
+  type ActiveMatchView,
   type SalonSnapshot,
 } from "@maxoujeux/shared";
 import type { TableNotifier } from "../modules/tables/manager.js";
 import {
   createTable,
+  activeViewFor,
   joinTable,
   leave,
   play,
   playersOf,
   salonSnapshot,
   tableOf,
-  viewFor,
 } from "../modules/tables/manager.js";
 import { gameCounts } from "./counts.js";
 import { withAck } from "./guard.js";
@@ -51,8 +51,10 @@ export function createTableNotifier(io: GameServer): TableNotifier {
       // jeux du lot 1 n'ont rien à cacher, mais la mécanique doit déjà être
       // celle du poker, sinon elle sera récrite sous pression au lot 4.
       for (const userId of playersOf(tableId)) {
-        const view = viewFor(tableId, userId);
-        if (view) io.to(userRoom(userId)).emit("match:state", view);
+        const view = activeViewFor(tableId, userId);
+        if (!view) continue;
+        if (view.game === "blackjack") io.to(userRoom(userId)).emit("blackjack:state", view);
+        else io.to(userRoom(userId)).emit("match:state", view);
       }
     },
 
@@ -92,8 +94,8 @@ export function registerTableHandlers(socket: GameSocket): void {
 
   socket.on("tables:create", (payload, ack) => {
     void withAck<{ tableId: string }>(socket, "tables:create", ack, async () => {
-      const { game, stake } = createTableSchema.parse(payload);
-      const tableId = await createTable(me, game, stake);
+      const input = createTableSchema.parse(payload);
+      const tableId = await createTable(me, input.game, "stake" in input ? input.stake : undefined);
       return { tableId };
     });
   });
@@ -123,9 +125,9 @@ export function registerTableHandlers(socket: GameSocket): void {
   });
 
   socket.on("match:sync", (ack) => {
-    void withAck<MatchView | null>(socket, "match:sync", ack, async () => {
+    void withAck<ActiveMatchView | null>(socket, "match:sync", ack, async () => {
       const tableId = tableOf(me.userId);
-      return tableId ? viewFor(tableId, me.userId) : null;
+      return tableId ? activeViewFor(tableId, me.userId) : null;
     });
   });
 

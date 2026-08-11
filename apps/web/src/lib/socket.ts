@@ -9,6 +9,7 @@ import { useEffect } from "react";
 import { io } from "socket.io-client";
 import { create } from "zustand";
 import { bindGameEvents, useGame } from "./game.js";
+import { bindBlackjackEvents, useBlackjack } from "./blackjack.js";
 import {
   bindMotusEvents,
   isWatchingMotus,
@@ -66,8 +67,12 @@ export const useRealtime = create<RealtimeState>((set, get) => ({
        */
       socket.emit("match:sync", (reply) => {
         if (!reply.ok) return;
-        if (reply.data) useGame.getState().apply(reply.data);
-        else useGame.getState().clear();
+        if (reply.data?.game === "blackjack") useBlackjack.getState().apply(reply.data);
+        else if (reply.data) useGame.getState().apply(reply.data);
+        else {
+          useGame.getState().clear();
+          useBlackjack.getState().clear();
+        }
       });
 
       for (const game of watchedGames()) {
@@ -86,6 +91,7 @@ export const useRealtime = create<RealtimeState>((set, get) => ({
 
     socket.on("disconnect", () => {
       useMotus.getState().clearPending();
+      useBlackjack.getState().clearPending();
       set({ status: "disconnected", presence: EMPTY_PRESENCE });
     });
     socket.on("presence:update", (presence) => set({ presence }));
@@ -106,6 +112,7 @@ export const useRealtime = create<RealtimeState>((set, get) => ({
     socket.on("tables:counts", (counts) => useTables.getState().setCounts(counts));
 
     bindGameEvents(socket);
+    bindBlackjackEvents(socket);
     bindMotusEvents(socket);
 
     set({ socket });
@@ -120,6 +127,7 @@ export const useRealtime = create<RealtimeState>((set, get) => ({
     // remise à zéro, le compte suivant sur la même machine verrait la table du
     // précédent.
     useGame.getState().clear();
+    useBlackjack.getState().clear();
     useMotus.getState().clear();
     useTables.getState().clear();
   },
