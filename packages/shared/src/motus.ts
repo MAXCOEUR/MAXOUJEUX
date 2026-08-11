@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { MOTUS_MAX_ATTEMPTS } from "./economy.js";
 
 export const MOTUS_WORD_LENGTHS = [5, 6, 7, 8] as const;
 
@@ -28,6 +29,32 @@ export interface MotusView {
   net: number;
   version: number;
   now: string;
+}
+
+const MOTUS_SHARE_MARKS: Record<MotusMark, string> = {
+  correct: "🟩",
+  present: "🟨",
+  absent: "⬛",
+};
+
+/** Produit un résultat partageable sans sérialiser les lettres proposées. */
+export function formatMotusShare(view: MotusView, appOrigin: string): string {
+  if (view.status !== "won" && view.status !== "lost") {
+    throw new Error("Le résultat Motus doit provenir d'une partie terminée");
+  }
+
+  const score =
+    view.status === "won"
+      ? `${view.guesses.length}/${MOTUS_MAX_ATTEMPTS}`
+      : view.endReason === "abandoned"
+        ? `Abandon — ${view.guesses.length}/${MOTUS_MAX_ATTEMPTS}`
+        : `X/${MOTUS_MAX_ATTEMPTS}`;
+  const grid = view.guesses
+    .map((guess) => guess.marks.map((mark) => MOTUS_SHARE_MARKS[mark]).join(""))
+    .join("\n");
+  const url = `${appOrigin.replace(/\/+$/, "")}/jeu/motus`;
+
+  return [`MaxouJeux Motus — ${score}`, grid, url].filter(Boolean).join("\n\n");
 }
 
 export const motusGuessSchema = z.object({
