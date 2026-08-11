@@ -20,7 +20,9 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY packages/shared/package.json packages/shared/
 COPY apps/api/package.json apps/api/
 COPY apps/web/package.json apps/web/
-RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
+# `sharing=locked` par cohérence avec l'image de l'API : garantit qu'aucune
+# étape parallèle ne puisse écrire dans le magasin pnpm en même temps.
+RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store,sharing=locked \
     pnpm install --frozen-lockfile --filter @maxoujeux/web...
 
 FROM deps AS build

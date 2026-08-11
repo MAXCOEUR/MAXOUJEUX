@@ -21,7 +21,10 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY packages/shared/package.json packages/shared/
 COPY apps/api/package.json apps/api/
 COPY apps/web/package.json apps/web/
-RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
+# `sharing=locked` : les étapes `deps` et `runtime` descendent toutes deux de
+# `base`, BuildKit les exécute donc en parallèle. Sans verrou, elles écrivent
+# dans le même magasin pnpm en même temps et se corrompent mutuellement.
+RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store,sharing=locked \
     pnpm install --frozen-lockfile --filter @maxoujeux/api...
 
 # --- Compilation -------------------------------------------------------------
@@ -41,9 +44,13 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY packages/shared/package.json packages/shared/
 COPY apps/api/package.json apps/api/
 COPY apps/web/package.json apps/web/
-RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
-    pnpm install --frozen-lockfile --prod --filter @maxoujeux/api... \
- && pnpm store prune
+#
+# Pas de `pnpm store prune` ici : le magasin est un cache de construction, il
+# n'entre jamais dans l'image finale — le purger ne gagnait aucun octet, mais
+# supprimait les fichiers sous les pieds de l'étape `deps` qui tourne en
+# parallèle, d'où des ENOENT aléatoires à la copie.
+RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store,sharing=locked \
+    pnpm install --frozen-lockfile --prod --filter @maxoujeux/api...
 
 COPY --from=build /app/apps/api/dist ./apps/api/dist
 # Les migrations SQL sont rejouées au démarrage : elles doivent voyager avec l'image.
