@@ -405,19 +405,41 @@ Décisions arrêtées à cette occasion :
   saisie native, couleurs accompagnées de libellés accessibles, synchronisation entre
   onglets et reconnexion automatique. Après une défaite, le mot reste caché.
 
-Vérifications passées : typage strict sur les quatre paquets, **163 tests** (55 partagés,
-39 moteurs, 66 API, 3 web), dont les courses réelles sur PostgreSQL 16 ; build de production
+Vérifications passées : typage strict sur les quatre paquets, **170 tests** (55 partagés,
+39 moteurs, 66 API, 10 web), dont les courses réelles sur PostgreSQL 16 ; build de production
 (API 82,84 Ko, front 112,15 Ko gzip). La migration de 1,8 Mo contenant le dictionnaire
 s'applique en environ 3,9 s sur une base PGlite vierge. Les images locales mesurées font
 303,5 Mo pour l'API et 48,9 Mo pour le front. Le parcours navigateur couvre les grilles
 5 et 8 lettres, téléphone 360 px sans débordement, deux onglets, coupure réseau,
 abandon et réduction des mouvements.
 
+### Lot 3 — Blackjack : **livré**
+
+- **Table publique persistante** : une table de cinq sièges maximum, visible comme une
+  vraie table de casino. Tous les joueurs assis voient les pseudos, mises, cartes, mains
+  séparées et résultats des autres en temps réel.
+- **Moteur et sabot** : six jeux mélangés côté serveur, coupe à 75 %, As souples,
+  blackjack payé 3:2, croupier arrêté sur 17 souple, assurance, doublement et jusqu'à
+  quatre mains après séparation. La carte fermée et l'ordre du sabot ne transitent jamais.
+- **Manches et économie** : fenêtre de mises de 20 s, décisions de 30 s, mises de 10 à
+  2 500 MC par pas de 10. Mise initiale, assurance, double, séparation, règlement et
+  statistiques utilisent le service de portefeuille et des transactions atomiques.
+- **Résilience** : mutations sérialisées par table, versions autoritaires, multi-onglets,
+  sursis de déconnexion de 45 s et remboursement idempotent des manches ouvertes après un
+  redémarrage de l'API.
+- **Front** : salon générique conservé, cinq places permanentes autour du croupier,
+  commandes contextuelles et disposition responsive sans débordement à 360 px.
+
+Vérifications passées : typage strict, **190 tests suivis par Git** (58 partagés,
+46 moteurs, 72 API, 14 web), suite API rejouée sur PostgreSQL 16 réel et build de
+production (API 112,67 Ko, front 116,57 Ko gzip). Le parcours Chromium couvre deux
+comptes assis ensemble, leurs cartes et mises publiques, une manche complète et le rendu
+téléphone 360 px.
+
 ### Lots suivants
 
 | Lot | Contenu | Charge |
 |---|---|---|
-| **3** | Blackjack : moteur, sabot, croupier, transactions de jetons | 4 j |
 | **4** | Poker Hold'em : moteur + ~60 tests, UI de table, timers, sit-out | 8–10 j |
 | **5** | Profils, classements Elo, chat, modération, sauvegardes | 3 j |
 

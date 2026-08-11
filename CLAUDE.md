@@ -13,7 +13,7 @@ pnpm install
 pnpm dev                 # API :3000 + front :5173 en parallèle
 pnpm typecheck           # tsc --noEmit sur les 4 paquets — à lancer avant tout commit
 pnpm build               # tsup (API) + tsc && vite build (front)
-pnpm test                # vitest : 122 tests (47 partagés, 31 moteurs, 44 API)
+pnpm test                # 190 tests (58 partagés, 46 moteurs, 72 API, 14 web)
 pnpm db:generate         # OBLIGATOIRE après toute modification de src/db/schema.ts
 ```
 
@@ -335,16 +335,17 @@ immédiat) **et** rejoués par l'API. Ne jamais supposer qu'un contrôle client 
 
 ## À faire
 
-Lot 3 : Blackjack — moteur, sabot, croupier et transactions de jetons. Voir la
-section « État d'avancement » de `CAHIER-DES-CHARGES.md`.
+Lot 4 : Poker Hold'em — moteur, enchères, pots secondaires et table de 2 à 9 joueurs.
+Voir la section « État d'avancement » de `CAHIER-DES-CHARGES.md`.
 
 Ce qui est déjà en place et **à consommer sans le réécrire** :
 
 - **Motus** est livré dans `modules/motus/` : son registre d'activité commun, son modèle
   de notifieur injecté et son transport `withAck` servent de patron aux prochains jeux
   solo. Le secret reste exclusivement dans `motus_slots` et ne rejoint jamais une vue.
-- **Blackjack** (lot 3) et **poker** (lot 4) : `debit` / `credit` avec les codes
-  `blackjack_bet`, `blackjack_payout`, `poker_buyin`, `poker_cashout`, et les caves de
+- **Blackjack** est livré dans `modules/blackjack/` : table persistante de cinq sièges,
+  sabot en mémoire, une ligne `matches` par manche et récupération transactionnelle au
+  redémarrage. Le poker (lot 4) utilisera `poker_buyin` / `poker_cashout` et les caves de
   `STAKE_TIERS`. Pour tout règlement touchant plusieurs écritures, passer par
   `creditInTx` / `debitInTx` dans une transaction unique, comme
   `modules/tables/settle.ts`.
@@ -353,9 +354,9 @@ Ce qui est déjà en place et **à consommer sans le réécrire** :
 
 Dette assumée, à traiter le jour où elle gêne :
 
-- Le harnais front reste volontairement minimal (`tsx --test`) et ne teste que les
-  adaptateurs aux API navigateur. La logique pure reste dans `packages/shared` ou
-  `packages/engines`. À étendre si l'interface de poker devient complexe.
+- Le harnais front reste volontairement léger (`tsx --test`) : il couvre désormais les
+  adaptateurs navigateur, la saisie Motus et le rendu statique de la table Blackjack.
+  La logique pure reste dans `packages/shared` ou `packages/engines`.
 - Le parcours à deux joueurs se vérifie à la main (deux navigateurs) ou avec un script
   pilotant deux clients `socket.io-client`. Il n'y a pas de test d'intégration WebSocket
   automatisé.
