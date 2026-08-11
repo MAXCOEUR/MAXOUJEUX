@@ -149,7 +149,7 @@ export function AuthPage() {
               label="Email"
               name="email"
               type="email"
-              autoComplete="email"
+              autoComplete={mode === "login" ? "username" : "email"}
               placeholder="toi@exemple.fr"
               required
               error={fieldErrors.email}
