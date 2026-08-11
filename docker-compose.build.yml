@@ -1,0 +1,18 @@
+# Surcouche de construction locale, à utiliser uniquement pour tester une image
+# sans passer par GitHub Actions :
+#
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+#
+# En usage normal, le NAS ne construit rien : il tire les images de GHCR.
+# Construire sur le CPU ARM du NAS fonctionne mais prend plusieurs minutes.
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile

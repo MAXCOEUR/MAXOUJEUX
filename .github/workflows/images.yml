@@ -1,0 +1,118 @@
+name: Images Docker
+
+# Publie les deux images de MaxouJeux sur GHCR :
+#   ghcr.io/<propriétaire>/maxoujeux-api
+#   ghcr.io/<propriétaire>/maxoujeux-web
+#
+# Le déploiement sur le NAS reste manuel : `docker compose pull && up -d`.
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+# Un push qui en remplace un autre annule le build précédent : inutile de
+# publier une image déjà périmée.
+concurrency:
+  group: images-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Barrière de qualité : rien n'est publié si les types ou les tests échouent.
+  # Sans ce garde-fou, un `latest` cassé partirait sur le NAS au prochain pull.
+  verification:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Types
+        run: pnpm typecheck
+
+      - name: Tests
+        run: pnpm test
+
+  images:
+    needs: verification
+    # Runner ARM64 natif, gratuit sur les dépôts publics. Le NAS UGREEN est en
+    # aarch64 : construire ici évite l'émulation QEMU, cinq à dix fois plus lente.
+    # Si ce label devenait indisponible, repasser sur `ubuntu-latest` en ajoutant
+    # `docker/setup-qemu-action@v3` avant buildx.
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: read
+      packages: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: api
+            dockerfile: apps/api/Dockerfile
+          - name: web
+            dockerfile: apps/web/Dockerfile
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Propriétaire en minuscules
+        id: owner
+        # GHCR refuse les majuscules dans un nom d'image, alors que le nom de
+        # compte GitHub peut en contenir.
+        run: echo "value=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Étiquettes et métadonnées
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ steps.owner.outputs.value }}/maxoujeux-${{ matrix.name }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,prefix=sha-,format=short
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+          labels: |
+            org.opencontainers.image.title=MaxouJeux ${{ matrix.name }}
+            org.opencontainers.image.description=Plateforme de mini-jeux multijoueur
+
+      - uses: docker/build-push-action@v6
+        with:
+          # Contexte à la racine : les deux Dockerfile ont besoin du monorepo
+          # complet (paquet partagé + fichier de verrouillage pnpm).
+          context: .
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # Cache par image : le front et l'API n'ont pas les mêmes couches.
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+
+      - name: Récapitulatif
+        # L'étiquette `sha-…` est ce qui permet de revenir en arrière depuis le
+        # NAS : elle doit être lisible sans fouiller les journaux du build.
+        run: |
+          {
+            echo "### maxoujeux-${{ matrix.name }}"
+            echo '```'
+            echo "${{ steps.meta.outputs.tags }}"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

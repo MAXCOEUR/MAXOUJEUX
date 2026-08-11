@@ -1,0 +1,90 @@
+# Pile de production — NAS UGREEN DH4300 Plus (ARM64).
+#
+# Les images sont construites par GitHub Actions et publiées sur GHCR ; rien
+# n'est compilé sur le NAS.
+#
+#   Première installation :  cp .env.example .env  (puis renseigner les secrets)
+#                            docker compose up -d
+#   Mise à jour :            docker compose pull && docker compose up -d
+#   Retour en arrière :      TAG=sha-abc1234 docker compose up -d
+#
+# Pour construire localement au lieu de tirer les images :
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+#
+# Toutes les images utilisées existent en linux/arm64.
+#
+# Le reverse proxy public, le certificat et le nom de domaine ne font PAS
+# partie de cette pile : Nginx Proxy Manager s'en occupe déjà sur le NAS.
+# Il suffit d'y créer un hôte mandataire vers ce conteneur `web`
+# (voir CAHIER-DES-CHARGES.md, section « Exposition »).
+
+name: maxoujeux
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-maxoujeux}
+      POSTGRES_USER: ${POSTGRES_USER:-maxoujeux}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD est obligatoire}
+      # Accélère nettement l'initialisation du volume sur un CPU ARM.
+      POSTGRES_INITDB_ARGS: "--data-checksums"
+      TZ: ${TZ:-Europe/Paris}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-maxoujeux} -d ${POSTGRES_DB:-maxoujeux}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    # La base n'est jamais exposée hors du réseau Docker : seule l'API la joint.
+    networks: [internal]
+
+  api:
+    image: ghcr.io/${GHCR_OWNER:?GHCR_OWNER est obligatoire}/maxoujeux-api:${TAG:-latest}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: postgres://${POSTGRES_USER:-maxoujeux}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-maxoujeux}
+      SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET est obligatoire}
+      SESSION_TTL_DAYS: ${SESSION_TTL_DAYS:-30}
+      PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:?PUBLIC_ORIGIN est obligatoire}
+      STARTING_BALANCE: ${STARTING_BALANCE:-5000}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      # Confort de lecture des journaux uniquement. La logique MaxouCoin ne
+      # dépend pas de cette variable : les calculs de jour civil et de créneau
+      # Motus nomment explicitement Europe/Paris dans le code.
+      TZ: ${TZ:-Europe/Paris}
+    networks: [internal]
+    # Garde-fou mémoire : une fuite dans une partie ne doit pas emporter le NAS.
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  # Front statique + regroupement de /api et /socket.io sous une même origine.
+  # Ni TLS ni domaine ici : Nginx Proxy Manager, déjà en place sur le NAS,
+  # termine le HTTPS et pointe vers ce conteneur.
+  web:
+    image: ghcr.io/${GHCR_OWNER:?GHCR_OWNER est obligatoire}/maxoujeux-web:${TAG:-latest}
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      # Cible unique de NPM. Port 8080 par défaut pour ne pas entrer en conflit
+      # avec NPM lui-même, qui occupe déjà 80 et 443 sur le NAS.
+      - "${WEB_PORT:-8080}:80"
+    networks: [internal]
+
+volumes:
+  pgdata:
+
+networks:
+  internal:
+    driver: bridge
