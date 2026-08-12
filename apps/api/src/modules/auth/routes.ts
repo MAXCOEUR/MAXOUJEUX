@@ -1,26 +1,14 @@
-import { loginSchema, registerSchema, type CurrentUser } from "@maxoujeux/shared";
+import { loginSchema, registerSchema } from "@maxoujeux/shared";
 import type { FastifyInstance } from "fastify";
 import { currentUser, readSessionToken, requireAuth } from "../../lib/require-auth.js";
+import { toPublicUser } from "./public-user.js";
 import { login, register } from "./service.js";
 import {
   clearSessionCookie,
   createSession,
   revokeSession,
   setSessionCookie,
-  type AuthenticatedUser,
 } from "./session.js";
-
-function toPublicUser(user: AuthenticatedUser): CurrentUser {
-  return {
-    id: user.id,
-    email: user.email,
-    pseudo: user.pseudo,
-    avatarSeed: user.avatarSeed,
-    isAdmin: user.isAdmin,
-    balance: user.balance,
-    createdAt: user.createdAt.toISOString(),
-  };
-}
 
 export async function authRoutes(app: FastifyInstance): Promise<void> {
   /**

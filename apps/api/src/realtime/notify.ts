@@ -10,11 +10,19 @@
  * sont silencieusement ignorées.
  */
 
+/** Ce qui peut changer dans l'identité affichée d'un joueur en cours de session. */
+export interface IdentityPatch {
+  pseudo?: string;
+  avatarSeed?: string;
+}
+
 type WalletNotifier = (userId: string, balance: number) => void;
 type DisconnectNotifier = (userId: string) => void;
+type IdentityNotifier = (userId: string, patch: IdentityPatch) => void;
 
 let walletNotifier: WalletNotifier | null = null;
 let disconnectNotifier: DisconnectNotifier | null = null;
+let identityNotifier: IdentityNotifier | null = null;
 
 export function setWalletNotifier(notifier: WalletNotifier): void {
   walletNotifier = notifier;
@@ -30,4 +38,20 @@ export function setDisconnectNotifier(notifier: DisconnectNotifier): void {
 
 export function disconnectUser(userId: string): void {
   disconnectNotifier?.(userId);
+}
+
+export function setIdentityNotifier(notifier: IdentityNotifier): void {
+  identityNotifier = notifier;
+}
+
+/**
+ * Signale qu'un joueur a changé de pseudo ou d'avatar.
+ *
+ * L'identité est résolue **à la poignée de main** puis recopiée dans
+ * `socket.data` : sans cette reprise, le prochain message de chat du joueur
+ * repartirait sous son ancien nom, et il faudrait recharger la page pour s'en
+ * sortir.
+ */
+export function notifyIdentity(userId: string, patch: IdentityPatch): void {
+  identityNotifier?.(userId, patch);
 }

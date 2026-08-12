@@ -650,6 +650,17 @@ export function hasRouletteTable(tableId: string): boolean {
   return tables.has(tableId);
 }
 
+/** Corrige l'identité recopiée dans le participant, figée à son arrivée. */
+export function updateRouletteIdentity(
+  userId: string,
+  patch: { pseudo?: string; avatarSeed?: string },
+): void {
+  const tableId = tableByUser.get(userId);
+  const table = tableId ? tables.get(tableId) : undefined;
+  const player = table?.players.get(userId);
+  if (player) Object.assign(player, patch);
+}
+
 export function roulettePlayersOf(tableId: string): string[] {
   const table = tables.get(tableId);
   return table ? [...table.players.keys()] : [];

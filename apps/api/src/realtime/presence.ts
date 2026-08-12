@@ -43,6 +43,22 @@ export function removeConnection(userId: string): boolean {
 }
 
 /**
+ * Corrige l'identité d'un joueur déjà présent.
+ *
+ * @returns true si le lobby doit être rediffusé.
+ */
+export function renameConnection(
+  userId: string,
+  patch: { pseudo?: string; avatarSeed?: string },
+): boolean {
+  const existing = entries.get(userId);
+  if (!existing) return false;
+
+  existing.player = { ...existing.player, ...patch };
+  return true;
+}
+
+/**
  * Nombre de sockets ouvertes pour ce compte.
  *
  * Le gestionnaire de tables en a besoin : quand un joueur s'assied, il faut

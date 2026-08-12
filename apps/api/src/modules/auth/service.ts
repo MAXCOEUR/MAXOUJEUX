@@ -103,6 +103,7 @@ export async function login(input: LoginInput): Promise<AuthenticatedUser> {
       passwordHash: users.passwordHash,
       isBanned: users.isBanned,
       isAdmin: users.isAdmin,
+      deletedAt: users.deletedAt,
       balance: wallets.balance,
     })
     .from(users)
@@ -119,6 +120,12 @@ export async function login(input: LoginInput): Promise<AuthenticatedUser> {
 
   const ok = await verifyPassword(row.passwordHash, input.password);
   if (!ok) throw invalidCredentials();
+
+  // Contrôlé après la vérification du mot de passe : sinon le temps de réponse
+  // trahirait l'existence d'un compte fermé. En pratique l'email d'un compte
+  // anonymisé est réécrit, donc la recherche ci-dessus ne le trouve jamais —
+  // c'est une ceinture, pas la bretelle.
+  if (row.deletedAt) throw invalidCredentials();
 
   if (row.isBanned) {
     throw new AppError(403, "ACCOUNT_BANNED", "Ce compte a été suspendu");

@@ -3,6 +3,7 @@ import {
   bigint,
   boolean,
   check,
+  customType,
   date,
   index,
   integer,
@@ -25,6 +26,19 @@ import {
 
 const now = sql`now()`;
 
+/**
+ * Colonne binaire.
+ *
+ * Drizzle n'expose pas `bytea`. La normalisation en `Buffer` n'est pas
+ * cosmétique : postgres-js rend déjà un `Buffer`, PGlite un `Uint8Array` nu.
+ * Sans elle, `readUInt32LE` existe en production et manque en développement —
+ * exactement le genre d'écart qui se découvre après déploiement.
+ */
+const bytea = customType<{ data: Buffer; driverData: Uint8Array }>({
+  dataType: () => "bytea",
+  fromDriver: (value) => Buffer.from(value),
+});
+
 // ---------------------------------------------------------------------------
 // Comptes et sessions
 // ---------------------------------------------------------------------------
@@ -36,7 +50,14 @@ export const users = pgTable(
     email: text("email").notNull(),
     pseudo: text("pseudo").notNull(),
     passwordHash: text("password_hash").notNull(),
-    /** Graine de génération de l'avatar procédural côté front. */
+    /**
+     * Jeton d'avatar, fabriqué exclusivement par le serveur.
+     *
+     * Sans préfixe : avatar procédural, la valeur donne la teinte.
+     * Préfixé `img:` : une image est stockée dans `user_avatars`, et la valeur
+     * sert à la fois de teinte de repli et de version d'URL pour le cache.
+     * Le format vit dans `packages/shared/src/avatar.ts`.
+     */
     avatarSeed: text("avatar_seed").notNull(),
     /** Réservé : passera à true le jour où un SMTP sera branché. */
     emailVerified: boolean("email_verified").notNull().default(false),
@@ -44,6 +65,14 @@ export const users = pgTable(
     isAdmin: boolean("is_admin").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(now),
     lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().default(now),
+    /**
+     * Fermeture du compte, par anonymisation.
+     *
+     * La ligne est conservée : huit tables la référencent en cascade, et les
+     * manches partagées avec d'autres joueurs perdraient leur sens si elle
+     * disparaissait. Non nul = plus aucune connexion possible.
+     */
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
   },
   (table) => [
     // Unicité insensible à la casse : "Maxou" et "maxou" sont le même pseudo.
@@ -51,6 +80,23 @@ export const users = pgTable(
     uniqueIndex("users_pseudo_lower_idx").on(sql`lower(${table.pseudo})`),
   ],
 );
+
+/**
+ * Image d'avatar téléversée, 128×128 WebP.
+ *
+ * Table à part, et pas une colonne de `users` : `resolveSession` est rejouée à
+ * chaque requête HTTP **et** à chaque poignée de main Socket.IO. Une colonne
+ * binaire sur `users` finirait tôt ou tard dans un `select` distrait, et dix
+ * kilo-octets par ligne à ce rythme se paient sur un NAS. Ici, la seule façon
+ * de lire l'image est de nommer cette table.
+ */
+export const userAvatars = pgTable("user_avatars", {
+  userId: uuid("user_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  image: bytea("image").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().default(now),
+});
 
 export const sessions = pgTable(
   "sessions",

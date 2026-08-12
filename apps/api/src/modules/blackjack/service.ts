@@ -794,6 +794,27 @@ export function hasBlackjackTable(tableId: string): boolean {
   return tables.has(tableId);
 }
 
+/**
+ * Corrige l'identité d'un joueur, assis comme spectateur.
+ *
+ * Les deux comptent : quitter un siège recopie l'identité dans `watchers`, donc
+ * un spectateur qui se rassied repartirait sinon sous son ancien nom.
+ */
+export function updateBlackjackIdentity(
+  userId: string,
+  patch: { pseudo?: string; avatarSeed?: string },
+): void {
+  const tableId = tableByUser.get(userId);
+  const table = tableId ? tables.get(tableId) : undefined;
+  if (!table) return;
+
+  for (const seat of table.seats) {
+    if (seat?.userId === userId) Object.assign(seat, patch);
+  }
+  const watcher = table.watchers.get(userId);
+  if (watcher) Object.assign(watcher, patch);
+}
+
 /** Quitter la table pour de bon : la place est rendue, le verrou d'activité aussi. */
 function removePlayer(table: BlackjackTable, player: Occupant): void {
   vacateSeat(table, player, false);

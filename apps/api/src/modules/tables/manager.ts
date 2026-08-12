@@ -703,6 +703,27 @@ export function tableOf(userId: string): string | null {
   return tableByUser.get(userId) ?? blackjackTableOf(userId) ?? rouletteTableOf(userId);
 }
 
+/**
+ * Corrige l'identité recopiée dans un siège occupé.
+ *
+ * L'identité est figée au moment où le joueur s'assied : sans cette reprise, un
+ * joueur renommé garderait son ancien nom à l'écran jusqu'à la fin de la partie.
+ * Aucune diffusion forcée — les vues sont reconstruites à chaque coup, la
+ * prochaine action emporte naturellement la correction.
+ */
+export function updateTableIdentity(
+  userId: string,
+  patch: { pseudo?: string; avatarSeed?: string },
+): void {
+  const tableId = tableByUser.get(userId);
+  const table = tableId ? tables.get(tableId) : undefined;
+  if (!table) return;
+
+  for (const seat of table.seats) {
+    if (seat?.userId === userId) Object.assign(seat, patch);
+  }
+}
+
 export function gameOf(tableId: string): TableGame | null {
   if (tables.has(tableId)) return tables.get(tableId)?.game ?? null;
   if (hasBlackjackTable(tableId)) return "blackjack";

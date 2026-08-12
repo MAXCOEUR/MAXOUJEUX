@@ -47,10 +47,12 @@ export async function createSession(userId: string, origin: RequestOrigin): Prom
 
 /**
  * Résout un jeton en utilisateur, ou `null` s'il est invalide, expiré,
- * ou si le compte est banni.
+ * ou si le compte est banni ou fermé.
  *
  * Cette fonction est appelée à chaque requête authentifiée *et* au handshake
- * Socket.IO : c'est le point d'entrée unique de l'identité.
+ * Socket.IO : c'est le point d'entrée unique de l'identité. Ne jamais y
+ * sélectionner l'image d'avatar : à ce rythme, la colonne binaire se paierait
+ * en mégaoctets par minute.
  */
 export async function resolveSession(token: string | undefined): Promise<AuthenticatedUser | null> {
   if (!token) return null;
@@ -64,6 +66,7 @@ export async function resolveSession(token: string | undefined): Promise<Authent
       createdAt: users.createdAt,
       isBanned: users.isBanned,
       isAdmin: users.isAdmin,
+      deletedAt: users.deletedAt,
       balance: wallets.balance,
     })
     .from(sessions)
@@ -72,7 +75,9 @@ export async function resolveSession(token: string | undefined): Promise<Authent
     .where(and(eq(sessions.tokenHash, hashToken(token)), gt(sessions.expiresAt, new Date())))
     .limit(1);
 
-  if (!row || row.isBanned) return null;
+  // `deletedAt` double la révocation des sessions faite à la fermeture : il
+  // couvre la session créée dans la seconde qui précède l'anonymisation.
+  if (!row || row.isBanned || row.deletedAt) return null;
 
   return {
     id: row.id,

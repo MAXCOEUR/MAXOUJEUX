@@ -9,11 +9,19 @@ import {
   detach,
   setTableLogger,
   setTableNotifier,
+  updateTableIdentity,
 } from "../modules/tables/manager.js";
+import { updateBlackjackIdentity } from "../modules/blackjack/service.js";
+import { updateRouletteIdentity } from "../modules/roulette/service.js";
 import { setRealtimeLogger } from "./guard.js";
 import { createMotusNotifier, registerMotusHandlers } from "./motus.js";
-import { setDisconnectNotifier, setWalletNotifier } from "./notify.js";
-import { addConnection, presenceSnapshot, removeConnection } from "./presence.js";
+import { setDisconnectNotifier, setIdentityNotifier, setWalletNotifier } from "./notify.js";
+import {
+  addConnection,
+  presenceSnapshot,
+  removeConnection,
+  renameConnection,
+} from "./presence.js";
 import { createTableNotifier, registerTableHandlers } from "./tables.js";
 import { registerBlackjackHandlers } from "./blackjack.js";
 import { registerRouletteHandlers } from "./roulette.js";
@@ -75,6 +83,36 @@ export function attachRealtime(app: FastifyInstance): GameServer {
 
   setDisconnectNotifier((userId) => {
     io.in(userRoom(userId)).disconnectSockets(true);
+  });
+
+  /**
+   * Changement de pseudo ou d'avatar en cours de session.
+   *
+   * L'identité est résolue à la poignée de main puis recopiée un peu partout :
+   * dans `socket.data`, dans le registre de présence, et dans chaque état de jeu
+   * en mémoire. Sans cette reprise, un joueur renommé devrait recharger sa page.
+   *
+   * On parcourt `io.sockets.sockets` et non `fetchSockets()` : ce dernier rend
+   * des `RemoteSocket` dont les écritures sur `.data` ne sont pas répercutées.
+   * Le déploiement est mono-processus, l'itération locale est donc exhaustive.
+   */
+  setIdentityNotifier((userId, patch) => {
+    for (const socket of io.sockets.sockets.values()) {
+      if (socket.data.userId !== userId) continue;
+      if (patch.pseudo) socket.data.pseudo = patch.pseudo;
+      if (patch.avatarSeed) socket.data.avatarSeed = patch.avatarSeed;
+    }
+
+    // Le lobby est la vitrine du site : lui, on le rediffuse tout de suite.
+    if (renameConnection(userId, patch)) {
+      io.emit("presence:update", presenceSnapshot());
+    }
+
+    // Les états de jeu sont corrigés en place, sans diffusion forcée : la
+    // prochaine action de la table emporte la correction.
+    updateTableIdentity(userId, patch);
+    updateBlackjackIdentity(userId, patch);
+    updateRouletteIdentity(userId, patch);
   });
 
   // Même principe pour les tables. Les deux journaliseurs sont injectés parce
