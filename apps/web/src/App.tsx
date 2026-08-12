@@ -2,13 +2,15 @@ import type { CurrentUser } from "@maxoujeux/shared";
 import { Loader2 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { AuthPage } from "@/pages/AuthPage";
+import { AdminPage } from "@/pages/AdminPage";
 import { LobbyPage } from "@/pages/LobbyPage";
 import { MotusPage } from "@/pages/MotusPage";
 import { SalonPage } from "@/pages/SalonPage";
 import { TablePage } from "@/pages/TablePage";
-import { useRoute, type Route } from "@/lib/route";
+import { navigate, useRoute, type Route } from "@/lib/route";
 import { useSession } from "@/lib/session";
 import { useRealtimeConnection } from "@/lib/socket";
+import { useEffect } from "react";
 
 export function App() {
   const session = useSession();
@@ -56,7 +58,19 @@ export function App() {
 }
 
 function Screen({ route, user }: { route: Route; user: CurrentUser }) {
+  const forbiddenAdmin = route.name === "admin" && !user.isAdmin;
+
+  // La redirection est un effet pour que le rendu reste pur. Le serveur garde
+  // de toute façon le dernier mot sur les appels d'administration.
+  useEffect(() => {
+    if (forbiddenAdmin) navigate({ name: "lobby" }, { replace: true });
+  }, [forbiddenAdmin]);
+
+  if (forbiddenAdmin) return <LobbyPage user={user} />;
+
   switch (route.name) {
+    case "admin":
+      return <AdminPage />;
     case "salon":
       return route.game === "motus"
         ? <MotusPage user={user} />

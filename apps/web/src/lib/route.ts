@@ -18,12 +18,15 @@ import { create } from "zustand";
 
 export type Route =
   | { name: "lobby" }
+  | { name: "admin" }
   | { name: "salon"; game: GameCode }
   | { name: "table"; tableId: string };
 
 /** Chemin canonique d'une route. Segments en français, comme le reste du site. */
 export function routePath(route: Route): string {
   switch (route.name) {
+    case "admin":
+      return "/admin";
     case "salon":
       return `/jeu/${route.game}`;
     case "table":
@@ -37,6 +40,9 @@ export function routePath(route: Route): string {
 export function parseRoute(pathname: string): Route {
   const segments = pathname.split("/").filter(Boolean);
 
+  if (segments[0] === "admin" && segments.length === 1) {
+    return { name: "admin" };
+  }
   if (segments[0] === "jeu" && segments[1]) {
     return { name: "salon", game: segments[1] as GameCode };
   }
@@ -55,7 +61,8 @@ interface RouteState {
 }
 
 export const useRouteStore = create<RouteState>((set) => ({
-  route: parseRoute(window.location.pathname),
+  // Les rendus statiques de composants ne disposent pas de `window`.
+  route: parseRoute(typeof window === "undefined" ? "/" : window.location.pathname),
 
   push: (route) => {
     const path = routePath(route);
@@ -80,9 +87,11 @@ export const useRouteStore = create<RouteState>((set) => ({
 // Enregistré une seule fois au chargement du module, pas dans un `useEffect` :
 // c'est un abonnement au navigateur, pas au cycle de vie d'un composant.
 // Le navigateur restaure lui-même la position de défilement, on n'y touche pas.
-window.addEventListener("popstate", () => {
-  useRouteStore.setState({ route: parseRoute(window.location.pathname) });
-});
+if (typeof window !== "undefined") {
+  window.addEventListener("popstate", () => {
+    useRouteStore.setState({ route: parseRoute(window.location.pathname) });
+  });
+}
 
 export function useRoute(): Route {
   return useRouteStore((state) => state.route);

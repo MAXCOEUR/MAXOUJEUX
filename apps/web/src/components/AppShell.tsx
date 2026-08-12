@@ -1,5 +1,5 @@
 import { COIN_NAME, formatCoins, type CurrentUser } from "@maxoujeux/shared";
-import { LogOut } from "lucide-react";
+import { LogOut, Shield } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { Avatar } from "./Avatar";
 import { Button } from "./Button";
@@ -30,6 +30,16 @@ export function AppShell({ user, children }: AppShellProps) {
           <ConnectionBadge className="hidden sm:flex" />
 
           <div className="ml-auto flex items-center gap-2 sm:gap-3">
+            {user.isAdmin && (
+              <Lien
+                to={{ name: "admin" }}
+                aria-label="Administration"
+                className="inline-flex items-center gap-2 rounded-xl px-2.5 py-2 text-sm text-cream-dim transition-colors hover:bg-felt-raised hover:text-cream"
+              >
+                <Shield className="size-4" aria-hidden />
+                <span className="hidden lg:inline">Administration</span>
+              </Lien>
+            )}
             {/* Le solde est un bouton : c'est le point d'entrée du porte-monnaie,
                 et l'endroit où l'œil va naturellement chercher son argent. */}
             <button
