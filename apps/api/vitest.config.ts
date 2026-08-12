@@ -8,6 +8,9 @@ export default defineConfig({
       NODE_ENV: "test",
       SESSION_SECRET: "secret-de-test-suffisamment-long-pour-passer-la-validation",
       LOG_LEVEL: "error",
+      ADMIN_EMAIL: "",
+      ADMIN_PSEUDO: "",
+      ADMIN_PASSWORD: "",
     },
     // Les tests du porte-monnaie partagent une même base : les exécuter en
     // parallèle mélangerait les comptes et fausserait les compteurs.

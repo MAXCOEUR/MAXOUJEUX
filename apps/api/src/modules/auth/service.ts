@@ -9,7 +9,10 @@ import { isUniqueViolation } from "../../lib/pg-errors.js";
 import { burnTimingBudget, hashPassword, verifyPassword } from "./password.js";
 import type { AuthenticatedUser } from "./session.js";
 
-export async function register(input: RegisterInput): Promise<AuthenticatedUser> {
+export async function createAccount(
+  input: RegisterInput,
+  options: { isAdmin?: boolean } = {},
+): Promise<AuthenticatedUser> {
   // Pré-contrôle pour pouvoir désigner le champ fautif à l'utilisateur.
   // L'index unique reste la vraie garantie en cas d'inscriptions simultanées.
   const taken = await db
@@ -49,12 +52,14 @@ export async function register(input: RegisterInput): Promise<AuthenticatedUser>
           pseudo: input.pseudo,
           passwordHash,
           avatarSeed,
+          isAdmin: options.isAdmin ?? false,
         })
         .returning({
           id: users.id,
           email: users.email,
           pseudo: users.pseudo,
           avatarSeed: users.avatarSeed,
+          isAdmin: users.isAdmin,
           createdAt: users.createdAt,
         });
 
@@ -82,6 +87,11 @@ export async function register(input: RegisterInput): Promise<AuthenticatedUser>
   }
 }
 
+/** L'inscription publique ne peut jamais attribuer de privilège administrateur. */
+export function register(input: RegisterInput): Promise<AuthenticatedUser> {
+  return createAccount(input, { isAdmin: false });
+}
+
 export async function login(input: LoginInput): Promise<AuthenticatedUser> {
   const [row] = await db
     .select({
@@ -92,6 +102,7 @@ export async function login(input: LoginInput): Promise<AuthenticatedUser> {
       createdAt: users.createdAt,
       passwordHash: users.passwordHash,
       isBanned: users.isBanned,
+      isAdmin: users.isAdmin,
       balance: wallets.balance,
     })
     .from(users)
@@ -120,6 +131,7 @@ export async function login(input: LoginInput): Promise<AuthenticatedUser> {
     email: row.email,
     pseudo: row.pseudo,
     avatarSeed: row.avatarSeed,
+    isAdmin: row.isAdmin,
     balance: row.balance ?? 0,
     createdAt: row.createdAt,
   };

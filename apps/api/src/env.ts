@@ -1,5 +1,12 @@
-import { SIGNUP_BONUS } from "@maxoujeux/shared";
+import { emailSchema, passwordSchema, pseudoSchema, SIGNUP_BONUS } from "@maxoujeux/shared";
 import { z } from "zod";
+
+const emptyToUndefined = (value: unknown): unknown => {
+  return typeof value === "string" && value.trim() === "" ? undefined : value;
+};
+
+const optionalAdminValue = <Schema extends z.ZodTypeAny>(schema: Schema) =>
+  z.preprocess(emptyToUndefined, schema.optional());
 
 /**
  * Configuration validée au démarrage. Le serveur refuse de démarrer si une
@@ -37,6 +44,10 @@ const envSchema = z
      */
     STARTING_BALANCE: z.coerce.number().int().nonnegative().default(SIGNUP_BONUS),
 
+    ADMIN_EMAIL: optionalAdminValue(emailSchema),
+    ADMIN_PSEUDO: optionalAdminValue(pseudoSchema),
+    ADMIN_PASSWORD: optionalAdminValue(passwordSchema),
+
     LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace"]).default("info"),
   })
   .superRefine((value, ctx) => {
@@ -46,6 +57,23 @@ const envSchema = z
         path: ["DATABASE_URL"],
         message: "DATABASE_URL est obligatoire en production (PGlite est réservé au développement)",
       });
+    }
+    const adminValues = [
+      ["ADMIN_EMAIL", value.ADMIN_EMAIL],
+      ["ADMIN_PSEUDO", value.ADMIN_PSEUDO],
+      ["ADMIN_PASSWORD", value.ADMIN_PASSWORD],
+    ] as const;
+    const configuredAdminValues = adminValues.filter(([, adminValue]) => adminValue !== undefined);
+    if (configuredAdminValues.length > 0 && configuredAdminValues.length < adminValues.length) {
+      for (const [key, adminValue] of adminValues) {
+        if (adminValue === undefined) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: [key],
+            message: `${key} est obligatoire lorsque le compte administrateur est configuré`,
+          });
+        }
+      }
     }
   });
 
@@ -60,6 +88,13 @@ if (!parsed.success) {
 }
 
 export const env = parsed.data;
+
+/** Les seules variables utiles à l'amorçage, laissées optionnelles pour autoriser son absence. */
+export interface AdminBootstrapConfig {
+  ADMIN_EMAIL?: string | undefined;
+  ADMIN_PSEUDO?: string | undefined;
+  ADMIN_PASSWORD?: string | undefined;
+}
 
 export const isProduction = env.NODE_ENV === "production";
 export const isDevelopment = env.NODE_ENV === "development";

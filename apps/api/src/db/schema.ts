@@ -41,6 +41,7 @@ export const users = pgTable(
     /** Réservé : passera à true le jour où un SMTP sera branché. */
     emailVerified: boolean("email_verified").notNull().default(false),
     isBanned: boolean("is_banned").notNull().default(false),
+    isAdmin: boolean("is_admin").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(now),
     lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().default(now),
   },

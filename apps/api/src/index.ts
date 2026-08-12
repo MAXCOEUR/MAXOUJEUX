@@ -6,6 +6,7 @@ import { closeDatabase, dbDriver, runMigrations } from "./db/index.js";
 import { env, isDevelopment, isProduction } from "./env.js";
 import { registerErrorHandler } from "./lib/errors.js";
 import { authRoutes } from "./modules/auth/routes.js";
+import { bootstrapAdmin } from "./modules/auth/bootstrap-admin.js";
 import { lobbyRoutes } from "./modules/lobby/routes.js";
 import { shutdown as shutdownTables } from "./modules/tables/manager.js";
 import { shutdown as shutdownMotus } from "./modules/motus/service.js";
@@ -76,6 +77,7 @@ const io = attachRealtime(app);
 async function start(): Promise<void> {
   app.log.info({ driver: dbDriver }, "Application des migrations");
   await runMigrations();
+  await bootstrapAdmin();
   await recoverBlackjackRounds();
   await recoverRouletteRounds();
   await purgeExpiredSessions();

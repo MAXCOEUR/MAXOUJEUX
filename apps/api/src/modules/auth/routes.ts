@@ -16,6 +16,7 @@ function toPublicUser(user: AuthenticatedUser): CurrentUser {
     email: user.email,
     pseudo: user.pseudo,
     avatarSeed: user.avatarSeed,
+    isAdmin: user.isAdmin,
     balance: user.balance,
     createdAt: user.createdAt.toISOString(),
   };

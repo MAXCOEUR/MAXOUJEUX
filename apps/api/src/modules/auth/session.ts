@@ -19,6 +19,7 @@ export interface AuthenticatedUser {
   email: string;
   pseudo: string;
   avatarSeed: string;
+  isAdmin: boolean;
   balance: number;
   createdAt: Date;
 }
@@ -62,6 +63,7 @@ export async function resolveSession(token: string | undefined): Promise<Authent
       avatarSeed: users.avatarSeed,
       createdAt: users.createdAt,
       isBanned: users.isBanned,
+      isAdmin: users.isAdmin,
       balance: wallets.balance,
     })
     .from(sessions)
@@ -77,6 +79,7 @@ export async function resolveSession(token: string | undefined): Promise<Authent
     email: row.email,
     pseudo: row.pseudo,
     avatarSeed: row.avatarSeed,
+    isAdmin: row.isAdmin,
     balance: row.balance ?? 0,
     createdAt: row.createdAt,
   };
