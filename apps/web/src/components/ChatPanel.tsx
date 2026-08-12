@@ -128,11 +128,37 @@ export function ChatPanel({
       list.scrollHeight - list.scrollTop - list.clientHeight < BAS_DE_LISTE_PX;
   }, [open, marqueur]);
 
-  /** Le trait n'a de sens que le temps d'être vu : dix secondes chat ouvert. */
+  /**
+   * Effacement du trait, dix secondes après qu'il a été **vu**.
+   *
+   * Le décompte part à l'entrée dans le champ de vision, pas à l'ouverture du
+   * panneau : un trait posé en bas de liste pendant qu'on lit plus haut
+   * s'effacerait sinon sans avoir jamais été affiché. Une fois lancé, le
+   * décompte n'est plus interrompu — repartir à zéro à chaque aller-retour de
+   * défilement rendrait le trait quasi indélébile.
+   */
   useEffect(() => {
     if (!open || !marqueur) return;
-    const timer = window.setTimeout(() => setMarqueur(null), MARQUEUR_MS);
-    return () => window.clearTimeout(timer);
+
+    const list = listRef.current;
+    const repere = list?.querySelector<HTMLElement>('[data-marqueur="nouveaux"]');
+    if (!list || !repere) return;
+
+    let timer: number | undefined;
+    const observateur = new IntersectionObserver(
+      (entrees) => {
+        if (timer !== undefined || !entrees.some((entree) => entree.isIntersecting)) return;
+        timer = window.setTimeout(() => setMarqueur(null), MARQUEUR_MS);
+        observateur.disconnect();
+      },
+      { root: list },
+    );
+    observateur.observe(repere);
+
+    return () => {
+      observateur.disconnect();
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
   }, [open, marqueur]);
 
   function handleScroll() {
