@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { and, eq, gt, lt } from "drizzle-orm";
 import type { FastifyReply } from "fastify";
-import { db } from "../../db/index.js";
+import { db, type Database } from "../../db/index.js";
 import { sessions, users, wallets } from "../../db/schema.js";
 import { env, isProduction } from "../../env.js";
 
@@ -92,7 +92,15 @@ export async function revokeSession(token: string | undefined): Promise<void> {
 
 /** Déconnecte le compte de partout. Utilisé au changement de mot de passe et au bannissement. */
 export async function revokeAllSessions(userId: string): Promise<void> {
-  await db.delete(sessions).where(eq(sessions.userId, userId));
+  await revokeAllSessionsIn(db, userId);
+}
+
+/** Révoque les sessions dans la transaction fournie par l'appelant. */
+export async function revokeAllSessionsIn(
+  exec: Pick<Database, "delete">,
+  userId: string,
+): Promise<void> {
+  await exec.delete(sessions).where(eq(sessions.userId, userId));
 }
 
 /** Purge des sessions expirées, planifiée au démarrage puis quotidiennement. */

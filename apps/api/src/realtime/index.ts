@@ -12,7 +12,7 @@ import {
 } from "../modules/tables/manager.js";
 import { setRealtimeLogger } from "./guard.js";
 import { createMotusNotifier, registerMotusHandlers } from "./motus.js";
-import { setWalletNotifier } from "./notify.js";
+import { setDisconnectNotifier, setWalletNotifier } from "./notify.js";
 import { addConnection, presenceSnapshot, removeConnection } from "./presence.js";
 import { createTableNotifier, registerTableHandlers } from "./tables.js";
 import { registerBlackjackHandlers } from "./blackjack.js";
@@ -70,6 +70,10 @@ export function attachRealtime(app: FastifyInstance): GameServer {
   // pour que le service de porte-monnaie n'ait pas à connaître Socket.IO.
   setWalletNotifier((userId, balance) => {
     io.to(userRoom(userId)).emit("wallet:update", { balance });
+  });
+
+  setDisconnectNotifier((userId) => {
+    io.in(userRoom(userId)).disconnectSockets(true);
   });
 
   // Même principe pour les tables. Les deux journaliseurs sont injectés parce

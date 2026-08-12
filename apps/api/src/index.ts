@@ -6,6 +6,7 @@ import { closeDatabase, dbDriver, runMigrations } from "./db/index.js";
 import { env, isDevelopment, isProduction } from "./env.js";
 import { registerErrorHandler } from "./lib/errors.js";
 import { authRoutes } from "./modules/auth/routes.js";
+import { adminRoutes } from "./modules/admin/routes.js";
 import { bootstrapAdmin } from "./modules/auth/bootstrap-admin.js";
 import { lobbyRoutes } from "./modules/lobby/routes.js";
 import { shutdown as shutdownTables } from "./modules/tables/manager.js";
@@ -65,6 +66,7 @@ app.get("/api/health", async () => ({
 }));
 
 await app.register(authRoutes, { prefix: "/api/auth" });
+await app.register(adminRoutes, { prefix: "/api/admin" });
 await app.register(lobbyRoutes, { prefix: "/api/lobby" });
 await app.register(walletRoutes, { prefix: "/api/wallet" });
 

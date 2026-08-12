@@ -11,8 +11,10 @@
  */
 
 type WalletNotifier = (userId: string, balance: number) => void;
+type DisconnectNotifier = (userId: string) => void;
 
 let walletNotifier: WalletNotifier | null = null;
+let disconnectNotifier: DisconnectNotifier | null = null;
 
 export function setWalletNotifier(notifier: WalletNotifier): void {
   walletNotifier = notifier;
@@ -20,4 +22,12 @@ export function setWalletNotifier(notifier: WalletNotifier): void {
 
 export function notifyWallet(userId: string, balance: number): void {
   walletNotifier?.(userId, balance);
+}
+
+export function setDisconnectNotifier(notifier: DisconnectNotifier): void {
+  disconnectNotifier = notifier;
+}
+
+export function disconnectUser(userId: string): void {
+  disconnectNotifier?.(userId);
 }
