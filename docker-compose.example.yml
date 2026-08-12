@@ -75,6 +75,12 @@ services:
       - DATABASE_URL=postgres://maxoujeux:REMPLACE_MOI_MOT_DE_PASSE_POSTGRES@db:5432/maxoujeux
       - SESSION_SECRET=REMPLACE_MOI_CLE_DE_SESSION_48_CARACTERES_MINIMUM
       - SESSION_TTL_DAYS=30
+      # Les trois valeurs doivent être présentes ensemble. Elles servent à
+      # créer ou promouvoir l'administrateur initial et ne réinitialisent pas
+      # son mot de passe après sa création.
+      - ADMIN_EMAIL=admin@example.com
+      - ADMIN_PSEUDO=Admin
+      - ADMIN_PASSWORD=REMPLACE_MOI_MOT_DE_PASSE_ADMIN_10_CARACTERES_MINIMUM
       # Origine telle que la voit le navigateur, donc en https via NPM.
       - PUBLIC_ORIGIN=https://maxoujeux.maxencecoeur.fr
       # MaxouCoin offerts à l'inscription.
