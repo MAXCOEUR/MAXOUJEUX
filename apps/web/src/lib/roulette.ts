@@ -1,7 +1,6 @@
 import type { RouletteView } from "@maxoujeux/shared";
 import { create } from "zustand";
 import { syncServerClock } from "./clock.js";
-import { navigate, useRouteStore } from "./route.js";
 import { isNewerRouletteView } from "./roulette-ui.js";
 import type { GameSocket } from "./socket-types.js";
 import { pushToast } from "./toast.js";
@@ -52,11 +51,5 @@ export const useRoulette = create<RouletteStore>((set, get) => ({
 }));
 
 export function bindRouletteEvents(socket: GameSocket): void {
-  socket.on("roulette:state", (view) => {
-    useRoulette.getState().apply(view);
-    const route = useRouteStore.getState().route;
-    if (!(route.name === "table" && route.tableId === view.id)) {
-      navigate({ name: "table", tableId: view.id });
-    }
-  });
+  socket.on("roulette:state", (view) => useRoulette.getState().apply(view));
 }
