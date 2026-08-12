@@ -202,7 +202,7 @@ function Players({ view }: { view: RouletteView }) {
               !player.connected && "opacity-55",
             )}
           >
-            <Avatar seed={player.avatarSeed} pseudo={player.pseudo} className="size-5 text-[0.55rem]" />
+            <Avatar userId={player.userId} seed={player.avatarSeed} pseudo={player.pseudo} className="size-5 text-[0.55rem]" />
             <span className="max-w-24 truncate text-[0.68rem] text-cream">{player.pseudo}</span>
             {player.roundNet !== null ? (
               <span

@@ -96,7 +96,14 @@ export function TableCard({
     >
       <div className="flex items-start justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
-          {host && <Avatar seed={host.avatarSeed} pseudo={host.pseudo} className="size-8 text-xs" />}
+          {host && (
+            <Avatar
+              userId={host.userId}
+              seed={host.avatarSeed}
+              pseudo={host.pseudo}
+              className="size-8 text-xs"
+            />
+          )}
           <div className="min-w-0">
             <p className="truncate text-sm font-medium text-cream">{host?.pseudo ?? "—"}</p>
             <p className="text-xs text-cream-faint">
@@ -148,6 +155,7 @@ export function TableCard({
           return occupant ? (
             <Avatar
               key={occupant.userId}
+              userId={occupant.userId}
               seed={occupant.avatarSeed}
               pseudo={occupant.pseudo}
               className="size-7 text-xs"

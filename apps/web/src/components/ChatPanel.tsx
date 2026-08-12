@@ -286,6 +286,7 @@ function ChatMessageRow({ message, mine }: { message: ChatMessage; mine: boolean
   return (
     <li className={cn("flex items-start gap-2.5", mine && "flex-row-reverse")}>
       <Avatar
+        userId={message.userId}
         seed={message.avatarSeed}
         pseudo={message.pseudo}
         className="size-8 shrink-0 text-xs"

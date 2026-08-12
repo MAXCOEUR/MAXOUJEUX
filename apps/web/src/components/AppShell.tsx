@@ -79,15 +79,21 @@ export function AppShell({ user, children }: AppShellProps) {
               </span>
             </button>
 
-            <span className="hidden items-center gap-2 md:flex">
-              <Avatar seed={user.avatarSeed} pseudo={user.pseudo} className="size-8" />
-              <span className="text-sm font-medium text-cream">{user.pseudo}</span>
-            </span>
-            <Avatar
-              seed={user.avatarSeed}
-              pseudo={user.pseudo}
-              className="size-8 md:hidden"
-            />
+            {/* Le bloc identité est le point d'entrée de l'espace personnel :
+                c'est là que l'œil cherche son propre compte. */}
+            <Lien
+              to={{ name: "compte" }}
+              aria-label="Mon compte"
+              className="inline-flex items-center gap-2 rounded-xl px-2 py-1.5 transition-colors hover:bg-felt-raised"
+            >
+              <Avatar
+                userId={user.id}
+                seed={user.avatarSeed}
+                pseudo={user.pseudo}
+                className="size-8"
+              />
+              <span className="hidden text-sm font-medium text-cream md:inline">{user.pseudo}</span>
+            </Lien>
 
             <Button
               variant="ghost"

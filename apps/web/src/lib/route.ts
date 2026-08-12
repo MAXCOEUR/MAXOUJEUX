@@ -19,6 +19,7 @@ import { create } from "zustand";
 export type Route =
   | { name: "lobby" }
   | { name: "admin" }
+  | { name: "compte" }
   | { name: "salon"; game: GameCode }
   | { name: "table"; tableId: string };
 
@@ -27,6 +28,8 @@ export function routePath(route: Route): string {
   switch (route.name) {
     case "admin":
       return "/admin";
+    case "compte":
+      return "/mon-compte";
     case "salon":
       return `/jeu/${route.game}`;
     case "table":
@@ -42,6 +45,9 @@ export function parseRoute(pathname: string): Route {
 
   if (segments[0] === "admin" && segments.length === 1) {
     return { name: "admin" };
+  }
+  if (segments[0] === "mon-compte" && segments.length === 1) {
+    return { name: "compte" };
   }
   if (segments[0] === "jeu" && segments[1]) {
     return { name: "salon", game: segments[1] as GameCode };

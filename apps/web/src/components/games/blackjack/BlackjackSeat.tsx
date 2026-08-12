@@ -375,11 +375,11 @@ function Nameplate({
     >
       {anneau && deadlineAt && turnMs ? (
         <ProgressRing deadlineAt={deadlineAt} turnMs={turnMs} size={40}>
-          <Avatar seed={seat.avatarSeed} pseudo={seat.pseudo} className="size-7 text-[0.65rem]" />
+          <Avatar userId={seat.userId} seed={seat.avatarSeed} pseudo={seat.pseudo} className="size-7 text-[0.65rem]" />
         </ProgressRing>
       ) : (
         <span className="grid size-10 shrink-0 place-items-center">
-          <Avatar seed={seat.avatarSeed} pseudo={seat.pseudo} className="size-7 text-[0.65rem]" />
+          <Avatar userId={seat.userId} seed={seat.avatarSeed} pseudo={seat.pseudo} className="size-7 text-[0.65rem]" />
         </span>
       )}
 

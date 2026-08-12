@@ -82,6 +82,7 @@ export function LobbyPage({ user }: { user: CurrentUser }) {
                 className="flex items-center gap-2 rounded-full border border-line bg-felt-deep/50 py-1 pl-1 pr-3"
               >
                 <Avatar
+                  userId={player.userId}
                   seed={player.avatarSeed}
                   pseudo={player.pseudo}
                   className="size-7 text-xs"

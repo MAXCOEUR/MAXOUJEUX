@@ -3,6 +3,7 @@ import { Loader2 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { AuthPage } from "@/pages/AuthPage";
 import { AdminPage } from "@/pages/AdminPage";
+import { ComptePage } from "@/pages/ComptePage";
 import { LobbyPage } from "@/pages/LobbyPage";
 import { MotusPage } from "@/pages/MotusPage";
 import { SalonPage } from "@/pages/SalonPage";
@@ -71,6 +72,8 @@ function Screen({ route, user }: { route: Route; user: CurrentUser }) {
   switch (route.name) {
     case "admin":
       return <AdminPage />;
+    case "compte":
+      return <ComptePage user={user} />;
     case "salon":
       return route.game === "motus"
         ? <MotusPage user={user} />

@@ -76,11 +76,11 @@ export function PlayerSeat({
       <div className="relative shrink-0">
         {showRing && match.deadlineAt ? (
           <ProgressRing deadlineAt={match.deadlineAt} turnMs={match.turnMs} size={46}>
-            <Avatar seed={occupant.avatarSeed} pseudo={occupant.pseudo} className="size-9" />
+            <Avatar userId={occupant.userId} seed={occupant.avatarSeed} pseudo={occupant.pseudo} className="size-9" />
           </ProgressRing>
         ) : (
           <div className="grid size-[46px] place-items-center">
-            <Avatar seed={occupant.avatarSeed} pseudo={occupant.pseudo} className="size-9" />
+            <Avatar userId={occupant.userId} seed={occupant.avatarSeed} pseudo={occupant.pseudo} className="size-9" />
           </div>
         )}
       </div>
