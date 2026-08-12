@@ -145,7 +145,16 @@ export function blackjackPayout(outcome: BlackjackOutcome, wager: number): numbe
 
 export type RandomIndex = (maximumExclusive: number) => number;
 
-export function createShoe(randomIndex: RandomIndex, decks = 6): BlackjackEngineCard[] {
+/**
+ * Nombre de jeux dans le sabot.
+ *
+ * Exporté et non écrit en dur dans la signature : le front affiche l'usure du
+ * sabot en proportion de sa taille de départ, et recopier « 6 » là-bas ferait
+ * mentir la jauge le jour où la table passerait à huit jeux.
+ */
+export const BLACKJACK_SHOE_DECKS = 6;
+
+export function createShoe(randomIndex: RandomIndex, decks = BLACKJACK_SHOE_DECKS): BlackjackEngineCard[] {
   const cards: BlackjackEngineCard[] = [];
   for (let deck = 0; deck < decks; deck += 1) {
     for (const suit of BLACKJACK_SUITS) {

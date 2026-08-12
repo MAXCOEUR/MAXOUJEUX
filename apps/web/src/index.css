@@ -49,6 +49,31 @@
   --color-win: #58c98a;
   --color-danger: #e8756a;
 
+  /* Carte à jouer. Le rouge des cœurs n'est **pas** `--color-danger` : celui-ci
+     est un rouge d'alerte, désaturé pour rester lisible sur le feutre. Imprimé
+     sur du carton crème, il vire au saumon et la carte cesse d'avoir l'air
+     d'une carte. */
+  --color-carte: #f6f1e4;
+  --color-carte-ombre: #d8d0bc;
+  --color-carte-noir: #16211b;
+  --color-carte-rouge: #a8261f;
+  /* Dos de carte : le bordeaux est la seule couleur hors palette du site, et
+     c'est voulu — c'est la couleur du dos de carte, elle n'a pas à se fondre
+     dans le tapis, elle doit s'en détacher. */
+  --color-dos: #5e1a20;
+  --color-dos-profond: #2c0c10;
+
+  /* Jetons. Les valeurs suivent les couleurs de casino usuelles ; c'est un code
+     que les joueurs connaissent déjà, l'inventer coûterait un apprentissage
+     pour rien. Chroma et clarté restent contraintes pour tenir sur le feutre. */
+  --color-jeton-10: #d9d1bd;
+  --color-jeton-50: #a8322b;
+  --color-jeton-100: #2f6a88;
+  --color-jeton-250: #2e7a4e;
+  --color-jeton-500: #6a3f8e;
+  --color-jeton-1000: #c8a250;
+  --color-jeton-2500: #a4306a;
+
   --font-display: "Bricolage Grotesque Variable", ui-sans-serif, system-ui, sans-serif;
   --font-sans: "Figtree Variable", ui-sans-serif, system-ui, sans-serif;
   /* Le monospace n'est pas décoratif : les soldes et les comptes à rebours
@@ -78,6 +103,17 @@
   --animate-lueur: lueur 1.5s ease-in-out infinite;
   --animate-gain: gain 1.15s cubic-bezier(0.22, 1, 0.36, 1) forwards;
   --animate-tremble: tremble 0.36s ease-in-out;
+
+  /* --- Blackjack -----------------------------------------------------------
+     Sur une table de blackjack, le mouvement **est** l'information : une carte
+     qui sort du sabot, un jeton posé dans la case, une carte retournée, un
+     cachet apposé sur une main réglée. Quatre gestes, ceux d'un croupier, et
+     rien d'autre. Le retournement, lui, est une transition et non une
+     image-clé — il doit se déclencher au changement d'état, pas au montage. */
+  --animate-donne: donne 0.42s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+  --animate-jeton: jeton 0.42s cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+  --animate-verdict: verdict 0.42s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  --animate-encaisse: encaisse 1s cubic-bezier(0.32, 0, 0.67, 0) forwards;
 }
 
 :root {
@@ -216,6 +252,60 @@
   }
 }
 
+/* La carte sort du sabot, posé en haut à droite de la table, et glisse jusqu'à
+   sa place. L'origine dépend du siège visé — un siège à l'autre bout de la
+   table est plus loin du sabot — d'où les variables, posées en ligne par le
+   composant. Sans elles, les cinq sièges recevraient leurs cartes d'un point
+   différent chacun mais toujours à la même distance, et l'œil verrait
+   immédiatement que la table est fausse. */
+@keyframes donne {
+  from {
+    opacity: 0;
+    transform: translate(var(--donne-x, 260%), var(--donne-y, -340%)) rotate(-18deg) scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Le jeton est lancé dans la case de mise et rebondit à l'arrivée. */
+@keyframes jeton {
+  from {
+    opacity: 0;
+    transform: translateY(150%) scale(0.7) rotate(-20deg);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Cachet posé sur une main réglée : gagnée, sautée, égalité. */
+@keyframes verdict {
+  from {
+    opacity: 0;
+    transform: scale(1.85) rotate(-8deg);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) rotate(-3deg);
+  }
+}
+
+/* Les jetons gagnés remontent vers le solde de l'en-tête : c'est ce trajet qui
+   fait comprendre d'où vient l'argent qui apparaît en haut de l'écran. */
+@keyframes encaisse {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-9rem) scale(0.55);
+  }
+}
+
 /* Anneau de temps : la durée et le décalage négatif sont fournis en ligne, la
    circonférence par une variable posée par le composant. */
 @keyframes tour-ring {
@@ -346,5 +436,82 @@
     font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;
     letter-spacing: -0.02em;
+  }
+
+  /* --- Blackjack : la carte -------------------------------------------------
+     Le retournement est une **transition** et non une animation : une animation
+     CSS se joue au montage de l'élément, or la carte fermée du croupier est
+     déjà à l'écran quand elle se retourne. Il faut donc que le même nœud change
+     de transformation, sans être remonté — sinon la carte disparaîtrait pour
+     réapparaître face visible, ce qui n'est pas un retournement.
+
+     Corollaire : une carte distribuée face visible ne se retourne pas au
+     montage, puisqu'une transition ne se déclenche pas au premier rendu. C'est
+     exactement le comportement voulu, et il est gratuit. */
+  .carte-3d {
+    transform-style: preserve-3d;
+    transform: rotateY(180deg);
+    transition: transform 520ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .carte-3d[data-face="up"] {
+    transform: rotateY(0deg);
+  }
+  .carte-3d > * {
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+  }
+  .carte-dos {
+    transform: rotateY(180deg);
+  }
+
+  /* --- Blackjack : la silhouette de la table -------------------------------
+     Une table de blackjack n'est pas un rectangle : le croupier est derrière un
+     côté droit, les joueurs devant un bord arrondi. Le rayon du bas est
+     **elliptique** — 46 % de la largeur pour 20 % de la hauteur : un rayon
+     circulaire de cette ampleur rognerait les sièges des extrémités. */
+  .bj-tapis {
+    border-radius: 1.25rem;
+  }
+  .bj-rail {
+    border-radius: 1rem;
+  }
+  @media (min-width: 40rem) {
+    .bj-tapis {
+      border-radius: 2rem 2rem 46% 46% / 2rem 2rem 20% 20%;
+    }
+    .bj-rail {
+      border-radius: 1.7rem 1.7rem 45% 45% / 1.7rem 1.7rem 19% 19%;
+    }
+  }
+
+  /* --- Blackjack : l'arc de la table ---------------------------------------
+     Sur téléphone, les sièges sont empilés : un arc de cinq places dans 360 px
+     ne donne pas une table de casino, il donne cinq vignettes illisibles. Au
+     delà, chaque siège est reculé et rapetissé selon sa position sur l'ovale —
+     c'est la seule chose qui fasse lire « table ronde » plutôt que « rangée ».
+     Les valeurs viennent du composant : une requête de média ne peut pas lire
+     un style en ligne, mais elle peut décider si elle l'applique. */
+  @media (min-width: 40rem) {
+    .bj-arc > [data-arc] {
+      transform: translateY(calc(var(--arc-y) * -1rem)) scale(var(--arc-s));
+      transform-origin: bottom center;
+    }
+  }
+
+  /* En dessous, l'arc disparaît et le siège du joueur passe devant, en pleine
+     largeur et avec de plus grandes cartes. C'est le compromis assumé du
+     téléphone : la table cesse d'être une table, mais on lit sa propre main
+     sans plisser les yeux — ce qui est la seule chose indispensable. */
+  @media (max-width: 39.999rem) {
+    .bj-arc > [data-self] {
+      --carte-l: clamp(2.75rem, 13vw, 3.6rem);
+      --jeton-l: clamp(1.6rem, 6.5vw, 2.1rem);
+    }
+
+    /* La carte ouverte du croupier commande toute la stratégie : elle mérite
+       le même traitement que sa propre main, pas la taille des voisins. */
+    .bj-croupier {
+      --carte-l: clamp(2.4rem, 9vw, 3.1rem);
+    }
   }
 }

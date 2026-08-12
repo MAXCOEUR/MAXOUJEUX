@@ -1,177 +1,384 @@
 import {
-  BLACKJACK_BET_OPTIONS,
   formatCoins,
+  formatCoinsDelta,
   type BlackjackAction,
+  type BlackjackSeatView,
   type BlackjackView,
   type CurrentUser,
 } from "@maxoujeux/shared";
-import { ArrowLeft, Hand, Layers3, Plus, ShieldCheck } from "lucide-react";
+import { ArrowLeft, ChevronsUp, Hand, Plus, RotateCcw, ShieldCheck, Split, Undo2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Button } from "@/components/Button";
-import { Countdown } from "@/components/Countdown";
 import { Lien } from "@/components/Lien";
-import { StakePicker } from "@/components/StakePicker";
 import { BlackjackTable } from "@/components/games/BlackjackTable";
+import { ChipRack, ChipStack } from "@/components/games/blackjack/Chips";
+import { chipStack, phaseLabel, type ChipValue } from "@/lib/blackjack-ui";
 import { useBlackjack } from "@/lib/blackjack";
+import { cn } from "@/lib/cn";
 import { navigate } from "@/lib/route";
 import { request } from "@/lib/socket";
 import { pushToast } from "@/lib/toast";
 
-const ACTION_LABELS: Record<BlackjackAction, { label: string; icon: typeof Plus }> = {
-  hit: { label: "Carte", icon: Plus },
-  stand: { label: "Rester", icon: Hand },
-  double: { label: "Doubler", icon: Layers3 },
-  split: { label: "Séparer", icon: Layers3 },
-};
+const MISE_MIN = 10;
+const MISE_MAX = 2_500;
 
-function phaseLabel(view: BlackjackView): string {
-  if (view.phase === "idle") return "La table attend une première mise";
-  if (view.phase === "betting") return "Les mises sont ouvertes";
-  if (view.phase === "insurance") return "Le croupier propose l’assurance";
-  if (view.phase === "players") return view.turn?.seat === view.you ? "À toi de jouer" : "Un autre joueur réfléchit";
-  if (view.phase === "dealer") return "Le croupier joue";
-  return "Résultats de la manche";
-}
+const ACTIONS: Record<BlackjackAction, { label: string; aide: string; icon: typeof Plus }> = {
+  hit: { label: "Carte", aide: "Tirer une carte de plus", icon: Plus },
+  stand: { label: "Rester", aide: "Garder ce total", icon: Hand },
+  double: { label: "Doubler", aide: "Doubler la mise, une seule carte", icon: ChevronsUp },
+  split: { label: "Séparer", aide: "Jouer deux mains", icon: Split },
+};
 
 export function BlackjackTablePage({ user, view }: { user: CurrentUser; view: BlackjackView }) {
   const pending = useBlackjack((state) => state.pending);
   const markPending = useBlackjack((state) => state.markPending);
   const clearPending = useBlackjack((state) => state.clearPending);
-  const affordable = BLACKJACK_BET_OPTIONS.filter((amount) => amount <= user.balance);
-  const [stake, setStake] = useState<number>(affordable.at(-1) ?? 10);
-  const validStake = Number.isInteger(stake) && stake >= 10 && stake <= 2_500 && stake % 10 === 0;
-  const mine = view.seats.find((seat) => seat.seat === view.you);
-  const canBet = (view.phase === "idle" || view.phase === "betting") && mine && !mine.participating;
-  const currentHand = view.turn?.seat === view.you ? view.turn.handIndex : null;
 
-  async function intention(name: string, send: Parameters<typeof request<null>>[0]) {
-    markPending(name);
-    const reply = await request<null>(send);
-    if (!reply.ok) {
+  /**
+   * Les jetons posés, dans l'ordre où le joueur les a poussés — et non un
+   * simple montant. Deux raisons : la case de mise montre alors les jetons
+   * qu'il a réellement choisis, et le retrait du dernier jeton devient une
+   * simple dépile, là où un montant obligerait à deviner ce qu'il faut retirer.
+   */
+  const [poses, setPoses] = useState<ChipValue[]>([]);
+  const [derniereMise, setDerniereMise] = useState<number | null>(null);
+
+  const mise = poses.reduce((somme, jeton) => somme + jeton, 0);
+  const mine = view.seats.find((seat) => seat.seat === view.you) ?? null;
+  const peutMiser = (view.phase === "idle" || view.phase === "betting") && mine !== null && !mine.participating;
+  const plafond = Math.min(MISE_MAX, user.balance);
+  const mainCourante = view.turn?.seat === view.you ? view.turn.handIndex : null;
+
+  async function intention(nom: string, envoi: Parameters<typeof request<null>>[0]): Promise<boolean> {
+    markPending(nom);
+    const reponse = await request<null>(envoi);
+    if (!reponse.ok) {
       clearPending();
-      pushToast("erreur", reply.message);
+      pushToast("erreur", reponse.message);
+      return false;
     }
+    return true;
   }
 
-  function bet() {
-    void intention("bet", (socket, ack) => socket.emit("blackjack:bet", {
-      tableId: view.id,
-      amount: stake,
-      version: view.version,
-    }, ack));
+  async function miser() {
+    const montant = mise;
+    const ok = await intention("bet", (socket, ack) =>
+      socket.emit("blackjack:bet", { tableId: view.id, amount: montant, version: view.version }, ack),
+    );
+    if (!ok) return;
+    // La case se vide seulement une fois la mise acceptée : la vider avant
+    // laisserait le joueur devant une case déserte si le serveur refuse.
+    setPoses([]);
+    setDerniereMise(montant);
   }
 
-  function insure(take: boolean) {
-    void intention("insurance", (socket, ack) => socket.emit("blackjack:insurance", {
-      tableId: view.id,
-      take,
-      version: view.version,
-    }, ack));
+  function assurer(prendre: boolean) {
+    void intention("insurance", (socket, ack) =>
+      socket.emit("blackjack:insurance", { tableId: view.id, take: prendre, version: view.version }, ack),
+    );
   }
 
-  function act(action: BlackjackAction) {
-    if (currentHand === null) return;
-    void intention(action, (socket, ack) => socket.emit("blackjack:act", {
-      tableId: view.id,
-      handIndex: currentHand,
-      action,
-      version: view.version,
-    }, ack));
+  function jouer(action: BlackjackAction) {
+    if (mainCourante === null) return;
+    void intention(action, (socket, ack) =>
+      socket.emit(
+        "blackjack:act",
+        { tableId: view.id, handIndex: mainCourante, action, version: view.version },
+        ack,
+      ),
+    );
   }
 
-  async function leave() {
-    const active = mine?.participating && view.phase !== "idle" && view.phase !== "result";
-    if (active && !window.confirm("Ta main restera automatiquement. Quitter la table ?")) return;
-    const reply = await request<null>((socket, ack) => socket.emit("match:leave", { tableId: view.id }, ack));
-    if (!reply.ok && reply.code !== "TABLE_GONE") {
-      pushToast("erreur", reply.message);
+  async function quitter() {
+    const engage = mine?.participating && view.phase !== "idle" && view.phase !== "result";
+    if (engage && !window.confirm("Ta main restera automatiquement. Quitter la table ?")) return;
+    const reponse = await request<null>((socket, ack) => socket.emit("match:leave", { tableId: view.id }, ack));
+    if (!reponse.ok && reponse.code !== "TABLE_GONE") {
+      pushToast("erreur", reponse.message);
       return;
     }
     useBlackjack.getState().clear();
     navigate({ name: "salon", game: "blackjack" });
   }
 
-  const live = useMemo(() => {
-    const activeSeat = view.turn ? view.seats.find((seat) => seat.seat === view.turn?.seat) : null;
-    return view.turn?.seat === view.you ? "À toi de jouer." : activeSeat ? `Au tour de ${activeSeat.pseudo}.` : phaseLabel(view);
-  }, [view]);
+  const annonce = useMemo(() => {
+    if (view.phase === "result" && mine?.roundNet !== null && mine !== null) {
+      return mine.roundNet > 0
+        ? `Manche gagnée, ${formatCoinsDelta(mine.roundNet)}.`
+        : mine.roundNet < 0
+          ? `Manche perdue, ${formatCoinsDelta(mine.roundNet)}.`
+          : "Égalité, ta mise est rendue.";
+    }
+    if (view.turn?.seat === view.you) {
+      const total = mine?.hands.length ?? 1;
+      return total > 1
+        ? `À toi de jouer, main ${(view.turn.handIndex ?? 0) + 1} sur ${total}.`
+        : "À toi de jouer.";
+    }
+    const actif = view.turn ? view.seats.find((seat) => seat.seat === view.turn?.seat) : null;
+    return actif ? `Au tour de ${actif.pseudo}.` : phaseLabel(view.phase, false);
+  }, [view, mine]);
 
   return (
-    <div className="space-y-4 pb-28 sm:pb-4">
+    <div className="space-y-4 pb-40 sm:pb-4">
       <div className="flex items-center justify-between gap-3">
-        <Lien to={{ name: "salon", game: "blackjack" }} className="inline-flex items-center gap-1.5 text-sm text-cream-dim hover:text-cream">
+        <Lien
+          to={{ name: "salon", game: "blackjack" }}
+          className="inline-flex items-center gap-1.5 text-sm text-cream-dim transition-colors hover:text-cream"
+        >
           <ArrowLeft className="size-4" aria-hidden /> Blackjack
         </Lien>
-        <Button variant="ghost" onClick={() => void leave()} className="text-xs">Quitter la table</Button>
+        <Button variant="ghost" onClick={() => void quitter()} className="text-xs">
+          Quitter la table
+        </Button>
       </div>
-
-      <header className="flex items-center justify-between gap-3">
-        <div>
-          <h1 className="font-display text-xl font-extrabold text-cream">Table Blackjack</h1>
-          <p className="text-sm text-cream-dim">{phaseLabel(view)}</p>
-        </div>
-        {view.deadlineAt && (
-          <div className="text-right">
-            <p className="text-[10px] uppercase tracking-wider text-cream-faint">Temps</p>
-            <Countdown to={view.deadlineAt} format="horloge" className="tabular text-xl font-bold text-cream" />
-          </div>
-        )}
-      </header>
 
       <BlackjackTable view={view} />
 
-      <section className="panel p-4" aria-label="Tes actions">
-        {canBet ? (
-          <div className="space-y-4">
-            <div>
-              <h2 className="font-display text-base font-bold text-cream">Ta mise</h2>
-              <p className="text-xs text-cream-faint">La première mise lance 20 secondes de préparation.</p>
-            </div>
-            <StakePicker options={[...BLACKJACK_BET_OPTIONS]} value={stake} onChange={setStake} balance={user.balance} disabled={pending !== null} />
-            <label className="block text-xs font-semibold uppercase tracking-[0.08em] text-cream-faint">
-              Mise précise
-              <input
-                type="number"
-                min={10}
-                max={2_500}
-                step={10}
-                value={stake}
-                disabled={pending !== null}
-                onChange={(event) => setStake(Number(event.target.value))}
-                className="mt-1.5 w-full rounded-xl border border-line-strong bg-felt-deep/60 px-3.5 py-2.5 text-base text-cream focus:border-brass focus:outline-none"
-              />
-            </label>
-            <Button onClick={bet} loading={pending === "bet"} disabled={!validStake || stake > user.balance} className="w-full">
-              Miser {formatCoins(stake)}
-            </Button>
-          </div>
+      {view.phase === "result" && mine && mine.roundNet !== null && <Verdict seat={mine} />}
+
+      {/* Barre d'actions. Ancrée en bas de l'écran sur téléphone : le pouce y
+          est déjà, et une barre qui défile hors de vue au milieu d'un tour de
+          trente secondes est une main perdue. */}
+      <section
+        aria-label="Tes actions"
+        className={cn(
+          "panel fixed inset-x-0 bottom-0 z-20 rounded-b-none p-3",
+          "pb-[calc(0.75rem+env(safe-area-inset-bottom))]",
+          "sm:static sm:rounded-panel sm:p-4 sm:pb-4",
+        )}
+      >
+        {peutMiser ? (
+          <BetPanel
+            poses={poses}
+            mise={mise}
+            plafond={plafond}
+            balance={user.balance}
+            derniereMise={derniereMise}
+            occupe={pending !== null}
+            enCours={pending === "bet"}
+            onPoser={(jeton) => setPoses((liste) => [...liste, jeton])}
+            onRetirer={() => setPoses((liste) => liste.slice(0, -1))}
+            onEffacer={() => setPoses([])}
+            onRepeter={() => derniereMise !== null && setPoses(chipStack(derniereMise, 12))}
+            onMiser={() => void miser()}
+          />
         ) : view.phase === "insurance" && view.insuranceCost !== null ? (
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Button onClick={() => insure(true)} loading={pending === "insurance"}>
-              <ShieldCheck className="size-4" aria-hidden /> Assurance {formatCoins(view.insuranceCost)}
-            </Button>
-            <Button variant="outline" onClick={() => insure(false)} disabled={pending !== null}>Sans assurance</Button>
+          <div className="space-y-2">
+            <p className="text-center text-xs text-cream-dim">
+              Le croupier montre un as. L&apos;assurance paie 2 pour 1 s&apos;il a un blackjack.
+            </p>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <Button onClick={() => assurer(true)} loading={pending === "insurance"}>
+                <ShieldCheck className="size-4" aria-hidden /> Assurer {formatCoins(view.insuranceCost)}
+              </Button>
+              <Button variant="outline" onClick={() => assurer(false)} disabled={pending !== null}>
+                Sans assurance
+              </Button>
+            </div>
           </div>
         ) : view.allowedActions.length > 0 ? (
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            {view.allowedActions.map((action) => {
-              const item = ACTION_LABELS[action];
-              const Icon = item.icon;
-              return (
-                <Button key={action} variant={action === "hit" ? "primary" : "outline"} onClick={() => act(action)} loading={pending === action} disabled={pending !== null}>
-                  <Icon className="size-4" aria-hidden /> {item.label}
-                </Button>
-              );
-            })}
-          </div>
+          <ActionPanel
+            actions={view.allowedActions}
+            hands={mine?.hands.length ?? 1}
+            handIndex={mainCourante ?? 0}
+            wager={mine?.hands[mainCourante ?? 0]?.wager ?? 0}
+            pending={pending}
+            onJouer={jouer}
+          />
         ) : (
           <p className="text-center text-sm text-cream-dim">
-            {mine?.participating ? "Ta mise est engagée. Suis la donne autour de la table." : "Tu observes cette manche. Tu pourras miser à la suivante."}
+            {mine?.participating
+              ? "Ta mise est engagée. Suis la donne autour de la table."
+              : "Tu observes cette manche. Tu pourras miser à la suivante."}
           </p>
         )}
       </section>
 
-      <p aria-live="polite" aria-atomic="true" className="sr-only">{live}</p>
+      <p aria-live="polite" aria-atomic="true" className="sr-only">
+        {annonce}
+      </p>
+    </div>
+  );
+}
+
+/**
+ * Case de mise.
+ *
+ * Le joueur pousse des jetons dans sa case comme à une vraie table, plutôt que
+ * de taper un nombre : c'est plus rapide au doigt, ça évite d'ouvrir un clavier
+ * par-dessus le tapis, et la mise se lit à la pile sans être relue.
+ *
+ * « Répéter » n'est pas un raccourci de confort : entre deux manches il ne
+ * reste que vingt secondes, et recomposer la même mise jeton par jeton à chaque
+ * fois est le meilleur moyen de rater la donne.
+ */
+function BetPanel({
+  poses,
+  mise,
+  plafond,
+  balance,
+  derniereMise,
+  occupe,
+  enCours,
+  onPoser,
+  onRetirer,
+  onEffacer,
+  onRepeter,
+  onMiser,
+}: {
+  poses: ChipValue[];
+  mise: number;
+  plafond: number;
+  balance: number;
+  derniereMise: number | null;
+  occupe: boolean;
+  enCours: boolean;
+  onPoser: (jeton: ChipValue) => void;
+  onRetirer: () => void;
+  onEffacer: () => void;
+  onRepeter: () => void;
+  onMiser: () => void;
+}) {
+  const valide = mise >= MISE_MIN && mise <= plafond;
+
+  return (
+    <div className="space-y-3 [--jeton-l:1.6rem]">
+      <div className="flex items-center justify-center gap-4">
+        {/* La case de mise : même cercle pointillé que sur le tapis, pour que le
+            lien entre ce qu'on compose ici et ce qui apparaît là-haut soit
+            immédiat. */}
+        <span
+          className={cn(
+            "grid aspect-square w-20 shrink-0 place-items-end justify-items-center rounded-full border border-dashed pb-1 transition-colors",
+            mise > 0 ? "border-brass/70 bg-brass/5" : "border-line-strong",
+          )}
+        >
+          {mise > 0 ? (
+            <ChipStack amount={mise} values={poses.slice(-6)} />
+          ) : (
+            <span className="pb-6 text-[0.6rem] uppercase tracking-[0.14em] text-cream-faint">Mise</span>
+          )}
+        </span>
+
+        <div className="min-w-0">
+          <p className="tabular text-2xl font-black leading-none text-brass-bright">{formatCoins(mise)}</p>
+          <p className="mt-1 text-xs text-cream-faint">
+            {mise === 0
+              ? `Pose tes jetons. Minimum ${formatCoins(MISE_MIN)}.`
+              : `Solde après la mise : ${formatCoins(balance - mise)}`}
+          </p>
+        </div>
+      </div>
+
+      <ChipRack balance={balance} current={mise} max={plafond} disabled={occupe} onAdd={onPoser} />
+
+      <div className="flex flex-wrap items-center justify-center gap-2">
+        <Button variant="outline" onClick={onRetirer} disabled={occupe || poses.length === 0} className="text-xs">
+          <Undo2 className="size-3.5" aria-hidden /> Retirer
+        </Button>
+        <Button variant="ghost" onClick={onEffacer} disabled={occupe || poses.length === 0} className="text-xs">
+          Tout enlever
+        </Button>
+        {derniereMise !== null && derniereMise <= plafond && (
+          <Button variant="outline" onClick={onRepeter} disabled={occupe} className="text-xs">
+            <RotateCcw className="size-3.5" aria-hidden /> Répéter {formatCoins(derniereMise)}
+          </Button>
+        )}
+      </div>
+
+      <Button onClick={onMiser} loading={enCours} disabled={!valide || occupe} className="w-full">
+        {valide ? `Miser ${formatCoins(mise)}` : "Miser"}
+      </Button>
+    </div>
+  );
+}
+
+/**
+ * Boutons de décision.
+ *
+ * Quand le joueur a séparé, le titre dit sur **quelle** main il agit et pour
+ * combien. Les boutons sont les mêmes pour toutes les mains : sans ce rappel,
+ * rien à l'écran ne distingue une décision prise sur la première main d'une
+ * décision prise sur la seconde, et c'est exactement le reproche fait à la
+ * première version.
+ */
+function ActionPanel({
+  actions,
+  hands,
+  handIndex,
+  wager,
+  pending,
+  onJouer,
+}: {
+  actions: BlackjackAction[];
+  hands: number;
+  handIndex: number;
+  wager: number;
+  pending: string | null;
+  onJouer: (action: BlackjackAction) => void;
+}) {
+  return (
+    <div className="space-y-2.5">
+      <p className="text-center text-xs">
+        {hands > 1 ? (
+          <span className="font-semibold text-brass-bright">
+            Main {handIndex + 1} sur {hands}
+          </span>
+        ) : (
+          <span className="font-semibold text-cream">À toi de jouer</span>
+        )}
+        {wager > 0 && <span className="text-cream-faint"> · {formatCoins(wager)} en jeu</span>}
+      </p>
+
+      <div className={cn("grid gap-2", actions.length > 2 ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-2")}>
+        {actions.map((action) => {
+          const item = ACTIONS[action];
+          const Icon = item.icon;
+          return (
+            <Button
+              key={action}
+              variant={action === "hit" ? "primary" : "outline"}
+              onClick={() => onJouer(action)}
+              loading={pending === action}
+              disabled={pending !== null}
+              title={item.aide}
+              className="min-h-12"
+            >
+              <Icon className="size-4" aria-hidden /> {item.label}
+            </Button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/** Résultat de la manche, du point de vue du joueur. */
+function Verdict({ seat }: { seat: BlackjackSeatView }) {
+  const net = seat.roundNet ?? 0;
+  const gagne = net > 0;
+  const nul = net === 0;
+
+  return (
+    <div
+      role="status"
+      className={cn(
+        "animate-flip-up panel flex items-center justify-center gap-3 p-3 text-center",
+        gagne ? "border-brass/50" : nul ? "border-line-strong" : "border-danger/40",
+      )}
+    >
+      <p className="font-display text-lg font-extrabold">
+        {gagne ? "Manche gagnée" : nul ? "Égalité" : "Manche perdue"}
+      </p>
+      <p
+        className={cn(
+          "tabular text-lg font-black",
+          gagne ? "text-win" : nul ? "text-cream-dim" : "text-danger",
+        )}
+      >
+        {nul ? "Mise rendue" : formatCoinsDelta(net)}
+      </p>
     </div>
   );
 }

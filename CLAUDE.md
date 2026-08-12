@@ -349,6 +349,18 @@ Ce qui est déjà en place et **à consommer sans le réécrire** :
   `STAKE_TIERS`. Pour tout règlement touchant plusieurs écritures, passer par
   `creditInTx` / `debitInTx` dans une transaction unique, comme
   `modules/tables/settle.ts`.
+- **La table de casino du front** est dans `components/games/blackjack/` et se reprend
+  telle quelle au poker : `PlayingCard` (carte à jouer, dos, retournement 3D), `Chip` /
+  `ChipStack` / `ChipRack` (jetons et composition d'une mise), `BlackjackSeat` (siège en
+  arc). Les calculs de mise en scène — décomposition d'un montant en jetons, ordre des
+  sièges sur l'arc, origine d'une carte distribuée — sont dans `lib/blackjack-ui.ts`,
+  testés sans rendu React.
+
+  Deux pièges déjà rencontrés, à ne pas réintroduire. **Le retournement d'une carte est
+  une transition, jamais une image-clé** : une animation se joue au montage, or la carte
+  fermée du croupier est déjà à l'écran quand elle s'ouvre. Et **le recul d'un siège sur
+  l'arc est en `rem`, jamais en pourcentage de sa hauteur** : un siège vide fait le quart
+  d'un siège à deux mains séparées, et l'arc se tordait autour des places libres.
 - **Elo** : la colonne `stats.elo` existe et reste à 1 000. Le classement est au lot 5 ;
   `settle.ts` ne doit pas y toucher avant.
 
