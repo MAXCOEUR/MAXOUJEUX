@@ -12,6 +12,8 @@ interface ProgressRingProps {
   turnMs: number;
   /** Diamètre en pixels. */
   size?: number;
+  /** Affiche le nombre de secondes restantes au centre de l’anneau. */
+  showSeconds?: boolean;
   className?: string;
   /** Contenu au centre — en général l'avatar du joueur au trait. */
   children?: ReactNode;
@@ -38,6 +40,7 @@ export function ProgressRing({
   deadlineAt,
   turnMs,
   size = 46,
+  showSeconds = false,
   className,
   children,
 }: ProgressRingProps) {
@@ -48,6 +51,18 @@ export function ProgressRing({
   const circumference = 2 * Math.PI * radius;
   const elapsed = Math.max(0, Math.min(turnMs, turnMs - msUntilServer(deadlineAt)));
   const urgent = remaining <= 6_000;
+  const seconds = Math.ceil(remaining / 1_000);
+  const secondsCounter = showSeconds ? (
+    <span
+      aria-label={`${seconds} ${seconds === 1 ? "seconde restante" : "secondes restantes"}`}
+      className={cn(
+        "tabular pointer-events-none absolute inset-0 z-10 grid place-items-center text-[0.68rem] font-bold leading-none",
+        urgent ? "text-danger" : "text-cream",
+      )}
+    >
+      {seconds}
+    </span>
+  ) : null;
 
   /**
    * En mode « animations réduites », la règle globale de `index.css` impose
@@ -60,14 +75,17 @@ export function ProgressRing({
     return (
       <div className={cn("relative grid place-items-center", className)} style={{ width: size, height: size }}>
         {children}
-        <span
-          className={cn(
-            "tabular absolute -bottom-1 rounded bg-felt-deep px-1 text-[10px] font-semibold",
-            urgent ? "text-danger" : "text-cream-dim",
-          )}
-        >
-          {formatClock(remaining)}
-        </span>
+        {secondsCounter}
+        {!showSeconds && (
+          <span
+            className={cn(
+              "tabular absolute -bottom-1 rounded bg-felt-deep px-1 text-[10px] font-semibold",
+              urgent ? "text-danger" : "text-cream-dim",
+            )}
+          >
+            {formatClock(remaining)}
+          </span>
+        )}
       </div>
     );
   }
@@ -111,6 +129,7 @@ export function ProgressRing({
         />
       </svg>
       {children}
+      {secondsCounter}
     </div>
   );
 }
