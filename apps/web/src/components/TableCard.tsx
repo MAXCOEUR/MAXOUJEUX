@@ -1,4 +1,4 @@
-import { formatCoins, isMyTable, winPayout, type TableSummary } from "@maxoujeux/shared";
+import { formatCoins, getGame, isMyTable, winPayout, type TableSummary } from "@maxoujeux/shared";
 import { Swords } from "lucide-react";
 import { Avatar } from "./Avatar";
 import { Button } from "./Button";
@@ -6,6 +6,35 @@ import { Plaque } from "./Plaque";
 import { cn } from "@/lib/cn";
 import { formatDuration } from "@/lib/countdown";
 import { msSinceServer } from "@/lib/clock";
+
+/** Ce que promet le bouton : le joueur doit savoir avant de cliquer. */
+function libelleAction({
+  spectateur,
+  casino,
+  busy,
+  complete,
+  tropCher,
+  enCours,
+}: {
+  spectateur: boolean;
+  casino: boolean;
+  busy: boolean;
+  complete: boolean;
+  tropCher: boolean;
+  enCours: boolean;
+}): string {
+  if (busy) return "Déjà en partie";
+  if (spectateur) return complete ? "Regarder — table complète" : "Regarder";
+  if (casino) {
+    if (complete) return "Complète";
+    // Entrer pendant le lancer est permis : on annonce l'attente plutôt que de
+    // laisser croire qu'on va pouvoir miser tout de suite.
+    return enCours ? "Rejoindre — tour en cours" : "Rejoindre";
+  }
+  if (complete) return "Complète";
+  if (tropCher) return "Solde insuffisant";
+  return "Rejoindre";
+}
 
 interface TableCardProps {
   table: TableSummary;
@@ -37,15 +66,23 @@ export function TableCard({
   const enCours = table.status === "playing";
   const complete = table.seats.length >= table.maxSeats;
   const tropCher = table.stake !== null && table.stake > balance;
+  const wager = getGame(table.game)?.wager;
 
   /**
+   * Tables de casino : s'asseoir ne coûte rien et la manche en cours n'interdit
+   * pas d'entrer — on attend simplement le tour suivant pour miser. Les duels,
+   * eux, engagent la mise à l'entrée et se ferment une fois lancés.
+   */
+  const casino = table.stake === null;
+  /**
    * Au blackjack, entrer veut dire **regarder** : la place se choisit ensuite,
-   * sur le tapis. Une table complète ou en pleine manche reste donc ouverte —
-   * c'est même là que le mode spectateur sert le plus.
+   * sur le tapis. Une table complète reste donc ouverte — c'est même là que le
+   * mode spectateur sert le plus. À la roulette il n'y a pas de siège : une
+   * table pleine est vraiment pleine.
    */
   const spectateur = table.game === "blackjack";
-  const joignable = spectateur
-    ? !mine && !busy
+  const joignable = casino
+    ? !mine && !busy && (spectateur || !complete)
     : !enCours && !complete && !mine && !busy && !tropCher;
 
   return (
@@ -81,17 +118,24 @@ export function TableCard({
         )}
       </div>
 
+      {/* Sur une table de casino ce sont les bornes du tapis, pas un droit
+          d'entrée : les valeurs viennent du jeu, plus du barème du blackjack
+          recopié en dur. */}
       <dl className="flex items-end justify-between gap-3">
         <div>
-          <dt className="text-xs text-cream-faint">Mise</dt>
+          <dt className="text-xs text-cream-faint">{casino ? "Mises au tapis" : "Mise"}</dt>
           <dd className="tabular text-sm font-semibold text-brass">
-            {table.stake === null ? "10 – 2 500 MC" : formatCoins(table.stake)}
+            {table.stake === null
+              ? `${formatCoins(wager?.min ?? 0)} – ${formatCoins(wager?.max ?? 0)}`
+              : formatCoins(table.stake)}
           </dd>
         </div>
         <div className="text-right">
-          <dt className="text-xs text-cream-faint">Gain si victoire</dt>
+          <dt className="text-xs text-cream-faint">{casino ? "Rapport" : "Gain si victoire"}</dt>
           <dd className="tabular text-sm font-semibold text-cream">
-            {table.stake === null ? "Blackjack 3:2" : formatCoins(winPayout(table.game, table.stake))}
+            {table.stake === null
+              ? (wager?.payout ?? "—")
+              : formatCoins(winPayout(table.game, table.stake))}
           </dd>
         </div>
       </dl>
@@ -125,26 +169,14 @@ export function TableCard({
         <Button variant="outline" onClick={() => onReprendre(table)} className="w-full">
           Revenir à ma table
         </Button>
-      ) : enCours && !spectateur ? null : (
+      ) : enCours && !casino ? null : (
         <Button
           onClick={() => onJoin(table)}
           loading={joining}
           disabled={!joignable}
           className="w-full"
         >
-          {spectateur
-            ? busy
-              ? "Déjà en partie"
-              : complete
-                ? "Regarder — table complète"
-                : "Regarder"
-            : complete
-              ? "Complète"
-              : tropCher
-                ? "Solde insuffisant"
-                : busy
-                  ? "Déjà en partie"
-                  : "Rejoindre"}
+          {libelleAction({ spectateur, casino, busy, complete, tropCher, enCours })}
         </Button>
       )}
 

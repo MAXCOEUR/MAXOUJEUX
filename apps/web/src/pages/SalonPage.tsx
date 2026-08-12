@@ -92,10 +92,13 @@ function SalonContent({
     setCreating(true);
     setCreateError(undefined);
 
+    // Les tables de casino s'ouvrent sans mise : elle se pose sur le tapis.
     const reply = await request<{ tableId: string }>((socket, ack) =>
       game === "blackjack"
         ? socket.emit("tables:create", { game: "blackjack" }, ack)
-        : socket.emit("tables:create", { game: game as DuelGame, stake }, ack),
+        : game === "roulette"
+          ? socket.emit("tables:create", { game: "roulette" }, ack)
+          : socket.emit("tables:create", { game: game as DuelGame, stake }, ack),
     );
 
     setCreating(false);
