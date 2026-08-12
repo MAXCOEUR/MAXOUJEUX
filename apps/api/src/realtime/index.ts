@@ -17,6 +17,7 @@ import { addConnection, presenceSnapshot, removeConnection } from "./presence.js
 import { createTableNotifier, registerTableHandlers } from "./tables.js";
 import { registerBlackjackHandlers } from "./blackjack.js";
 import { registerRouletteHandlers } from "./roulette.js";
+import { registerChatHandlers } from "./chat.js";
 import { userRoom, type GameServer } from "./types.js";
 import { setMotusNotifier, unwatch as unwatchMotus } from "../modules/motus/service.js";
 
@@ -111,6 +112,7 @@ export function attachRealtime(app: FastifyInstance): GameServer {
     registerBlackjackHandlers(socket);
     registerRouletteHandlers(socket);
     registerMotusHandlers(socket);
+    registerChatHandlers(io, socket);
 
     /**
      * Rattachement à la partie en cours.
