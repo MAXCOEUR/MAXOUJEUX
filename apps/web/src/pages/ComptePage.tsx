@@ -137,8 +137,14 @@ function AvatarCard({ user }: { user: CurrentUser }) {
       await envoyer.mutateAsync(image);
       pushToast("info", `Avatar mis à jour — ${Math.round(image.size / 1024)} ko`);
     } catch (error) {
-      // Un refus attendu se dit tel quel ; le reste passe par le message d'API.
-      setErreur(error instanceof AvatarError ? error.message : mutationError(error).message);
+      if (error instanceof AvatarError) {
+        setErreur(error.message);
+      } else {
+        // Le refus du serveur voyage dans `fields.avatar` : sans cette lecture,
+        // `message` vaut null et l'écran ne dirait rien du tout.
+        const { fields, message } = mutationError(error);
+        setErreur(fields.avatar ?? message);
+      }
     } finally {
       // Sans cette remise à zéro, rechoisir le même fichier n'émettrait rien.
       if (champ.current) champ.current.value = "";

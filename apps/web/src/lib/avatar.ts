@@ -52,15 +52,19 @@ export async function reduireAvatar(fichier: File): Promise<Blob> {
     const canvas = document.createElement("canvas");
     canvas.width = AVATAR_SIZE;
     canvas.height = AVATAR_SIZE;
-    const ctx = canvas.getContext("2d");
+    /**
+     * `alpha: false` retire le canal de transparence du canevas.
+     *
+     * Sans lui, l'encodeur produit un WebP en conteneur étendu **même sur une
+     * image entièrement opaque** : c'est la capacité du canevas qui décide, pas
+     * le contenu des pixels. Le serveur accepte les deux, mais le format simple
+     * est plus compact et se vérifie plus étroitement.
+     */
+    const ctx = canvas.getContext("2d", { alpha: false });
     if (!ctx) throw new AvatarError("Ton navigateur ne sait pas préparer l'image.");
 
-    /**
-     * Fond opaque avant le dessin.
-     *
-     * Une source à transparence produirait un WebP en conteneur étendu, que le
-     * serveur refuse. L'avatar est de toute façon affiché en pastille pleine.
-     */
+    // Un canevas sans alpha démarre en noir : on pose le fond du tapis, visible
+    // seulement si l'image source n'est pas parfaitement carrée.
     ctx.fillStyle = "#0d1b14";
     ctx.fillRect(0, 0, AVATAR_SIZE, AVATAR_SIZE);
 

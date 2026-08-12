@@ -47,6 +47,24 @@ function chunkLossless(largeur: number, hauteur: number): Buffer {
   return Buffer.concat([entete, donnees]);
 }
 
+/**
+ * Chunk VP8X, le conteneur étendu que produit un canevas HTML.
+ *
+ * Dimensions sur 24 bits diminuées de un, précédées d'un octet de drapeaux dont
+ * le bit 1 signale une animation.
+ */
+function chunkEtendu(largeur: number, hauteur: number, anime = false): Buffer {
+  const donnees = Buffer.alloc(10);
+  donnees.writeUInt8(anime ? 0x02 : 0x10, 0);
+  donnees.writeUIntLE(largeur - 1, 4, 3);
+  donnees.writeUIntLE(hauteur - 1, 7, 3);
+
+  const entete = Buffer.alloc(8);
+  entete.write("VP8X", 0, "ascii");
+  entete.writeUInt32LE(donnees.length, 4);
+  return Buffer.concat([entete, donnees, chunkLossy(largeur, hauteur)]);
+}
+
 function refus(octets: Buffer): AppError {
   try {
     decoderAvatar(octets);
@@ -84,11 +102,26 @@ describe("decoderAvatar", () => {
     expect(refus(riff(chunkLossy(128, 128), "WAVE")).message).toMatch(/pas une image WebP/);
   });
 
-  it("refuse le conteneur étendu, donc les WebP animés et à transparence", () => {
-    const vp8x = Buffer.alloc(18);
-    vp8x.write("VP8X", 0, "ascii");
-    vp8x.writeUInt32LE(10, 4);
-    expect(refus(riff(Buffer.concat([vp8x, Buffer.alloc(20)]))).message).toMatch(/non accepté/);
+  it("accepte le conteneur étendu, celui que produit un canevas HTML", () => {
+    // Un canevas porte un canal alpha par défaut : refuser ce conteneur
+    // rejetait en pratique toute image, même parfaitement opaque.
+    const octets = riff(chunkEtendu(128, 128));
+    expect(decoderAvatar(octets)).toBe(octets);
+  });
+
+  it("refuse un avatar animé", () => {
+    expect(refus(riff(chunkEtendu(128, 128, true))).message).toMatch(/animé/);
+  });
+
+  it("contrôle les dimensions du conteneur étendu comme des autres", () => {
+    expect(refus(riff(chunkEtendu(512, 512))).message).toMatch(/128×128/);
+  });
+
+  it("refuse un conteneur inconnu", () => {
+    const inconnu = Buffer.alloc(8);
+    inconnu.write("XXXX", 0, "ascii");
+    inconnu.writeUInt32LE(20, 4);
+    expect(refus(riff(Buffer.concat([inconnu, Buffer.alloc(20)]))).message).toMatch(/non accepté/);
   });
 
   it("refuse une charge utile cachée derrière l'image", () => {
