@@ -47,6 +47,18 @@ test("renvoie mes propres messages à droite, pas ceux des autres", () => {
   assert.doesNotMatch(renderChat([message(1)]), /flex-row-reverse/);
 });
 
+test("marque d'un trait le premier message non lu", () => {
+  const html = renderToStaticMarkup(
+    <ChatPanel open onClose={() => undefined} messages={[message(1), message(2)]} newFrom="2" />,
+  );
+
+  assert.match(html, /Nouveaux messages/);
+  // Le trait précède bien le message qu'il annonce, pas celui d'avant.
+  assert.match(html, /Nouveaux messages[\s\S]*Salut Alice/);
+  assert.match(html, /Bonjour ![\s\S]*Nouveaux messages/);
+  assert.doesNotMatch(renderChat([message(1), message(2)]), /Nouveaux messages/);
+});
+
 test("plafonne visuellement le badge de messages non lus", () => {
   assert.equal(formatUnreadBadge(1_000), "999+");
 });

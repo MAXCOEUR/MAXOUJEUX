@@ -1,6 +1,6 @@
 import { CHAT_MAX_LENGTH, type ChatMessage } from "@maxoujeux/shared";
 import { Send } from "lucide-react";
-import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
+import { Fragment, useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { sendChat, useChat } from "@/lib/chat";
 import { cn } from "@/lib/cn";
 import { Avatar } from "./Avatar";
@@ -14,6 +14,8 @@ interface ChatPanelProps {
   meId?: string | null;
   /** Injection réservée au rendu statique des tests. */
   messages?: ChatMessage[];
+  /** Repère initial des nouveaux messages — réservé aux tests. */
+  newFrom?: string | null;
 }
 
 const timeFormatter = new Intl.DateTimeFormat("fr-FR", {
@@ -21,6 +23,12 @@ const timeFormatter = new Intl.DateTimeFormat("fr-FR", {
   minute: "2-digit",
   hour12: false,
 });
+
+/** Durée d'affichage du trait « nouveaux messages » une fois le chat ouvert. */
+const MARQUEUR_MS = 10_000;
+
+/** Marge sous laquelle on considère le lecteur collé au bas de la liste. */
+const BAS_DE_LISTE_PX = 64;
 
 export function formatUnreadBadge(unread: number): string {
   return unread > 999 ? "999+" : String(unread);
@@ -31,26 +39,107 @@ function formatTime(createdAt: string): string {
 }
 
 /** Discussion générale, conservée uniquement pendant la session courante. */
-export function ChatPanel({ open, onClose, meId, messages: providedMessages }: ChatPanelProps) {
+export function ChatPanel({
+  open,
+  onClose,
+  meId,
+  messages: providedMessages,
+  newFrom,
+}: ChatPanelProps) {
   const chatMessages = useChat((state) => state.messages);
   const messages = providedMessages ?? chatMessages;
   const [draft, setDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  /** Premier message non lu : c'est lui qui porte le trait rouge. */
+  const [marqueur, setMarqueur] = useState<string | null>(newFrom ?? null);
   const listRef = useRef<HTMLOListElement>(null);
   const nearBottomRef = useRef(true);
   const formRef = useRef<HTMLFormElement>(null);
   const fieldRef = useRef<HTMLTextAreaElement>(null);
+  const dernierIdRef = useRef<string | null>(messages.at(-1)?.id ?? null);
+  const placeRef = useRef(false);
 
+  function collerEnBas(list: HTMLOListElement) {
+    list.scrollTop = list.scrollHeight;
+    nearBottomRef.current = true;
+  }
+
+  /**
+   * Arrivée d'un message.
+   *
+   * Deux cas et deux seulement : soit on lisait déjà le bas de la liste et on
+   * suit le fil, soit on lisait plus haut — ou le chat était fermé — et on ne
+   * bouge pas d'un pixel. Déplacer quelqu'un en pleine lecture est la faute
+   * classique des chats.
+   */
   useEffect(() => {
+    const dernierId = messages.at(-1)?.id ?? null;
+    if (dernierId === dernierIdRef.current) return;
+
+    const precedent = dernierIdRef.current;
+    dernierIdRef.current = dernierId;
+    if (!dernierId) return;
+
     const list = listRef.current;
-    if (open && list && nearBottomRef.current) list.scrollTop = list.scrollHeight;
-  }, [messages.length, open]);
+    if (open && nearBottomRef.current && list) {
+      collerEnBas(list);
+      setMarqueur(null);
+      return;
+    }
+
+    // Le premier non lu, ou le dernier message quand l'historique a été
+    // tronqué entre-temps et que le précédent n'y figure plus.
+    const index = precedent ? messages.findIndex((entry) => entry.id === precedent) : -1;
+    const premierNouveau = (index >= 0 ? messages[index + 1] : messages.at(-1))?.id ?? null;
+    setMarqueur((actuel) => actuel ?? premierNouveau);
+  }, [messages, open]);
+
+  /**
+   * Placement à l'ouverture.
+   *
+   * Sans nouveau message on arrive en bas, sur le dernier échange. Avec, on
+   * cadre le trait rouge à mi-hauteur : le contexte qui précède reste visible
+   * au-dessus, ce qu'un simple saut en haut du non-lu ne donne pas.
+   */
+  useEffect(() => {
+    if (!open) {
+      placeRef.current = false;
+      return;
+    }
+    if (placeRef.current) return;
+
+    const list = listRef.current;
+    if (!list) return;
+    placeRef.current = true;
+
+    const repere = marqueur
+      ? list.querySelector<HTMLElement>('[data-marqueur="nouveaux"]')
+      : null;
+    if (!repere) {
+      collerEnBas(list);
+      return;
+    }
+
+    const ecart = repere.getBoundingClientRect().top - list.getBoundingClientRect().top;
+    const cible = list.scrollTop + ecart - list.clientHeight / 2;
+    list.scrollTop = Math.max(0, Math.min(cible, list.scrollHeight - list.clientHeight));
+    nearBottomRef.current =
+      list.scrollHeight - list.scrollTop - list.clientHeight < BAS_DE_LISTE_PX;
+  }, [open, marqueur]);
+
+  /** Le trait n'a de sens que le temps d'être vu : dix secondes chat ouvert. */
+  useEffect(() => {
+    if (!open || !marqueur) return;
+    const timer = window.setTimeout(() => setMarqueur(null), MARQUEUR_MS);
+    return () => window.clearTimeout(timer);
+  }, [open, marqueur]);
 
   function handleScroll() {
     const list = listRef.current;
     if (!list) return;
-    nearBottomRef.current = list.scrollHeight - list.scrollTop - list.clientHeight < 64;
+    nearBottomRef.current =
+      list.scrollHeight - list.scrollTop - list.clientHeight < BAS_DE_LISTE_PX;
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -104,11 +193,13 @@ export function ChatPanel({ open, onClose, meId, messages: providedMessages }: C
             className="-mr-2 flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto pr-2"
           >
             {messages.map((message) => (
-              <ChatMessageRow
-                key={message.id}
-                message={message}
-                mine={meId !== undefined && meId !== null && message.userId === meId}
-              />
+              <Fragment key={message.id}>
+                {message.id === marqueur && <SeparateurNouveaux />}
+                <ChatMessageRow
+                  message={message}
+                  mine={meId !== undefined && meId !== null && message.userId === meId}
+                />
+              </Fragment>
             ))}
           </ol>
         )}
@@ -142,6 +233,19 @@ export function ChatPanel({ open, onClose, meId, messages: providedMessages }: C
         </form>
       </div>
     </Modal>
+  );
+}
+
+/** Trait rouge posé devant le premier message non lu. */
+function SeparateurNouveaux() {
+  return (
+    <li data-marqueur="nouveaux" className="flex items-center gap-2 py-0.5">
+      <span aria-hidden className="h-px flex-1 bg-danger/60" />
+      <span className="text-[0.6rem] font-bold uppercase tracking-[0.14em] text-danger">
+        Nouveaux messages
+      </span>
+      <span aria-hidden className="h-px flex-1 bg-danger/60" />
+    </li>
   );
 }
 
