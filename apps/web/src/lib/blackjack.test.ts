@@ -10,6 +10,7 @@ const view = (version: number, id = "table-1"): BlackjackView => ({
   seats: [],
   maxSeats: 5,
   you: null,
+  watching: 0,
   roundId: null,
   dealer: { cards: [], total: null, soft: null },
   turn: null,

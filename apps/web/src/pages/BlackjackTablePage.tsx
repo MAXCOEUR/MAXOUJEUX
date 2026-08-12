@@ -6,7 +6,18 @@ import {
   type BlackjackView,
   type CurrentUser,
 } from "@maxoujeux/shared";
-import { ArrowLeft, ChevronsUp, Hand, Plus, RotateCcw, ShieldCheck, Split, Undo2 } from "lucide-react";
+import {
+  ArrowLeft,
+  ChevronsUp,
+  Eye,
+  Hand,
+  LogOut,
+  Plus,
+  RotateCcw,
+  ShieldCheck,
+  Split,
+  Undo2,
+} from "lucide-react";
 import { useMemo, useState } from "react";
 import { Button } from "@/components/Button";
 import { Lien } from "@/components/Lien";
@@ -43,8 +54,12 @@ export function BlackjackTablePage({ user, view }: { user: CurrentUser; view: Bl
   const [poses, setPoses] = useState<ChipValue[]>([]);
   const [derniereMise, setDerniereMise] = useState<number | null>(null);
 
+  /** Place demandée, réponse du serveur en attente. */
+  const [sitting, setSitting] = useState<number | null>(null);
+
   const mise = poses.reduce((somme, jeton) => somme + jeton, 0);
   const mine = view.seats.find((seat) => seat.seat === view.you) ?? null;
+  const spectateur = view.you === null;
   const peutMiser = (view.phase === "idle" || view.phase === "betting") && mine !== null && !mine.participating;
   const plafond = Math.min(MISE_MAX, user.balance);
   const mainCourante = view.turn?.seat === view.you ? view.turn.handIndex : null;
@@ -78,6 +93,21 @@ export function BlackjackTablePage({ user, view }: { user: CurrentUser; view: Bl
     );
   }
 
+  async function sasseoir(seat: number) {
+    setSitting(seat);
+    const reponse = await request<null>((socket, ack) =>
+      socket.emit("blackjack:sit", { tableId: view.id, seat }, ack),
+    );
+    setSitting(null);
+    // Une place prise à la seconde près est le cas normal, pas une anomalie :
+    // le message dit laquelle a échoué, et le tapis montre déjà les autres.
+    if (!reponse.ok) pushToast("erreur", reponse.message);
+  }
+
+  function seLever() {
+    void intention("stand", (socket, ack) => socket.emit("blackjack:stand", { tableId: view.id }, ack));
+  }
+
   function jouer(action: BlackjackAction) {
     if (mainCourante === null) return;
     void intention(action, (socket, ack) =>
@@ -102,6 +132,12 @@ export function BlackjackTablePage({ user, view }: { user: CurrentUser; view: Bl
   }
 
   const annonce = useMemo(() => {
+    if (view.you === null) {
+      const libres = view.maxSeats - view.seats.length;
+      return libres > 0
+        ? `Tu regardes la table. ${libres} place${libres > 1 ? "s" : ""} libre${libres > 1 ? "s" : ""}.`
+        : "Tu regardes la table. Toutes les places sont prises.";
+    }
     if (view.phase === "result" && mine?.roundNet !== null && mine !== null) {
       return mine.roundNet > 0
         ? `Manche gagnée, ${formatCoinsDelta(mine.roundNet)}.`
@@ -128,12 +164,26 @@ export function BlackjackTablePage({ user, view }: { user: CurrentUser; view: Bl
         >
           <ArrowLeft className="size-4" aria-hidden /> Blackjack
         </Lien>
-        <Button variant="ghost" onClick={() => void quitter()} className="text-xs">
-          Quitter la table
-        </Button>
+        <div className="flex items-center gap-1">
+          {!spectateur && (
+            <Button
+              variant="ghost"
+              onClick={seLever}
+              loading={pending === "stand"}
+              disabled={pending !== null || mine?.standingAfterRound}
+              className="text-xs"
+            >
+              <LogOut className="size-3.5" aria-hidden />
+              {mine?.standingAfterRound ? "Tu te lèves après" : "Se lever"}
+            </Button>
+          )}
+          <Button variant="ghost" onClick={() => void quitter()} className="text-xs">
+            Quitter la table
+          </Button>
+        </div>
       </div>
 
-      <BlackjackTable view={view} />
+      <BlackjackTable view={view} onSit={(seat) => void sasseoir(seat)} sitting={sitting} />
 
       {view.phase === "result" && mine && mine.roundNet !== null && <Verdict seat={mine} />}
 
@@ -148,7 +198,9 @@ export function BlackjackTablePage({ user, view }: { user: CurrentUser; view: Bl
           "sm:static sm:rounded-panel sm:p-4 sm:pb-4",
         )}
       >
-        {peutMiser ? (
+        {spectateur ? (
+          <SpectatorPanel complete={view.seats.length >= view.maxSeats} />
+        ) : peutMiser ? (
           <BetPanel
             poses={poses}
             mise={mise}
@@ -197,6 +249,35 @@ export function BlackjackTablePage({ user, view }: { user: CurrentUser; view: Bl
 
       <p aria-live="polite" aria-atomic="true" className="sr-only">
         {annonce}
+      </p>
+    </div>
+  );
+}
+
+/**
+ * Ce que voit quelqu'un qui regarde.
+ *
+ * Le geste attendu est sur le tapis, pas ici : la barre le nomme, et les
+ * chaises libres portent le bouton. Dupliquer une liste de places dans la barre
+ * donnerait deux endroits pour le même geste, et le doute sur lequel fait foi.
+ */
+function SpectatorPanel({ complete }: { complete: boolean }) {
+  return (
+    <div className="flex items-center justify-center gap-2.5 text-center">
+      <Eye className="size-4 shrink-0 text-cream-faint" aria-hidden />
+      <p className="text-sm text-cream-dim">
+        {complete ? (
+          <>
+            Les cinq places sont prises.{" "}
+            <span className="text-cream-faint">Reste, une se libérera à la fin d&apos;une manche.</span>
+          </>
+        ) : (
+          <>
+            Tu regardes cette table.{" "}
+            <span className="text-brass">Choisis une place libre</span>{" "}
+            <span className="text-cream-faint">pour jouer la prochaine manche.</span>
+          </>
+        )}
       </p>
     </div>
   );

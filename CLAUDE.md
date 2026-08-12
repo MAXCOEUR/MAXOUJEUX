@@ -349,6 +349,27 @@ Ce qui est déjà en place et **à consommer sans le réécrire** :
   `STAKE_TIERS`. Pour tout règlement touchant plusieurs écritures, passer par
   `creditInTx` / `debitInTx` dans une transaction unique, comme
   `modules/tables/settle.ts`.
+- **Le mode spectateur du blackjack** est le patron pour le poker, qui en aura besoin
+  aussi. Trois règles s'y tiennent, et il faut les reprendre ensemble :
+
+  1. `tables:join` sur une table de blackjack **fait entrer sans siège**. La place se
+     prend ensuite par son numéro (`blackjack:sit`), parce que l'ordre de jeu compte et
+     qu'asseoir d'office prive du choix. `blackjack:sit` ne porte **aucun** numéro de
+     version : la version change à chaque carte, un garde de version ferait échouer une
+     prise de place en pleine manche alors que la chaise est libre.
+  2. **Regarder consomme le verrou d'activité** au même titre que jouer — mêmes entrées
+     dans `tableByUser`, même sursis de déconnexion. C'est ce qui fait que la reprise
+     après reconnexion (`match:sync`) marche pour un spectateur sans une ligne de code de
+     plus, et `blackjackPlayersOf` doit continuer de renvoyer l'audience entière, sièges
+     **et** spectateurs, sinon plus aucun état ne leur parvient.
+  3. Un joueur assis qui ne mise pas pendant `BLACKJACK_IDLE_ROUNDS_MAX` manches est levé
+     et redevient spectateur. Le décompte se fait à la **fermeture** des mises et
+     l'éviction à `resetRound` : compter au règlement punirait celui qui vient de
+     s'asseoir, et lever au milieu d'une donne casserait la manche.
+
+  Se lever avec une mise engagée ne rend pas la place tout de suite — `standAfterRound`
+  attend le règlement. Ce drapeau est distinct de `leaveAfterRound` : le premier laisse
+  le joueur à la table en spectateur, le second le renvoie au salon.
 - **La table de casino du front** est dans `components/games/blackjack/` et se reprend
   telle quelle au poker : `PlayingCard` (carte à jouer, dos, retournement 3D), `Chip` /
   `ChipStack` / `ChipRack` (jetons et composition d'une mise), `BlackjackSeat` (siège en

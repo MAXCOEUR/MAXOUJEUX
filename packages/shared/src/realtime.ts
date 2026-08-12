@@ -25,7 +25,14 @@ import type {
 } from "./tables.js";
 import type { GameCode } from "./games.js";
 import type { MotusGuessInput, MotusView } from "./motus.js";
-import type { BlackjackActionInput, BlackjackBetInput, BlackjackInsuranceInput, BlackjackView } from "./blackjack.js";
+import type {
+  BlackjackActionInput,
+  BlackjackBetInput,
+  BlackjackInsuranceInput,
+  BlackjackSitInput,
+  BlackjackTableRefInput,
+  BlackjackView,
+} from "./blackjack.js";
 
 export interface PresencePlayer {
   userId: string;
@@ -115,6 +122,14 @@ export interface ClientToServerEvents {
   "blackjack:bet": (payload: BlackjackBetInput, ack: (reply: ActionReply) => void) => void;
   "blackjack:insurance": (payload: BlackjackInsuranceInput, ack: (reply: ActionReply) => void) => void;
   "blackjack:act": (payload: BlackjackActionInput, ack: (reply: ActionReply) => void) => void;
+  /**
+   * Prendre une place précise. On entre à la table par `tables:join`, qui n'y
+   * donne qu'un statut de spectateur : s'asseoir est un geste distinct, et le
+   * numéro de place en est l'objet — au blackjack, l'ordre de jeu compte.
+   */
+  "blackjack:sit": (payload: BlackjackSitInput, ack: (reply: ActionReply) => void) => void;
+  /** Rendre sa place et redevenir spectateur, sans quitter la table. */
+  "blackjack:stand": (payload: BlackjackTableRefInput, ack: (reply: ActionReply) => void) => void;
 }
 
 /** Données attachées à la socket côté serveur, résolues au handshake. */

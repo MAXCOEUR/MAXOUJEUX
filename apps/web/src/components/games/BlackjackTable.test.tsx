@@ -30,6 +30,8 @@ function seat(partial: Partial<BlackjackSeatView> = {}): BlackjackSeatView {
     totalWager: 200,
     hands: [hand()],
     roundNet: null,
+    idleRounds: 0,
+    standingAfterRound: false,
     ...partial,
   };
 }
@@ -42,6 +44,7 @@ function view(partial: Partial<BlackjackView> = {}): BlackjackView {
     seats: [seat()],
     maxSeats: 5,
     you: 0,
+    watching: 0,
     roundId: "round-1",
     dealer: { cards: [{ rank: "9", suit: "clubs" }, null], total: null, soft: null },
     turn: { seat: 0, handIndex: 0 },
@@ -164,6 +167,53 @@ test("le tapis porte les règles de paiement du croupier", () => {
   const html = renderToStaticMarkup(<BlackjackTable view={view()} />);
   assert.match(html, /BLACKJACK PAIE 3 POUR 2/);
   assert.match(html, /RESTE À 17/);
+});
+
+/**
+ * Les chaises libres ne sont cliquables que pour qui n'en occupe aucune.
+ *
+ * Les proposer à un joueur déjà assis lui laisserait croire qu'il peut tenir
+ * deux mains — ce que la table refuse.
+ */
+test("un spectateur peut cliquer chaque place libre", () => {
+  const html = renderToStaticMarkup(
+    <BlackjackTable
+      view={view({ you: null, turn: null, allowedActions: [], watching: 2 })}
+      onSit={() => {}}
+    />,
+  );
+  assert.equal((html.match(/S&#x27;asseoir à la place/g) ?? []).length, 4);
+  assert.match(html, /2 spectateurs/);
+});
+
+test("un joueur assis ne se voit proposer aucune chaise", () => {
+  const html = renderToStaticMarkup(<BlackjackTable view={view()} onSit={() => {}} />);
+  assert.doesNotMatch(html, /asseoir/);
+  assert.equal((html.match(/Libre/g) ?? []).length, 4);
+});
+
+test("sans spectateur, la table n'affiche pas de galerie", () => {
+  const html = renderToStaticMarkup(<BlackjackTable view={view({ watching: 0 })} />);
+  assert.doesNotMatch(html, /spectateur/);
+});
+
+test("le préavis d'éviction apparaît une manche avant la dernière", () => {
+  const paisible = renderToStaticMarkup(
+    <BlackjackTable view={view({ seats: [seat({ idleRounds: 1 })] })} />,
+  );
+  assert.doesNotMatch(paisible, /perds ta place/);
+
+  const menace = renderToStaticMarkup(
+    <BlackjackTable view={view({ seats: [seat({ idleRounds: 2 })] })} />,
+  );
+  assert.match(menace, /perds ta place/);
+});
+
+test("un joueur qui se lève après la manche l'annonce à la table", () => {
+  const html = renderToStaticMarkup(
+    <BlackjackTable view={view({ seats: [seat({ standingAfterRound: true })] })} />,
+  );
+  assert.match(html, /Se lève après la manche/);
 });
 
 test("la jauge du sabot suit le nombre de cartes restantes", () => {

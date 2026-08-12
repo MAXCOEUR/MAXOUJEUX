@@ -2,13 +2,44 @@ import {
   blackjackActionSchema,
   blackjackBetSchema,
   blackjackInsuranceSchema,
+  blackjackSitSchema,
+  blackjackTableRefSchema,
 } from "@maxoujeux/shared";
-import { actBlackjack, betBlackjack, insureBlackjack } from "../modules/blackjack/service.js";
+import {
+  actBlackjack,
+  betBlackjack,
+  insureBlackjack,
+  sitBlackjack,
+  standBlackjack,
+} from "../modules/blackjack/service.js";
 import { withAck } from "./guard.js";
 import type { GameSocket } from "./types.js";
 
 export function registerBlackjackHandlers(socket: GameSocket): void {
   const userId = socket.data.userId;
+  // L'identité vient du handshake, jamais de la charge utile : un client qui
+  // enverrait son pseudo pourrait s'asseoir sous celui d'un autre.
+  const me = {
+    userId,
+    pseudo: socket.data.pseudo,
+    avatarSeed: socket.data.avatarSeed,
+  };
+
+  socket.on("blackjack:sit", (payload, ack) => {
+    void withAck<null>(socket, "blackjack:sit", ack, async () => {
+      const input = blackjackSitSchema.parse(payload);
+      await sitBlackjack(me, input.tableId, input.seat);
+      return null;
+    });
+  });
+
+  socket.on("blackjack:stand", (payload, ack) => {
+    void withAck<null>(socket, "blackjack:stand", ack, async () => {
+      const input = blackjackTableRefSchema.parse(payload);
+      await standBlackjack(userId, input.tableId);
+      return null;
+    });
+  });
 
   socket.on("blackjack:bet", (payload, ack) => {
     void withAck<null>(socket, "blackjack:bet", ack, async () => {

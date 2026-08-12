@@ -1,11 +1,12 @@
 import {
+  BLACKJACK_IDLE_ROUNDS_MAX,
   formatCoins,
   formatCoinsDelta,
   type BlackjackHandView,
   type BlackjackPhase,
   type BlackjackSeatView,
 } from "@maxoujeux/shared";
-import { WifiOff } from "lucide-react";
+import { UserPlus, WifiOff } from "lucide-react";
 import { Avatar } from "@/components/Avatar";
 import { ProgressRing } from "@/components/ProgressRing";
 import { arcPose, dealOriginX, handVerdict } from "@/lib/blackjack-ui";
@@ -28,6 +29,10 @@ interface SeatProps {
   /** Échéance du tour, quand c'est à ce siège de jouer. */
   deadlineAt: string | null;
   turnMs: number | null;
+  /** Le spectateur peut-il s'asseoir ici ? `null` : il a déjà une place. */
+  onSit: (() => void) | null;
+  /** Prise de place émise, réponse du serveur en attente. */
+  sitting: boolean;
 }
 
 /**
@@ -47,6 +52,8 @@ export function BlackjackSeat({
   activeHand,
   deadlineAt,
   turnMs,
+  onSit,
+  sitting,
 }: SeatProps) {
   const pose = arcPose(place, maxSeats);
   const actif = activeHand !== null;
@@ -66,7 +73,7 @@ export function BlackjackSeat({
       style={{ ["--arc-y" as string]: pose.y, ["--arc-s" as string]: pose.scale }}
     >
       {!seat ? (
-        <EmptySeat />
+        <EmptySeat seatIndex={seatIndex} onSit={onSit} sitting={sitting} />
       ) : (
         <>
           <div className="flex min-h-[calc(var(--carte-l)*1.4)] items-end justify-center gap-2 sm:gap-3">
@@ -104,15 +111,62 @@ export function BlackjackSeat({
   );
 }
 
-function EmptySeat() {
+/**
+ * Une chaise vide.
+ *
+ * Pour un spectateur, c'est un bouton : c'est le geste réel — on désigne la
+ * chaise où l'on veut s'asseoir. Pour un joueur déjà assis, ce n'est qu'une
+ * marque sur le tapis, et un bouton mort qui refuse le clic vaudrait moins
+ * qu'une absence de bouton.
+ */
+function EmptySeat({
+  seatIndex,
+  onSit,
+  sitting,
+}: {
+  seatIndex: number;
+  onSit: (() => void) | null;
+  sitting: boolean;
+}) {
+  if (!onSit) {
+    return (
+      <div className="flex flex-col items-center gap-2 py-2 opacity-45">
+        <span
+          aria-hidden
+          className="grid aspect-square w-[calc(var(--jeton-l)*1.5)] place-items-center rounded-full border border-dashed border-line-strong"
+        />
+        <span className="text-[0.65rem] uppercase tracking-[0.18em] text-cream-faint">Libre</span>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex flex-col items-center gap-2 py-2 opacity-45">
+    <button
+      type="button"
+      onClick={onSit}
+      aria-busy={sitting || undefined}
+      aria-label={`S'asseoir à la place ${seatIndex + 1}`}
+      className={cn(
+        "group flex min-h-11 flex-col items-center gap-1.5 rounded-xl px-2 py-2",
+        "transition-[background-color,transform] duration-150",
+        "hover:bg-brass/10 active:translate-y-px",
+        "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brass",
+      )}
+    >
       <span
         aria-hidden
-        className="grid aspect-square w-[calc(var(--jeton-l)*1.5)] place-items-center rounded-full border border-dashed border-line-strong"
-      />
-      <span className="text-[0.65rem] uppercase tracking-[0.18em] text-cream-faint">Libre</span>
-    </div>
+        className={cn(
+          "grid aspect-square w-[calc(var(--jeton-l)*1.5)] place-items-center rounded-full",
+          "border border-dashed border-brass/50 text-brass transition-colors",
+          "group-hover:border-brass group-hover:bg-brass/10",
+        )}
+      >
+        <UserPlus className="size-3.5" />
+      </span>
+      <span className="text-[0.62rem] font-semibold uppercase leading-tight tracking-[0.1em] text-brass">
+        {sitting ? "…" : "S'asseoir"}
+      </span>
+    </button>
   );
 }
 
@@ -256,6 +310,40 @@ function HandTotal({ hand, active }: { hand: BlackjackHandView; active: boolean 
   );
 }
 
+/** Deuxième ligne de la plaque : ce que ce joueur fait de sa manche. */
+function SeatStatus({ seat, phase }: { seat: BlackjackSeatView; phase: BlackjackPhase }) {
+  if (seat.roundNet !== null) {
+    return (
+      <span
+        className={cn(
+          "tabular block text-[0.68rem] font-bold leading-tight",
+          seat.roundNet > 0 ? "text-win" : seat.roundNet < 0 ? "text-danger" : "text-cream-dim",
+        )}
+      >
+        {seat.roundNet === 0 ? "Mise rendue" : formatCoinsDelta(seat.roundNet)}
+      </span>
+    );
+  }
+
+  if (seat.standingAfterRound) {
+    return (
+      <span className="block text-[0.66rem] leading-tight text-cream-faint">
+        Se lève après la manche
+      </span>
+    );
+  }
+
+  return (
+    <span className="tabular block text-[0.68rem] leading-tight text-cream-faint">
+      {seat.totalWager > 0
+        ? formatCoins(seat.totalWager)
+        : phase === "betting" || phase === "idle"
+          ? "Pas encore misé"
+          : "Passe cette manche"}
+    </span>
+  );
+}
+
 /** Plaque du joueur : avatar cerclé du temps restant, pseudo, gain de la manche. */
 function Nameplate({
   seat,
@@ -302,22 +390,15 @@ function Nameplate({
           {!seat.connected && <WifiOff className="size-3 shrink-0 text-danger" aria-label="Déconnecté" />}
         </span>
 
-        {seat.roundNet !== null ? (
-          <span
-            className={cn(
-              "tabular block text-[0.68rem] font-bold leading-tight",
-              seat.roundNet > 0 ? "text-win" : seat.roundNet < 0 ? "text-danger" : "text-cream-dim",
-            )}
-          >
-            {seat.roundNet === 0 ? "Mise rendue" : formatCoinsDelta(seat.roundNet)}
-          </span>
-        ) : (
-          <span className="tabular block text-[0.68rem] leading-tight text-cream-faint">
-            {seat.totalWager > 0
-              ? formatCoins(seat.totalWager)
-              : phase === "betting" || phase === "idle"
-                ? "Pas encore misé"
-                : "Spectateur"}
+        <SeatStatus seat={seat} phase={phase} />
+
+        {/* Le préavis d'éviction. Un joueur levé sans avertissement conclura à
+            un bug ; il lui faut une manche pour réagir. */}
+        {seat.roundNet === null
+          && !seat.standingAfterRound
+          && seat.idleRounds >= BLACKJACK_IDLE_ROUNDS_MAX - 1 && (
+          <span className="block text-[0.62rem] font-semibold leading-tight text-danger">
+            Mise ou tu perds ta place
           </span>
         )}
       </span>

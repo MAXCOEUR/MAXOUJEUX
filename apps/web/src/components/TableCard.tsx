@@ -38,7 +38,15 @@ export function TableCard({
   const complete = table.seats.length >= table.maxSeats;
   const tropCher = table.stake !== null && table.stake > balance;
 
-  const joignable = (!enCours || table.game === "blackjack") && !complete && !mine && !busy && !tropCher;
+  /**
+   * Au blackjack, entrer veut dire **regarder** : la place se choisit ensuite,
+   * sur le tapis. Une table complète ou en pleine manche reste donc ouverte —
+   * c'est même là que le mode spectateur sert le plus.
+   */
+  const spectateur = table.game === "blackjack";
+  const joignable = spectateur
+    ? !mine && !busy
+    : !enCours && !complete && !mine && !busy && !tropCher;
 
   return (
     <article
@@ -117,14 +125,26 @@ export function TableCard({
         <Button variant="outline" onClick={() => onReprendre(table)} className="w-full">
           Revenir à ma table
         </Button>
-      ) : enCours && table.game !== "blackjack" ? null : (
+      ) : enCours && !spectateur ? null : (
         <Button
           onClick={() => onJoin(table)}
           loading={joining}
           disabled={!joignable}
           className="w-full"
         >
-          {complete ? "Complète" : tropCher ? "Solde insuffisant" : busy ? "Déjà en partie" : "Rejoindre"}
+          {spectateur
+            ? busy
+              ? "Déjà en partie"
+              : complete
+                ? "Regarder — table complète"
+                : "Regarder"
+            : complete
+              ? "Complète"
+              : tropCher
+                ? "Solde insuffisant"
+                : busy
+                  ? "Déjà en partie"
+                  : "Rejoindre"}
         </Button>
       )}
 

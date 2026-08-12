@@ -53,7 +53,7 @@ import {
   createBlackjackTable,
   detachBlackjack,
   hasBlackjackTable,
-  joinBlackjackTable,
+  watchBlackjackTable,
   leaveBlackjack,
   resetBlackjackForTests,
   setBlackjackNotifier,
@@ -407,7 +407,10 @@ export async function createTable(
  */
 export async function joinTable(player: PlayerIdentity, tableId: string): Promise<string> {
   const table = tables.get(tableId);
-  if (!table && hasBlackjackTable(tableId)) return joinBlackjackTable(player, tableId);
+  // Sur une table de blackjack, « rejoindre » veut dire **regarder** : la place
+  // se choisit ensuite, siège par siège, via `blackjack:sit`. Voir
+  // `watchBlackjackTable` pour la raison.
+  if (!table && hasBlackjackTable(tableId)) return watchBlackjackTable(player, tableId);
 
   // --- Réservation synchrone. ---
   if (!table || !isLive(table)) fail("TABLE_GONE", "Cette table n'existe plus.", 404);

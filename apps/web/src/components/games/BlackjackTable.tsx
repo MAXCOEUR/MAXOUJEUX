@@ -4,6 +4,7 @@ import {
   BLACKJACK_SUITS,
   type BlackjackView,
 } from "@maxoujeux/shared";
+import { Eye } from "lucide-react";
 import { ProgressRing } from "@/components/ProgressRing";
 import { phaseDurationMs, phaseLabel, seatOrder } from "@/lib/blackjack-ui";
 import { cn } from "@/lib/cn";
@@ -26,7 +27,15 @@ const SHOE_CARDS = BLACKJACK_SHOE_DECKS * BLACKJACK_RANKS.length * BLACKJACK_SUI
  * cartes, index, cases de mise et piles en dépendent. Redimensionner la table
  * revient à changer deux nombres, jamais trente.
  */
-export function BlackjackTable({ view }: { view: BlackjackView }) {
+interface TableProps {
+  view: BlackjackView;
+  /** Prise de place. Absent en rendu statique : les places ne sont alors pas cliquables. */
+  onSit?: (seat: number) => void;
+  /** Numéro de place demandée, réponse du serveur en attente. */
+  sitting?: number | null;
+}
+
+export function BlackjackTable({ view, onSit, sitting = null }: TableProps) {
   const ordre = seatOrder(view.you, view.maxSeats);
   const seatAt = (index: number) => view.seats.find((seat) => seat.seat === index) ?? null;
   const dureePhase = phaseDurationMs(view.phase);
@@ -52,12 +61,15 @@ export function BlackjackTable({ view }: { view: BlackjackView }) {
       <Markings />
 
       <div className="relative flex items-start justify-between gap-2">
-        <PitClock
-          phase={view.phase}
-          deadlineAt={surLaTable ? view.deadlineAt : null}
-          durationMs={surLaTable ? dureePhase : null}
-          yourTurn={view.turn?.seat === view.you}
-        />
+        <div className="flex w-16 shrink-0 flex-col items-center gap-1 sm:w-20">
+          <PitClock
+            phase={view.phase}
+            deadlineAt={surLaTable ? view.deadlineAt : null}
+            durationMs={surLaTable ? dureePhase : null}
+            yourTurn={view.turn?.seat === view.you}
+          />
+          <Gallery count={view.watching} />
+        </div>
         <Dealer view={view} />
         <Shoe remaining={view.shoeRemaining} />
       </div>
@@ -82,6 +94,10 @@ export function BlackjackTable({ view }: { view: BlackjackView }) {
             activeHand={view.turn?.seat === seatIndex ? view.turn.handIndex : null}
             deadlineAt={view.deadlineAt}
             turnMs={dureePhase}
+            // Seul un spectateur peut s'asseoir. Proposer la chaise à qui en
+            // occupe déjà une lui ferait croire qu'il peut jouer deux mains.
+            onSit={onSit && view.you === null ? () => onSit(seatIndex) : null}
+            sitting={sitting === seatIndex}
           />
         ))}
       </div>
@@ -149,7 +165,7 @@ function PitClock({
   const libelle = phaseLabel(phase, yourTurn);
 
   return (
-    <div className="flex w-16 shrink-0 flex-col items-center gap-1 sm:w-20">
+    <div className="flex flex-col items-center gap-1">
       {deadlineAt && durationMs ? (
         <ProgressRing deadlineAt={deadlineAt} turnMs={durationMs} size={44}>
           <span
@@ -205,6 +221,31 @@ function Shoe({ remaining }: { remaining: number }) {
         {remaining} cartes
       </span>
     </div>
+  );
+}
+
+/**
+ * Les spectateurs, en nombre.
+ *
+ * Un compteur et non une liste : savoir qu'on est regardé change la partie,
+ * savoir par qui ne la change pas — et vingt pseudos mangeraient le tapis.
+ *
+ * Placé sous la montre de table, en pendant du compteur du sabot. Le coin
+ * inférieur droit, qui semblait le bon endroit, est **avalé par la courbe** :
+ * le tapis est en `overflow-hidden` et son rayon elliptique emporte les coins
+ * du bas.
+ */
+function Gallery({ count }: { count: number }) {
+  if (count === 0) return null;
+  return (
+    <p className="inline-flex items-center gap-1 text-[0.58rem] leading-tight text-cream-faint">
+      <Eye className="size-3 shrink-0" aria-hidden />
+      {/* Un seul nœud de texte : deux `span` séparés par une gouttière se lisent
+          « deux », « spectateurs » à la synthèse vocale, avec une pause entre. */}
+      <span className="tabular">
+        {count} {count > 1 ? "spectateurs" : "spectateur"}
+      </span>
+    </p>
   );
 }
 
