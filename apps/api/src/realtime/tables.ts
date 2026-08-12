@@ -32,6 +32,7 @@ import {
 } from "../modules/tables/manager.js";
 import { gameCounts } from "./counts.js";
 import { withAck } from "./guard.js";
+import { socketIdentity } from "./identity.js";
 import { lobbyRoom, userRoom, type GameServer, type GameSocket } from "./types.js";
 
 /**
@@ -65,17 +66,8 @@ export function createTableNotifier(io: GameServer): TableNotifier {
   };
 }
 
-/** Identité du joueur, résolue au handshake — jamais envoyée par le client. */
-function identity(socket: GameSocket) {
-  return {
-    userId: socket.data.userId,
-    pseudo: socket.data.pseudo,
-    avatarSeed: socket.data.avatarSeed,
-  };
-}
-
 export function registerTableHandlers(socket: GameSocket): void {
-  const me = identity(socket);
+  const userId = socket.data.userId;
 
   socket.on("tables:watch", (payload, ack) => {
     void withAck<SalonSnapshot>(socket, "tables:watch", ack, async () => {
@@ -96,7 +88,7 @@ export function registerTableHandlers(socket: GameSocket): void {
   socket.on("tables:create", (payload, ack) => {
     void withAck<{ tableId: string }>(socket, "tables:create", ack, async () => {
       const input = createTableSchema.parse(payload);
-      const tableId = await createTable(me, input.game, "stake" in input ? input.stake : undefined);
+      const tableId = await createTable(socketIdentity(socket), input.game, "stake" in input ? input.stake : undefined);
       return { tableId };
     });
   });
@@ -104,7 +96,7 @@ export function registerTableHandlers(socket: GameSocket): void {
   socket.on("tables:join", (payload, ack) => {
     void withAck<{ tableId: string }>(socket, "tables:join", ack, async () => {
       const { tableId } = tableRefSchema.parse(payload);
-      await joinTable(me, tableId);
+      await joinTable(socketIdentity(socket), tableId);
       return { tableId };
     });
   });
@@ -112,7 +104,7 @@ export function registerTableHandlers(socket: GameSocket): void {
   socket.on("match:play", (payload, ack) => {
     void withAck<null>(socket, "match:play", ack, async () => {
       const parsed = playSchema.parse(payload);
-      await play(me.userId, parsed.tableId, parsed.move, parsed.version);
+      await play(userId, parsed.tableId, parsed.move, parsed.version);
       return null;
     });
   });
@@ -120,15 +112,15 @@ export function registerTableHandlers(socket: GameSocket): void {
   socket.on("match:leave", (payload, ack) => {
     void withAck<null>(socket, "match:leave", ack, async () => {
       const { tableId } = tableRefSchema.parse(payload);
-      await leave(me.userId, tableId);
+      await leave(userId, tableId);
       return null;
     });
   });
 
   socket.on("match:sync", (ack) => {
     void withAck<ActiveMatchView | null>(socket, "match:sync", ack, async () => {
-      const tableId = tableOf(me.userId);
-      return tableId ? activeViewFor(tableId, me.userId) : null;
+      const tableId = tableOf(userId);
+      return tableId ? activeViewFor(tableId, userId) : null;
     });
   });
 

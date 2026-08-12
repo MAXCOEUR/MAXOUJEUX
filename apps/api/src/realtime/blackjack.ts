@@ -13,22 +13,18 @@ import {
   standBlackjack,
 } from "../modules/blackjack/service.js";
 import { withAck } from "./guard.js";
+import { socketIdentity } from "./identity.js";
 import type { GameSocket } from "./types.js";
 
 export function registerBlackjackHandlers(socket: GameSocket): void {
   const userId = socket.data.userId;
-  // L'identité vient du handshake, jamais de la charge utile : un client qui
-  // enverrait son pseudo pourrait s'asseoir sous celui d'un autre.
-  const me = {
-    userId,
-    pseudo: socket.data.pseudo,
-    avatarSeed: socket.data.avatarSeed,
-  };
 
   socket.on("blackjack:sit", (payload, ack) => {
     void withAck<null>(socket, "blackjack:sit", ack, async () => {
       const input = blackjackSitSchema.parse(payload);
-      await sitBlackjack(me, input.tableId, input.seat);
+      // L'identité reste issue de la session, mais elle est relue maintenant :
+      // un avatar téléversé après la connexion doit apparaître sur le siège.
+      await sitBlackjack(socketIdentity(socket), input.tableId, input.seat);
       return null;
     });
   });

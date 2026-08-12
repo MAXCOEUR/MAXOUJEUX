@@ -75,19 +75,19 @@ export function AuthPage() {
   }
 
   return (
-    <div className="grid min-h-dvh lg:grid-cols-[1.15fr_1fr]">
+    <div className="grid min-h-dvh lg:h-dvh lg:grid-cols-[1.15fr_1fr] lg:overflow-hidden">
       {/* --- Panneau de gauche : la table --------------------------------- */}
       {/* Masqué sous lg : sur un téléphone, la table volerait la place du
           formulaire, qui est la seule chose à faire sur cet écran. */}
-      <aside className="relative hidden overflow-hidden border-r border-line lg:flex lg:flex-col lg:justify-between lg:p-12">
+      <aside className="relative hidden min-h-0 overflow-hidden border-r border-line lg:flex lg:flex-col lg:justify-between lg:p-8 xl:p-12">
         <Logo className="relative text-2xl" />
 
-        <div className="relative -my-8 flex-1">
+        <div className="relative -my-4 min-h-0 flex-1 xl:-my-8">
           <TableScene />
         </div>
 
         <div className="relative max-w-md">
-          <h1 className="font-display text-4xl leading-[1.05] font-extrabold text-cream">
+          <h1 className="font-display text-3xl leading-[1.05] font-extrabold text-cream xl:text-4xl">
             La salle de jeux
             <br />
             <span className="text-brass">de la maison.</span>
@@ -100,7 +100,7 @@ export function AuthPage() {
       </aside>
 
       {/* --- Panneau de droite : le formulaire ---------------------------- */}
-      <main className="flex items-center justify-center px-5 py-12 sm:px-10">
+      <main className="flex items-center justify-center px-5 py-8 sm:px-10 xl:py-12">
         <div className="w-full max-w-sm animate-rise">
           {/* Sur mobile, le logo revient ici : sans lui, la page démarre sur
               un champ email sans dire de quel site il s'agit. */}

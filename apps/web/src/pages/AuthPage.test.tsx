@@ -16,3 +16,15 @@ test("expose l'email de connexion comme identifiant au gestionnaire de mots de p
   assert.match(emailInput, /type="email"/);
   assert.match(emailInput, /autoComplete="username"/i);
 });
+
+test("borne la scène de connexion à la hauteur de l’écran sur ordinateur", () => {
+  const markup = renderToStaticMarkup(
+    <QueryClientProvider client={new QueryClient()}>
+      <AuthPage />
+    </QueryClientProvider>,
+  );
+
+  assert.match(markup, /lg:h-dvh/);
+  assert.match(markup, /lg:overflow-hidden/);
+  assert.match(markup, /min-h-0/);
+});

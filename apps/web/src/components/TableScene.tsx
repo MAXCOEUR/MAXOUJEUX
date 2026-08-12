@@ -4,7 +4,7 @@ import { GameArtefact } from "./GameArtefact";
 /**
  * La table de jeu — signature de l'écran d'accueil.
  *
- * Les cinq artefacts sont posés comme si quelqu'un avait quitté la table au
+ * Les six artefacts sont posés comme si quelqu'un avait quitté la table au
  * milieu d'une soirée : légèrement de biais, à des hauteurs différentes, sans
  * grille visible. C'est cette irrégularité qui donne l'impression d'objets
  * réels ; un alignement parfait produirait une planche d'icônes.
@@ -13,17 +13,18 @@ import { GameArtefact } from "./GameArtefact";
  * la composition doit être la même à chaque visite.
  */
 const LAYOUT = [
-  { rotate: -7, x: -2, y: 4, scale: 1.12, delay: 0 },
-  { rotate: 5, x: 6, y: -6, scale: 0.92, delay: 90 },
-  { rotate: -3, x: -8, y: 2, scale: 0.86, delay: 180 },
-  { rotate: 8, x: 4, y: 6, scale: 0.9, delay: 270 },
-  { rotate: -5, x: 2, y: -4, scale: 0.8, delay: 360 },
+  { rotate: -7, x: -2, y: 4, scale: 0.96, delay: 0 },
+  { rotate: 5, x: 4, y: -5, scale: 0.88, delay: 90 },
+  { rotate: -3, x: -4, y: 2, scale: 0.9, delay: 180 },
+  { rotate: 7, x: 3, y: 5, scale: 0.86, delay: 270 },
+  { rotate: -5, x: 2, y: -4, scale: 0.84, delay: 360 },
+  { rotate: 4, x: -3, y: 3, scale: 0.88, delay: 450 },
 ] as const;
 
 export function TableScene() {
   return (
     <div
-      className="relative grid h-full w-full grid-cols-2 place-items-center gap-6 p-8 sm:gap-10 sm:p-12"
+      className="relative grid h-full min-h-0 w-full grid-cols-3 grid-rows-2 place-items-center gap-4 p-4 xl:gap-6 xl:p-8"
       aria-hidden
     >
       {/* Halo du plafonnier au-dessus de la table. */}
@@ -40,9 +41,8 @@ export function TableScene() {
         return (
           <div
             key={game.code}
-            // Le troisième artefact prend toute la largeur : la composition
-            // reste asymétrique au lieu de retomber sur deux colonnes égales.
-            className={index === 2 ? "col-span-2 w-1/2" : "w-full"}
+            data-table-scene-item
+            className="w-full min-w-0"
             style={{
               transform: `translate(${pose.x}%, ${pose.y}%) rotate(${pose.rotate}deg) scale(${pose.scale})`,
               animation: `var(--animate-deal)`,
