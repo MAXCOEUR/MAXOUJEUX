@@ -316,26 +316,55 @@
 }
 
 /* Le cylindre de roulette.
-   L'angle d'arrivée est fourni en ligne — il dépend du numéro tiré par le
-   serveur — et l'accélération est concentrée au départ : une bille qui
-   ralentirait linéairement n'aurait aucun poids. La bille tourne en sens
-   inverse, comme au casino ; c'est ce contresens qui rend le mouvement
-   crédible, deux rotations dans le même sens se lisant comme un seul bloc. */
+   Un nombre entier de tours, sans cible : le cylindre ne vise pas une case, il
+   tourne et ralentit. C'est la bille qui désignera le numéro. */
 @keyframes roue-tourne {
   from {
     transform: rotate(0deg);
   }
   to {
-    transform: rotate(var(--roue-fin, 1800deg));
+    transform: rotate(var(--roue-fin, 1080deg));
   }
 }
 
-@keyframes bille-tourne {
+/* L'orbite de la bille, en sens inverse du cylindre — c'est ce contresens qui
+   rend le mouvement crédible, deux rotations dans le même sens se lisant comme
+   un seul bloc. L'angle d'arrivée est fourni en ligne : il tombe exactement sur
+   la case tirée par le serveur. */
+@keyframes bille-orbite {
   from {
     transform: rotate(0deg);
   }
   to {
-    transform: rotate(var(--bille-fin, -2880deg));
+    transform: rotate(var(--bille-fin, -2160deg));
+  }
+}
+
+/* La chute de la bille, de la piste extérieure vers les cases.
+   C'est le trajet qui manquait le plus : sans lui la bille restait collée à son
+   rail jusqu'à l'arrêt, ce qu'aucune bille ne fait. Elle tient d'abord sur la
+   piste, décroche aux deux tiers, puis rebondit deux fois en s'amortissant avant
+   de se caler. Les rebonds sont volontairement inégaux : un amortissement
+   régulier se lit comme un ressort, pas comme de l'ivoire sur du bois. */
+@keyframes bille-chute {
+  0%,
+  58% {
+    transform: translateY(0);
+  }
+  71% {
+    transform: translateY(var(--bille-chute, 127%));
+  }
+  78% {
+    transform: translateY(calc(var(--bille-chute, 127%) * 0.72));
+  }
+  85% {
+    transform: translateY(var(--bille-chute, 127%));
+  }
+  91% {
+    transform: translateY(calc(var(--bille-chute, 127%) * 0.89));
+  }
+  100% {
+    transform: translateY(var(--bille-chute, 127%));
   }
 }
 

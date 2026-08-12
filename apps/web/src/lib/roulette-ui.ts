@@ -133,18 +133,28 @@ export function pocketAngle(value: number): number {
 export const POCKET_ARC = 360 / ROULETTE_POCKETS;
 
 /**
- * Rotation finale du cylindre pour amener un numéro sous le repère du haut.
+ * Rotation du cylindre pendant un lancer.
  *
- * Plusieurs tours complets d'abord, pour que le mouvement se lise comme un
- * lancer et non comme un saut : la roue part vite et ralentit. Le nombre de
- * tours est fixe, sans quoi deux joueurs verraient la même bille tourner
- * différemment.
+ * Un **nombre entier de tours**, indépendant du numéro sorti : le cylindre ne
+ * vise rien, il tourne. C'est la correction du défaut d'origine, où la roue
+ * pivotait pour amener la case gagnante sous un repère fixe — ce qui donnait à
+ * l'écran un point d'arrivée que n'a aucune roulette réelle.
+ *
+ * Le nombre de tours est constant, sans quoi deux joueurs verraient le même
+ * lancer se dérouler différemment.
  */
-export function wheelRotation(result: number, turns = 5): number {
-  return turns * 360 - pocketAngle(result);
+export function wheelRotation(turns = 3): number {
+  return turns * 360;
 }
 
-/** Rotation de la bille, en sens **inverse** de la roue, comme au casino. */
-export function ballRotation(turns = 8): number {
-  return -turns * 360;
+/**
+ * Rotation de la bille, en sens **inverse** du cylindre, comme au casino.
+ *
+ * Elle se termine exactement sur la case sortie : le cylindre s'immobilisant à
+ * un multiple de 360°, la case garde son angle de dessin, et la bille n'a qu'à
+ * l'atteindre. C'est elle, et elle seule, qui désigne le numéro — plus aucun
+ * repère n'est nécessaire.
+ */
+export function ballRotation(result: number, turns = 6): number {
+  return pocketAngle(result) - turns * 360;
 }

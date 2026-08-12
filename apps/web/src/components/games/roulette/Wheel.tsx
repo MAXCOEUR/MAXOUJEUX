@@ -26,14 +26,23 @@ const POCKET_FILL: Record<ReturnType<typeof rouletteColor>, string> = {
  *
  * **Animé entièrement en CSS**, sans un seul rendu React par image : une roue
  * pilotée par l'état ferait quatre cents rendus en sept secondes et saccaderait
- * sur un téléphone. Le GPU compose deux rotations, React ne touche plus à rien.
+ * sur un téléphone. Le GPU compose les rotations, React ne touche plus à rien.
+ *
+ * Trois mouvements indépendants, et c'est leur superposition qui fait le
+ * réalisme : le cylindre tourne dans un sens sans viser quoi que ce soit, la
+ * bille orbite dans l'autre en décélérant fortement, et elle **descend** de la
+ * piste extérieure vers les cases en rebondissant sur la fin.
+ *
+ * Aucun repère fixe : le cylindre s'arrête sur un multiple de 360°, donc chaque
+ * case garde son angle de dessin, et la bille s'immobilise pile sur celle que le
+ * serveur a tirée. C'est elle qui annonce le numéro, comme sur une vraie table.
  *
  * Le `animation-delay` **négatif** est ce qui fait qu'un joueur arrivant à trois
  * secondes d'un lancer de sept voit la bille déjà bien avancée. Sans lui, elle
  * repartirait de zéro et s'arrêterait quatre secondes après tout le monde.
  *
- * La `key` sur les deux nœuds animés est indispensable : changer une propriété
- * ne relance pas une animation CSS, il faut que l'élément soit remonté.
+ * La `key` sur les nœuds animés est indispensable : changer une propriété ne
+ * relance pas une animation CSS, il faut que l'élément soit remonté.
  */
 export function Wheel({ result, spinning, deadlineAt, spinMs }: WheelProps) {
   const reduced = useReducedMotion();
@@ -68,7 +77,7 @@ export function Wheel({ result, spinning, deadlineAt, spinMs }: WheelProps) {
     );
   }
 
-  const rotation = result === null ? 0 : wheelRotation(result);
+  const retard = `-${Math.round(ecoule)}ms`;
 
   return (
     <div
@@ -82,49 +91,46 @@ export function Wheel({ result, spinning, deadlineAt, spinMs }: WheelProps) {
             : `Le ${result} est sorti`
       }
     >
-      {/* Repère fixe : c'est sous lui que la case gagnante s'immobilise. */}
-      <span
-        aria-hidden
-        className="absolute left-1/2 top-0 z-20 -translate-x-1/2 -translate-y-1/2 text-brass-bright"
-        style={{ fontSize: "0.9rem", lineHeight: 1 }}
-      >
-        ▼
-      </span>
-
-      {/* Le cylindre tourne ; le moyeu et le repère ne bougent pas. */}
+      {/* Le cylindre tourne sans viser : seul le moyeu reste fixe. */}
       <div
-        key={`cylindre-${result ?? "repos"}-${deadlineAt ?? "fixe"}`}
+        key={`cylindre-${deadlineAt ?? "fixe"}`}
         className="absolute inset-0"
         style={
           spinning
             ? {
-                animation: `roue-tourne ${spinMs}ms cubic-bezier(0.16, 0.9, 0.24, 1) forwards`,
-                animationDelay: `-${Math.round(ecoule)}ms`,
-                ["--roue-fin" as string]: `${rotation}deg`,
+                // Décélération douce : une vraie roue ralentit à peine sur sept
+                // secondes, et une roue qui pile se lit comme un coup de frein.
+                animation: `roue-tourne ${spinMs}ms cubic-bezier(0.22, 0.55, 0.3, 1) forwards`,
+                animationDelay: retard,
+                ["--roue-fin" as string]: `${wheelRotation()}deg`,
               }
-            : { transform: `rotate(${result === null ? 0 : -pocketAngle(result)}deg)` }
+            : undefined
         }
       >
-        <Cylinder />
+        {/* La case gagnante est cerclée une fois la bille posée, comme le
+            marqueur que le croupier pose sur le tapis. */}
+        <Cylinder gagnant={spinning ? null : result} />
       </div>
 
-      {/* La bille tourne en sens inverse, puis retombe dans sa case. */}
-      {spinning && (
+      {/* La bille : orbite en sens inverse, et chute vers les cases. */}
+      {result !== null && (
         <div
-          key={`bille-${deadlineAt ?? "fixe"}`}
+          key={`bille-${deadlineAt ?? "fixe"}-${result}`}
           className="absolute inset-0"
-          style={{
-            animation: `bille-tourne ${spinMs}ms cubic-bezier(0.16, 0.9, 0.24, 1) forwards`,
-            animationDelay: `-${Math.round(ecoule)}ms`,
-            ["--bille-fin" as string]: `${ballRotation()}deg`,
-          }}
+          style={
+            spinning
+              ? {
+                  // Décélération bien plus marquée que celle du cylindre : c'est
+                  // la bille qui perd sa vitesse, le contraste entre les deux
+                  // fait tout le mouvement.
+                  animation: `bille-orbite ${spinMs}ms cubic-bezier(0.1, 0.72, 0.18, 1) forwards`,
+                  animationDelay: retard,
+                  ["--bille-fin" as string]: `${ballRotation(result)}deg`,
+                }
+              : { transform: `rotate(${pocketAngle(result)}deg)` }
+          }
         >
-          <Ball />
-        </div>
-      )}
-      {!spinning && result !== null && (
-        <div className="absolute inset-0">
-          <Ball />
+          <Ball spinning={spinning} spinMs={spinMs} retard={retard} />
         </div>
       )}
 
@@ -143,13 +149,13 @@ export function Wheel({ result, spinning, deadlineAt, spinMs }: WheelProps) {
 }
 
 /** Le disque à trente-sept cases, dessiné en secteurs SVG. */
-function Cylinder() {
+function Cylinder({ gagnant }: { gagnant: number | null }) {
   return (
     <svg viewBox="-50 -50 100 100" className="size-full drop-shadow-[0_8px_18px_rgb(0_0_0/0.55)]" aria-hidden>
       <circle r="49" fill="var(--color-brass-deep)" />
       <circle r="46.5" fill="var(--color-felt-deep)" />
       {ROULETTE_WHEEL.map((pocket, index) => (
-        <Pocket key={pocket} value={pocket} index={index} />
+        <Pocket key={pocket} value={pocket} index={index} gagnante={pocket === gagnant} />
       ))}
       <circle r="27" fill="none" stroke="var(--color-brass)" strokeWidth="0.6" opacity="0.55" />
     </svg>
@@ -163,7 +169,15 @@ function Cylinder() {
  * la seule façon d'avoir des séparateurs radiaux nets, ceux qui font lire un
  * cylindre plutôt qu'un camembert.
  */
-function Pocket({ value, index }: { value: number; index: number }) {
+function Pocket({
+  value,
+  index,
+  gagnante,
+}: {
+  value: number;
+  index: number;
+  gagnante: boolean;
+}) {
   const debut = index * POCKET_ARC - POCKET_ARC / 2 - 90;
   const fin = debut + POCKET_ARC;
   const exterieur = 46.5;
@@ -192,8 +206,9 @@ function Pocket({ value, index }: { value: number; index: number }) {
       <path
         d={chemin}
         fill={POCKET_FILL[rouletteColor(value)]}
-        stroke="var(--color-brass-deep)"
-        strokeWidth="0.35"
+        stroke={gagnante ? "var(--color-brass-bright)" : "var(--color-brass-deep)"}
+        strokeWidth={gagnante ? "1.1" : "0.35"}
+        style={gagnante ? { filter: "brightness(1.25)" } : undefined}
       />
       <text
         x={(rayonTexte * Math.cos(rad)).toFixed(3)}
@@ -213,15 +228,50 @@ function Pocket({ value, index }: { value: number; index: number }) {
   );
 }
 
-/** La bille, posée sur la piste extérieure. */
-function Ball() {
+/**
+ * La bille.
+ *
+ * Deux éléments imbriqués et non un seul : le centrage horizontal est un
+ * `transform`, et l'animation de chute en est un autre. Les cumuler sur le même
+ * nœud ferait que l'animation écrase le centrage, et la bille partirait sur le
+ * côté du cylindre.
+ *
+ * Le déplacement vaut 127 % de son propre diamètre, ce qui l'amène du rail
+ * extérieur au milieu de la couronne des cases — et la valeur suit
+ * automatiquement la taille du cylindre, puisque la bille est dimensionnée en
+ * pourcentage de celui-ci.
+ */
+const CHUTE = "127%";
+
+function Ball({
+  spinning,
+  spinMs,
+  retard,
+}: {
+  spinning: boolean;
+  spinMs: number;
+  retard: string;
+}) {
   return (
     <span
       aria-hidden
-      className={cn(
-        "absolute left-1/2 top-[3.5%] block size-[5.5%] -translate-x-1/2 rounded-full",
-        "bg-cream shadow-[0_1px_3px_rgb(0_0_0/0.7),inset_0_-1px_2px_rgb(0_0_0/0.25)]",
-      )}
-    />
+      className="absolute left-1/2 top-[3.5%] block size-[5.5%] -translate-x-1/2"
+    >
+      <span
+        className={cn(
+          "block size-full rounded-full",
+          "bg-cream shadow-[0_1px_3px_rgb(0_0_0/0.7),inset_0_-1px_2px_rgb(0_0_0/0.25)]",
+        )}
+        style={
+          spinning
+            ? {
+                animation: `bille-chute ${spinMs}ms linear forwards`,
+                animationDelay: retard,
+                ["--bille-chute" as string]: CHUTE,
+              }
+            : { transform: `translateY(${CHUTE})` }
+        }
+      />
+    </span>
   );
 }

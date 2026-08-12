@@ -6,6 +6,7 @@ import {
   MAT_DOZENS,
   MAT_EVEN_MONEY,
   MAT_ROWS,
+  ballRotation,
   betOn,
   draftTotal,
   isNewerRouletteView,
@@ -167,12 +168,26 @@ test("le zéro est en haut du cylindre et chaque case a son angle", () => {
   assert.equal(angles.size, 37);
 });
 
-test("la roue tourne plusieurs tours avant de présenter le numéro sorti", () => {
-  // Le reste modulo 360 doit ramener la case sous le repère du haut, et le
-  // total doit rester largement positif pour que le mouvement se lise.
-  for (const numero of [0, 17, 26]) {
-    const rotation = wheelRotation(numero);
-    assert.ok(rotation > 360, `${numero} doit tourner plus d'un tour`);
-    assert.ok(Math.abs(((rotation + pocketAngle(numero)) % 360)) < 0.001);
+test("le cylindre tourne plusieurs tours sans viser de case", () => {
+  // Un multiple exact de 360 : chaque case retrouve son angle de dessin, ce qui
+  // permet à la bille de s'arrêter dessus sans repère fixe à l'écran.
+  const rotation = wheelRotation();
+  assert.ok(rotation > 360, "le cylindre doit tourner plus d'un tour");
+  assert.equal(rotation % 360, 0);
+});
+
+test("la bille s'arrête exactement sur le numéro sorti, en sens inverse", () => {
+  for (const numero of [0, 17, 26, 32]) {
+    const bille = ballRotation(numero);
+    // Sens inverse du cylindre, et plusieurs tours pour que le lancer se lise.
+    assert.ok(bille < -360, `${numero} doit orbiter plus d'un tour à l'envers`);
+
+    // Position finale de la bille et de la case, une fois les tours retirés.
+    const arrivee = ((bille % 360) + 360) % 360;
+    const caseGagnante = ((pocketAngle(numero) + wheelRotation()) % 360 + 360) % 360;
+    assert.ok(
+      Math.abs(arrivee - caseGagnante) < 0.001,
+      `la bille doit tomber sur la case ${numero}`,
+    );
   }
 });
