@@ -162,7 +162,7 @@ function PhaseClock({
   return (
     <div className="flex items-center gap-2">
       {deadlineAt && durationMs ? (
-        <ProgressRing deadlineAt={deadlineAt} turnMs={durationMs} size={34}>
+        <ProgressRing deadlineAt={deadlineAt} turnMs={durationMs} size={34} showSeconds>
           <span aria-hidden className="size-2 rounded-full bg-brass" />
         </ProgressRing>
       ) : (

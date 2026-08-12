@@ -144,3 +144,10 @@ test("la phase est nommée en toutes lettres", () => {
     /Rien ne va plus/,
   );
 });
+
+test("l’anneau de mise affiche les secondes restantes au centre", () => {
+  const deadlineAt = new Date(Date.now() + 15_000).toISOString();
+  const html = renderToStaticMarkup(<RouletteTable view={vue({ deadlineAt })} />);
+
+  assert.match(html, /aria-label="15 secondes restantes"/);
+});

@@ -167,7 +167,7 @@ function PitClock({
   return (
     <div className="flex flex-col items-center gap-1">
       {deadlineAt && durationMs ? (
-        <ProgressRing deadlineAt={deadlineAt} turnMs={durationMs} size={44}>
+        <ProgressRing deadlineAt={deadlineAt} turnMs={durationMs} size={44} showSeconds>
           <span
             aria-hidden
             className="grid size-8 place-items-center rounded-full border border-brass/30 bg-felt-deep/80"

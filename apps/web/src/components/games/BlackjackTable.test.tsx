@@ -144,22 +144,25 @@ test("l'anneau de temps se pose sur le joueur au trait", () => {
     <BlackjackTable view={view({ deadlineAt: "2026-08-12T00:00:25.000Z" })} />,
   );
   assert.equal((html.match(/animation:tour-ring/g) ?? []).length, 1);
+  assert.doesNotMatch(html, /secondes restantes/);
 });
 
 test("pendant les mises, l'anneau revient à la montre de table", () => {
+  const deadlineAt = new Date(Date.now() + 15_000).toISOString();
   const html = renderToStaticMarkup(
     <BlackjackTable
       view={view({
         phase: "betting",
         turn: null,
         allowedActions: [],
-        deadlineAt: "2026-08-12T00:00:15.000Z",
+        deadlineAt,
         seats: [seat({ hands: [], participating: false, totalWager: 0 })],
         dealer: { cards: [], total: null, soft: null },
       })}
     />,
   );
   assert.equal((html.match(/animation:tour-ring/g) ?? []).length, 1);
+  assert.match(html, /aria-label="15 secondes restantes"/);
   assert.match(html, /Faites vos jeux/);
 });
 
