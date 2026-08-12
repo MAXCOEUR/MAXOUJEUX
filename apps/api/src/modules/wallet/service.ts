@@ -169,6 +169,60 @@ export async function debit(
   return balance;
 }
 
+/**
+ * Fixe un solde depuis l'administration sans rompre l'audit du porte-monnaie.
+ *
+ * Le verrou est indispensable : deux ajustements concurrents doivent calculer
+ * leur delta depuis le solde effectivement courant, puis inscrire chacun le
+ * mouvement qui reconstitue ce solde dans le journal.
+ */
+export async function setBalance(userId: string, target: number): Promise<number> {
+  if (!Number.isSafeInteger(target) || target < 0) {
+    throw new Error(`Solde cible invalide : ${target}`);
+  }
+
+  const balance = await db.transaction(async (tx) => {
+    await tx.execute(sql`select ${wallets.userId} from ${wallets}
+      where ${wallets.userId} = ${userId} for update`);
+
+    const [current] = await tx
+      .select({ balance: wallets.balance })
+      .from(wallets)
+      .where(eq(wallets.userId, userId));
+
+    if (!current) {
+      throw new AppError(404, "WALLET_NOT_FOUND", "Porte-monnaie introuvable");
+    }
+
+    if (current.balance === target) {
+      return current.balance;
+    }
+
+    const [updated] = await tx
+      .update(wallets)
+      .set({ balance: target, updatedAt: new Date() })
+      .where(eq(wallets.userId, userId))
+      .returning({ balance: wallets.balance });
+
+    if (!updated) {
+      throw new Error(`Porte-monnaie disparu pendant l'ajustement : ${userId}`);
+    }
+
+    await tx.insert(walletTx).values({
+      userId,
+      delta: updated.balance - current.balance,
+      balanceAfter: updated.balance,
+      reason: "admin_adjustment",
+    });
+
+    return updated.balance;
+  });
+
+  // La transaction est validée : le solde diffusé existe donc réellement.
+  notifyWallet(userId, balance);
+  return balance;
+}
+
 /** Dernier encaissement de bonus, pour calculer la série en cours. */
 async function lastClaim(
   exec: Executor,
