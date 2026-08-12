@@ -34,6 +34,7 @@ import type {
   BlackjackView,
 } from "./blackjack.js";
 import type { RouletteBetInput, RouletteTableRefInput, RouletteView } from "./roulette.js";
+import type { ChatMessage, ChatSendInput } from "./chat.js";
 
 export interface PresencePlayer {
   userId: string;
@@ -79,6 +80,7 @@ export interface ServerToClientEvents {
   /** État Blackjack : cartes des joueurs publiques, carte fermée du croupier masquée. */
   "blackjack:state": (view: BlackjackView) => void;
   "roulette:state": (view: RouletteView) => void;
+  "chat:message": (message: ChatMessage) => void;
 }
 
 /** Événements client → serveur. */
@@ -141,6 +143,7 @@ export interface ClientToServerEvents {
   "roulette:bet": (payload: RouletteBetInput, ack: (reply: ActionReply) => void) => void;
   /** Reprendre l'intégralité de ses jetons, tant que la bille n'est pas partie. */
   "roulette:clear": (payload: RouletteTableRefInput, ack: (reply: ActionReply) => void) => void;
+  "chat:send": (payload: ChatSendInput, ack: (reply: ActionReply) => void) => void;
 }
 
 /** Données attachées à la socket côté serveur, résolues au handshake. */

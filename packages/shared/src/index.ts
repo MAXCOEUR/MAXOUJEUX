@@ -1,5 +1,7 @@
 export * from "./auth.js";
+export * from "./admin.js";
 export * from "./blackjack.js";
+export * from "./chat.js";
 export * from "./economy.js";
 export * from "./games.js";
 export * from "./motus.js";

@@ -54,6 +54,7 @@ export interface CurrentUser {
   email: string;
   pseudo: string;
   avatarSeed: string;
+  isAdmin: boolean;
   balance: number;
   createdAt: string;
 }
