@@ -1,5 +1,5 @@
 import { COIN_NAME, formatCoins, type CurrentUser } from "@maxoujeux/shared";
-import { LogOut, Shield } from "lucide-react";
+import { LogOut, MessageCircle, Shield } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { Avatar } from "./Avatar";
 import { Button } from "./Button";
@@ -10,6 +10,8 @@ import { ResumeBanner } from "./ResumeBanner";
 import { Toaster } from "./Toaster";
 import { WalletPanel } from "./WalletPanel";
 import { useLogout } from "@/lib/session";
+import { useChat } from "@/lib/chat";
+import { ChatPanel, formatUnreadBadge } from "./ChatPanel";
 
 interface AppShellProps {
   user: CurrentUser;
@@ -19,6 +21,10 @@ interface AppShellProps {
 export function AppShell({ user, children }: AppShellProps) {
   const logout = useLogout();
   const [walletOpen, setWalletOpen] = useState(false);
+  const chatOpen = useChat((state) => state.isOpen);
+  const unread = useChat((state) => state.unread);
+  const openChat = useChat((state) => state.open);
+  const closeChat = useChat((state) => state.close);
 
   return (
     <div className="flex min-h-dvh flex-col">
@@ -40,6 +46,19 @@ export function AppShell({ user, children }: AppShellProps) {
                 <span className="hidden lg:inline">Administration</span>
               </Lien>
             )}
+            <button
+              type="button"
+              onClick={openChat}
+              aria-label={unread > 0 ? `Ouvrir le chat, ${Math.min(unread, 999)} message${unread > 1 ? "s" : ""} non lu${unread > 1 ? "s" : ""}` : "Ouvrir le chat"}
+              className="relative inline-flex items-center justify-center rounded-xl p-2.5 text-cream-dim transition-colors hover:bg-felt-raised hover:text-cream"
+            >
+              <MessageCircle className="size-4" aria-hidden />
+              {unread > 0 && (
+                <span className="absolute -right-1 -top-1 min-w-4 rounded-full bg-danger px-1 text-center text-[10px] font-bold leading-4 text-white">
+                  {formatUnreadBadge(unread)}
+                </span>
+              )}
+            </button>
             {/* Le solde est un bouton : c'est le point d'entrée du porte-monnaie,
                 et l'endroit où l'œil va naturellement chercher son argent. */}
             <button
@@ -92,6 +111,7 @@ export function AppShell({ user, children }: AppShellProps) {
       </footer>
 
       <WalletPanel open={walletOpen} onClose={() => setWalletOpen(false)} />
+      <ChatPanel open={chatOpen} onClose={closeChat} />
       <Toaster />
     </div>
   );

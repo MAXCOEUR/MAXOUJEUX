@@ -9,6 +9,7 @@ import { useEffect } from "react";
 import { io } from "socket.io-client";
 import { create } from "zustand";
 import { bindGameEvents, useGame } from "./game.js";
+import { useChat } from "./chat.js";
 import { bindBlackjackEvents, useBlackjack } from "./blackjack.js";
 import { bindRouletteEvents, useRoulette } from "./roulette.js";
 import {
@@ -113,6 +114,7 @@ export const useRealtime = create<RealtimeState>((set, get) => ({
 
     socket.on("tables:update", (snapshot) => useTables.getState().apply(snapshot));
     socket.on("tables:counts", (counts) => useTables.getState().setCounts(counts));
+    socket.on("chat:message", (message) => useChat.getState().receive(message));
 
     bindGameEvents(socket);
     bindBlackjackEvents(socket);
@@ -134,6 +136,7 @@ export const useRealtime = create<RealtimeState>((set, get) => ({
     useBlackjack.getState().clear();
     useMotus.getState().clear();
     useTables.getState().clear();
+    useChat.getState().clear();
   },
 }));
 
@@ -186,6 +189,9 @@ export function request<T>(
   }
   return new Promise((resolve) => send(socket, resolve));
 }
+
+/** Alias explicite pour les intentions Socket.IO qui attendent un accusé de réception. */
+export const emitWithAck = request;
 
 /**
  * Abonne un écran au salon d'un jeu, avec comptage de références.

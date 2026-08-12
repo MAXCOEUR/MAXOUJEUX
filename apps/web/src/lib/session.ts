@@ -1,6 +1,7 @@
 import type { CurrentUser, LoginInput, RegisterInput } from "@maxoujeux/shared";
 import { useMutation, useQuery, useQueryClient, type UseQueryResult } from "@tanstack/react-query";
 import { api, ApiClientError } from "./api";
+import { useChat } from "./chat";
 
 interface SessionResponse {
   user: CurrentUser;
@@ -55,6 +56,7 @@ export function useLogout() {
   return useMutation({
     mutationFn: () => api.post<void>("/auth/logout"),
     onSuccess: () => {
+      useChat.getState().clear();
       queryClient.setQueryData(sessionQueryKey, null);
       // Purge complète : aucune donnée du compte précédent ne doit rester en
       // cache si un autre joueur se connecte sur la même machine.
