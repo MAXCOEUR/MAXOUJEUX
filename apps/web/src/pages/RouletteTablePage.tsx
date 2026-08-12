@@ -9,10 +9,10 @@ import {
   type RouletteSpot,
   type RouletteView,
 } from "@maxoujeux/shared";
-import { ArrowLeft, Eraser, RotateCcw, Undo2 } from "lucide-react";
+import { ArrowLeft, Eraser, LogOut, RotateCcw, Undo2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Button } from "@/components/Button";
-import { Lien } from "@/components/Lien";
+import { Modal } from "@/components/Modal";
 import { RouletteTable } from "@/components/games/RouletteTable";
 import { ChipRack } from "@/components/games/casino/Chips";
 import { cn } from "@/lib/cn";
@@ -49,6 +49,8 @@ export function RouletteTablePage({ user, view }: { user: CurrentUser; view: Rou
   const [ordre, setOrdre] = useState<{ key: string; amount: ChipValue }[]>([]);
   const [jeton, setJeton] = useState<ChipValue>(10);
   const [derniere, setDerniere] = useState<{ spot: RouletteSpot; amount: number }[] | null>(null);
+  const [sortie, setSortie] = useState(false);
+  const [leaving, setLeaving] = useState(false);
 
   const compose = draftTotal(draft);
   const moi = view.players.find((player) => player.userId === user.id) ?? null;
@@ -140,12 +142,21 @@ export function RouletteTablePage({ user, view }: { user: CurrentUser; view: Rou
   }
 
   async function quitter() {
+    setLeaving(true);
     const reponse = await request<null>((socket, ack) => socket.emit("match:leave", { tableId: view.id }, ack));
+    setLeaving(false);
     if (!reponse.ok && reponse.code !== "TABLE_GONE") {
       pushToast("erreur", reponse.message);
       return;
     }
+    setSortie(false);
     useRoulette.getState().clear();
+    navigate({ name: "salon", game: "roulette" });
+  }
+
+  /** Revenir au salon sans rendre sa place ni toucher aux mises confirmées. */
+  function garderMaPlace() {
+    setSortie(false);
     navigate({ name: "salon", game: "roulette" });
   }
 
@@ -168,13 +179,14 @@ export function RouletteTablePage({ user, view }: { user: CurrentUser; view: Rou
   return (
     <div className="space-y-4 pb-44 sm:pb-4">
       <div className="flex items-center justify-between gap-3">
-        <Lien
-          to={{ name: "salon", game: "roulette" }}
+        <button
+          type="button"
+          onClick={() => setSortie(true)}
           className="inline-flex items-center gap-1.5 text-sm text-cream-dim transition-colors hover:text-cream"
         >
           <ArrowLeft className="size-4" aria-hidden /> Roulette
-        </Lien>
-        <Button variant="ghost" onClick={() => void quitter()} className="text-xs">
+        </button>
+        <Button variant="ghost" onClick={() => void quitter()} loading={leaving} className="text-xs">
           Quitter la table
         </Button>
       </div>
@@ -260,10 +272,70 @@ export function RouletteTablePage({ user, view }: { user: CurrentUser; view: Rou
         )}
       </section>
 
+      <LeaveDialog
+        open={sortie}
+        onClose={() => setSortie(false)}
+        wager={engage}
+        leaving={leaving}
+        onGarder={garderMaPlace}
+        onQuitter={() => void quitter()}
+      />
+
       <p aria-live="polite" aria-atomic="true" className="sr-only">
         {annonce}
       </p>
     </div>
+  );
+}
+
+/** Distingue un simple retour au salon d'un véritable départ de la table. */
+function LeaveDialog({
+  open,
+  onClose,
+  wager,
+  leaving,
+  onGarder,
+  onQuitter,
+}: {
+  open: boolean;
+  onClose: () => void;
+  wager: number;
+  leaving: boolean;
+  onGarder: () => void;
+  onQuitter: () => void;
+}) {
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Quitter cette page ?"
+      footer={
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <Button onClick={onGarder} disabled={leaving} className="flex-1">
+            Garder ma place
+          </Button>
+          <Button variant="outline" onClick={onQuitter} loading={leaving} className="flex-1">
+            <LogOut className="size-4" aria-hidden /> Quitter la table
+          </Button>
+        </div>
+      }
+    >
+      <div className="space-y-3 text-sm">
+        <p className="text-cream">
+          Tu peux revenir au salon sans quitter cette table : un bandeau te ramènera ici en un clic.
+        </p>
+
+        {wager > 0 && (
+          <p className="rounded-xl border border-brass/40 bg-brass/10 px-4 py-3 text-cream">
+            {formatCoins(wager)} restent engagés sur ce tour et seront réglés normalement.
+          </p>
+        )}
+
+        <p className="text-cream-dim">
+          Quitter la table libère ta place et te rend l'accès aux autres jeux.
+        </p>
+      </div>
+    </Modal>
   );
 }
 
