@@ -65,9 +65,28 @@ async function errorOf(work: () => Promise<unknown>): Promise<AppError> {
 beforeAll(() => runMigrations(), 60_000);
 afterEach(() => {
   resetBlackjackForTests();
-  setBlackjackDurationsForTests({ betting: 20_000, insurance: 15_000, action: 30_000, result: 8_000, grace: 45_000 });
+  setBlackjackDurationsForTests({
+    betting: 20_000,
+    allBetsPlaced: 3_000,
+    insurance: 15_000,
+    action: 30_000,
+    result: 8_000,
+    grace: 45_000,
+  });
 });
 afterAll(() => created.cleanup());
+
+/** Version d'état courante, exigée par chaque intention. */
+function version(tableId: string, userId: string): number {
+  return viewBlackjack(tableId, userId)?.version ?? -1;
+}
+
+/** Millisecondes restantes avant la fin de la phase, vues du joueur. */
+function restant(tableId: string, userId: string): number {
+  const deadline = viewBlackjack(tableId, userId)?.deadlineAt;
+  if (!deadline) throw new Error("échéance absente");
+  return new Date(deadline).getTime() - Date.now();
+}
 
 describe("table Blackjack", () => {
   it("assied jusqu'à cinq joueurs sans débiter l'entrée", async () => {
@@ -104,6 +123,36 @@ describe("table Blackjack", () => {
 
     expect((await errorOf(() => betBlackjack(host.userId, tableId, 100, version))).code).toBe("STALE_STATE");
     expect(await balanceOf(host.userId)).toBe(4_900);
+  });
+
+  it("écourte la fenêtre dès que tous les joueurs assis ont misé", async () => {
+    const host = await player();
+    const guest = await player();
+    const tableId = await createBlackjackTable(host);
+    await seatAt(guest, tableId, 1);
+
+    await betBlackjack(host.userId, tableId, 100, version(tableId, host.userId));
+    const roundId = viewBlackjack(tableId, host.userId)?.roundId;
+    if (roundId) created.match(roundId);
+    // Le voisin n'a pas encore misé : il garde toute la fenêtre.
+    expect(restant(tableId, host.userId)).toBeGreaterThan(10_000);
+
+    await betBlackjack(guest.userId, tableId, 100, version(tableId, guest.userId));
+    // Plus personne n'est attendu : la donne peut partir.
+    expect(restant(tableId, host.userId)).toBeLessThanOrEqual(3_000);
+  });
+
+  it("laisse la fenêtre entière à un siège qui saute la manche", async () => {
+    const host = await player();
+    const passif = await player();
+    const tableId = await createBlackjackTable(host);
+    await seatAt(passif, tableId, 1);
+
+    await betBlackjack(host.userId, tableId, 100, version(tableId, host.userId));
+    const roundId = viewBlackjack(tableId, host.userId)?.roundId;
+    if (roundId) created.match(roundId);
+
+    expect(restant(tableId, host.userId)).toBeGreaterThan(10_000);
   });
 
   it("refuse une mise sans fonds sans modifier la vue", async () => {

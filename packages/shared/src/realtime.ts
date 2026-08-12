@@ -24,7 +24,7 @@ import type {
   TableRefInput,
 } from "./tables.js";
 import type { GameCode } from "./games.js";
-import type { MotusGuessInput, MotusView } from "./motus.js";
+import type { MotusGuessInput, MotusStartInput, MotusView } from "./motus.js";
 import type {
   BlackjackActionInput,
   BlackjackBetInput,
@@ -119,7 +119,7 @@ export interface ClientToServerEvents {
   "motus:watch": (ack: (reply: ActionReply<MotusView>) => void) => void;
   /** Quitter l'écran suspend la tentative sans la terminer. */
   "motus:unwatch": () => void;
-  "motus:start": (ack: (reply: ActionReply) => void) => void;
+  "motus:start": (payload: MotusStartInput, ack: (reply: ActionReply) => void) => void;
   "motus:guess": (payload: MotusGuessInput, ack: (reply: ActionReply) => void) => void;
   "motus:abandon": (ack: (reply: ActionReply) => void) => void;
 

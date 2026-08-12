@@ -62,7 +62,18 @@ export const motusGuessSchema = z.object({
   version: z.number().int().nonnegative(),
 });
 
+/**
+ * Mise engagée au démarrage d'un mot.
+ *
+ * Choisie par le joueur depuis que le prix fixe a disparu : le barème verse un
+ * multiple de ce montant. Le plafond est son solde, vérifié par le débit.
+ */
+export const motusStartSchema = z.object({
+  stake: z.number().int(),
+});
+
 export type MotusGuessInput = z.infer<typeof motusGuessSchema>;
+export type MotusStartInput = z.infer<typeof motusStartSchema>;
 
 export const MOTUS_ERROR_CODES = [
   "MOTUS_CAPACITY_REACHED",
@@ -71,6 +82,7 @@ export const MOTUS_ERROR_CODES = [
   "MOTUS_INVALID_LENGTH",
   "MOTUS_UNKNOWN_WORD",
   "MOTUS_UNAVAILABLE",
+  "MOTUS_STAKE_INVALID",
 ] as const;
 
 export type MotusErrorCode = (typeof MOTUS_ERROR_CODES)[number];
@@ -82,4 +94,5 @@ export const MOTUS_ERROR_LABELS: Record<MotusErrorCode, string> = {
   MOTUS_INVALID_LENGTH: "Le mot proposé n'a pas la bonne longueur.",
   MOTUS_UNKNOWN_WORD: "Ce mot n'est pas dans le dictionnaire.",
   MOTUS_UNAVAILABLE: "Aucun mot Motus n'est disponible pour le moment.",
+  MOTUS_STAKE_INVALID: "Cette mise n'est pas autorisée.",
 };

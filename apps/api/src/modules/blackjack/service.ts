@@ -1,7 +1,10 @@
 import { randomInt, randomUUID } from "node:crypto";
 import {
+  ALL_BETS_PLACED_MS,
   BLACKJACK_ACTION_MS,
   BLACKJACK_BETTING_MS,
+  BLACKJACK_BET_MIN,
+  BLACKJACK_BET_STEP,
   BLACKJACK_DISCONNECT_GRACE_MS,
   BLACKJACK_IDLE_ROUNDS_MAX,
   BLACKJACK_INSURANCE_MS,
@@ -112,6 +115,7 @@ const tableByUser = new Map<string, string>();
 
 const durations = {
   betting: BLACKJACK_BETTING_MS,
+  allBetsPlaced: ALL_BETS_PLACED_MS,
   insurance: BLACKJACK_INSURANCE_MS,
   action: BLACKJACK_ACTION_MS,
   result: BLACKJACK_RESULT_MS,
@@ -230,6 +234,18 @@ function schedule(table: BlackjackTable, duration: number, work: () => Promise<v
     if (table.timerGeneration !== generation) return;
     void enqueue(table, work).catch((error: unknown) => console.error("Minuterie blackjack", error));
   }, duration);
+}
+
+/**
+ * Écourte la minuterie en cours.
+ *
+ * Ne fait qu'**avancer** l'échéance, jamais la repousser : sans ce contrôle, une
+ * mise de dernière seconde rallongerait la fenêtre au lieu de la fermer.
+ */
+function hasten(table: BlackjackTable, duration: number, work: () => Promise<void>): void {
+  if (table.deadline === null) return;
+  if (table.deadline - Date.now() <= duration) return;
+  schedule(table, duration, work);
 }
 
 function enqueue<T>(table: BlackjackTable, work: () => Promise<T>): Promise<T> {
@@ -382,7 +398,13 @@ export function betBlackjack(userId: string, tableId: string, amount: number, ve
   return enqueue(table, async () => {
     if (version !== table.version) fail("STALE_STATE", "La table a changé entre-temps.");
     if (table.phase !== "idle" && table.phase !== "betting") fail("BLACKJACK_BETTING_CLOSED", "Les mises sont fermées.");
-    if (!Number.isInteger(amount) || amount < 10 || amount > 2_500 || amount % 10 !== 0) {
+    // Aucun plafond : le seul maximum est le solde, que le débit atomique du
+    // porte-monnaie fait respecter quelques lignes plus bas.
+    if (
+      !Number.isInteger(amount) ||
+      amount < BLACKJACK_BET_MIN ||
+      amount % BLACKJACK_BET_STEP !== 0
+    ) {
       fail("BLACKJACK_BET_INVALID", "Cette mise n'est pas autorisée.", 400);
     }
     const player = occupant(table, userId);
@@ -414,6 +436,12 @@ export function betBlackjack(userId: string, tableId: string, amount: number, ve
     table.phase = "betting";
     table.version += 1;
     if (first) schedule(table, durations.betting, () => deal(table));
+    // Plus personne n'a de mise à poser : inutile de faire patienter la table
+    // le reste du compte à rebours. Un siège occupé par quelqu'un qui saute la
+    // manche laisse au contraire la fenêtre entière se dérouler.
+    if (occupants(table).every((seat) => seat.bet !== null)) {
+      hasten(table, durations.allBetsPlaced, () => deal(table));
+    }
     publish(table);
   });
 }

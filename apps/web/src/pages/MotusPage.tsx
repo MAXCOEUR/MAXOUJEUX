@@ -1,8 +1,12 @@
 import {
   formatCoins,
   formatMotusShare,
+  getGame,
+  isValidStake,
   MOTUS_MAX_ATTEMPTS,
-  MOTUS_REWARDS,
+  MOTUS_MULTIPLIERS,
+  motusReward,
+  stakeSuggestions,
   type CurrentUser,
   type MotusView,
 } from "@maxoujeux/shared";
@@ -14,6 +18,7 @@ import { GameArtefact } from "@/components/GameArtefact";
 import { Lien } from "@/components/Lien";
 import { Modal } from "@/components/Modal";
 import { Plaque } from "@/components/Plaque";
+import { StakePicker } from "@/components/StakePicker";
 import { MotusBoard } from "@/components/games/MotusBoard";
 import { MotusKeyboard } from "@/components/games/MotusKeyboard";
 import { cn } from "@/lib/cn";
@@ -61,10 +66,10 @@ function MotusContent({ user, view }: { user: CurrentUser; view: MotusView }) {
     setError(undefined);
   }, [view.slotStart, view.version]);
 
-  async function commencer() {
+  async function commencer(stake: number) {
     markPending("start");
     setError(undefined);
-    const reply = await request<null>((socket, ack) => socket.emit("motus:start", ack));
+    const reply = await request<null>((socket, ack) => socket.emit("motus:start", { stake }, ack));
     if (!reply.ok) {
       clearPending();
       setError(reply.message);
@@ -108,7 +113,16 @@ function MotusContent({ user, view }: { user: CurrentUser; view: MotusView }) {
 
   const playing = view.status === "playing";
   const finished = view.status === "won" || view.status === "lost";
-  const canAfford = user.balance >= view.stake;
+  /**
+   * Mise choisie pour la prochaine partie.
+   *
+   * Initialisée sur celle annoncée par le serveur : le minimum tant qu'aucune
+   * partie n'est engagée, celle de la tentative en cours sinon — ce qui la
+   * reconduit naturellement après un résultat.
+   */
+  const [mise, setMise] = useState(view.stake);
+  const miseValide = isValidStake("motus", mise);
+  const canAfford = miseValide && user.balance >= mise;
 
   useEffect(() => {
     if (!playing || pending || confirmAbandon) return;
@@ -171,7 +185,16 @@ function MotusContent({ user, view }: { user: CurrentUser; view: MotusView }) {
       </header>
 
       {view.status === "available" ? (
-        <BeforeGame view={view} canAfford={canAfford} pending={pending !== null} error={error} onStart={commencer} />
+        <BeforeGame
+          view={view}
+          balance={user.balance}
+          stake={mise}
+          onStakeChange={setMise}
+          canAfford={canAfford}
+          pending={pending !== null}
+          error={error}
+          onStart={() => void commencer(mise)}
+        />
       ) : (
         <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_17rem]">
           <section className="panel min-w-0 p-4 sm:p-6" aria-labelledby="motus-grid-title">
@@ -200,12 +223,20 @@ function MotusContent({ user, view }: { user: CurrentUser; view: MotusView }) {
               </div>
             )}
 
-            {finished && <Result view={view} pending={pending !== null} error={error} onStart={commencer} />}
+            {finished && (
+              <Result
+                view={view}
+                pending={pending !== null}
+                error={error}
+                canAfford={canAfford}
+                onStart={() => void commencer(mise)}
+              />
+            )}
           </section>
 
           <aside className="space-y-4">
             <Legend />
-            <RewardScale compact used={view.guesses.length} />
+            <RewardScale stake={view.stake} compact used={view.guesses.length} />
           </aside>
         </div>
       )}
@@ -242,18 +273,25 @@ function MotusContent({ user, view }: { user: CurrentUser; view: MotusView }) {
 }
 
 function BeforeGame({
-  view,
+  balance,
+  stake,
+  onStakeChange,
   canAfford,
   pending,
   error,
   onStart,
 }: {
   view: MotusView;
+  balance: number;
+  stake: number;
+  onStakeChange: (value: number) => void;
   canAfford: boolean;
   pending: boolean;
   error?: string;
   onStart: () => void;
 }) {
+  const wager = getGame("motus")?.wager;
+
   return (
     <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_20rem]">
       <section className="panel p-5 sm:p-7">
@@ -261,16 +299,33 @@ function BeforeGame({
           Trouve un mot français en six propositions. Vert : bonne lettre, bonne place. Jaune : bonne lettre, autre place. Gris : lettre absente.
         </p>
         <Legend className="mt-6" />
+
+        {/* Le prix fixe a disparu : le barème verse un multiple de ce que le
+            joueur engage, il faut donc le lui faire choisir avant de commencer. */}
         <div className="mt-7 border-t border-line pt-5">
+          <p className="text-xs font-semibold uppercase tracking-[0.08em] text-cream-faint">Ta mise</p>
+          <StakePicker
+            options={stakeSuggestions("motus")}
+            value={stake}
+            onChange={onStakeChange}
+            min={wager?.min ?? 10}
+            step={wager?.step ?? 10}
+            balance={balance}
+            disabled={pending}
+            className="mt-3 max-w-md"
+          />
+        </div>
+
+        <div className="mt-6 border-t border-line pt-5">
           <Button onClick={onStart} loading={pending} disabled={!canAfford} className="w-full sm:w-auto sm:text-base">
-            Commencer pour {formatCoins(view.stake)}
+            Commencer pour {formatCoins(stake)}
           </Button>
-          {!canAfford && <p className="mt-2 text-sm text-danger">Solde insuffisant pour engager la mise.</p>}
+          {!canAfford && <p className="mt-2 text-sm text-danger">Cette mise dépasse ton solde.</p>}
           {error && <p role="alert" className="mt-2 text-sm text-danger">{error}</p>}
           <p className="mt-3 text-xs text-cream-faint">Une partie commencée reste disponible après la fin du créneau.</p>
         </div>
       </section>
-      <RewardScale />
+      <RewardScale stake={stake} />
     </div>
   );
 }
@@ -288,25 +343,61 @@ function Legend({ className }: { className?: string }) {
   );
 }
 
-function RewardScale({ compact = false, used = 0 }: { compact?: boolean; used?: number }) {
+/**
+ * Le barème, exprimé dans la mise réellement engagée.
+ *
+ * Afficher les multiplicateurs nus — « × 4,5 » — obligerait le joueur à faire le
+ * calcul lui-même à chaque changement de mise. On montre donc les montants, avec
+ * le multiplicateur en second plan pour que la dégressivité reste lisible.
+ */
+function RewardScale({
+  stake,
+  compact = false,
+  used = 0,
+}: {
+  stake: number;
+  compact?: boolean;
+  used?: number;
+}) {
+  const lisible = isValidStake("motus", stake);
+
   return (
     <section className="panel p-4 sm:p-5" aria-labelledby={compact ? "reward-title-side" : "reward-title"}>
       <h2 id={compact ? "reward-title-side" : "reward-title"} className="flex items-center gap-2 font-display text-sm font-bold text-cream">
         <Trophy className="size-4 text-brass" aria-hidden /> Barème
       </h2>
       <ol className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-xs sm:grid-cols-3 lg:grid-cols-2">
-        {MOTUS_REWARDS.map((reward, index) => (
-          <li key={reward} className={cn("flex justify-between gap-3", used > index && "opacity-45")}>
+        {MOTUS_MULTIPLIERS.map((multiplier, index) => (
+          <li key={multiplier} className={cn("flex justify-between gap-3", used > index && "opacity-45")}>
             <span className="text-cream-faint">Essai {index + 1}</span>
-            <span className="tabular text-brass-bright">{formatCoins(reward)}</span>
+            <span className="tabular text-brass-bright">
+              {lisible
+                ? formatCoins(motusReward(index + 1, true, stake))
+                : `× ${multiplier.toLocaleString("fr-FR")}`}
+            </span>
           </li>
         ))}
       </ol>
+      <p className="mt-3 text-[0.65rem] leading-snug text-cream-faint">
+        Trouver au sixième essai rend exactement la mise.
+      </p>
     </section>
   );
 }
 
-function Result({ view, pending, error, onStart }: { view: MotusView; pending: boolean; error?: string; onStart: () => void }) {
+function Result({
+  view,
+  pending,
+  error,
+  canAfford,
+  onStart,
+}: {
+  view: MotusView;
+  pending: boolean;
+  error?: string;
+  canAfford: boolean;
+  onStart: () => void;
+}) {
   const won = view.status === "won";
   const [sharing, setSharing] = useState(false);
 
@@ -338,7 +429,11 @@ function Result({ view, pending, error, onStart }: { view: MotusView; pending: b
       )}
       <div className="mt-5 flex flex-wrap justify-center gap-2">
         {view.canStartCurrent && (
-          <Button onClick={onStart} loading={pending}>Jouer le mot actuel</Button>
+          // La mise du mot précédent est reconduite : c'est ce que le joueur
+          // attend en enchaînant, et il peut la changer depuis l'écran d'accueil.
+          <Button onClick={onStart} loading={pending} disabled={!canAfford}>
+            Jouer le mot actuel pour {formatCoins(view.stake)}
+          </Button>
         )}
         <Button variant="outline" onClick={partager} loading={sharing}>
           <Share2 className="size-4" aria-hidden />

@@ -90,26 +90,38 @@ describe("récompense Motus", () => {
     expect(WALLET_REASON_LABELS.motus_reward).toBe("Gain Motus");
   });
 
-  it("suit le barème dégressif", () => {
-    expect(motusReward(1, true)).toBe(600);
-    expect(motusReward(4, true)).toBe(250);
-    expect(motusReward(6, true)).toBe(100);
+  it("suit le barème dégressif, en multiple de la mise", () => {
+    expect(motusReward(1, true, 100)).toBe(600);
+    expect(motusReward(4, true, 100)).toBe(250);
+    // Trouver au dernier essai rend exactement la mise : ni gain, ni perte.
+    expect(motusReward(6, true, 100)).toBe(100);
+  });
+
+  it("suit la mise, quelle qu'elle soit", () => {
+    expect(motusReward(1, true, 10)).toBe(60);
+    expect(motusReward(1, true, 5_000)).toBe(30_000);
+  });
+
+  it("verse un montant entier pour toute mise au pas de 10", () => {
+    // Le 5e essai verse 1,8 × la mise : c'est le multiplicateur qui tomberait
+    // à côté si le pas de mise venait à descendre sous 10.
+    for (let stake = 10; stake <= 1_000; stake += 10) {
+      for (let attempts = 1; attempts <= 6; attempts += 1) {
+        expect(Number.isInteger(motusReward(attempts, true, stake))).toBe(true);
+      }
+    }
   });
 
   it("ne verse rien si le mot n'est pas trouvé", () => {
-    expect(motusReward(6, false)).toBe(0);
-    expect(motusReward(3, false)).toBe(0);
+    expect(motusReward(6, false, 100)).toBe(0);
+    expect(motusReward(3, false, 100)).toBe(0);
   });
 
   it("ne verse rien pour un nombre d'essais hors barème", () => {
     // Un 7e essai ne devrait jamais exister ; s'il arrive, il ne rapporte rien
     // plutôt que de renvoyer `undefined` et de corrompre un solde.
-    expect(motusReward(7, true)).toBe(0);
-    expect(motusReward(0, true)).toBe(0);
-  });
-
-  it("plafonne le gain quotidien à 2 400 MC sur les quatre créneaux", () => {
-    expect(motusReward(1, true) * 4).toBe(2400);
+    expect(motusReward(7, true, 100)).toBe(0);
+    expect(motusReward(0, true, 100)).toBe(0);
   });
 });
 

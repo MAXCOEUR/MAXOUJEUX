@@ -1,0 +1,1 @@
+ALTER TABLE "motus_attempts" ADD COLUMN "stake" bigint DEFAULT 100 NOT NULL;

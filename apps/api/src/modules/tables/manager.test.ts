@@ -143,7 +143,9 @@ describe("ouverture d'une table", () => {
   it("refuse une mise hors barème sans rien débiter", async () => {
     const host = await player(1_000);
 
-    for (const stake of [0, 5, 37, 110]) {
+    // 110 n'est plus hors barème : le plafond a disparu, seuls le minimum et
+    // le pas de 10 subsistent.
+    for (const stake of [0, 5, 37, 105]) {
       const error = await errorOf(() => createTable(host, "connect4", stake));
       expect(error.code).toBe("STAKE_INVALID");
     }

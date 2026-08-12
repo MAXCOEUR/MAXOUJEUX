@@ -17,8 +17,14 @@ import { z } from "zod";
 // Durées
 // ---------------------------------------------------------------------------
 
-/** Fenêtre de mise, ouverte par la première mise confirmée. */
-export const ROULETTE_BETTING_MS = 30_000;
+/**
+ * Fenêtre de mise, ouverte par la première mise confirmée.
+ *
+ * Alignée sur celle du blackjack : c'est le même geste, il n'y a pas de raison
+ * qu'il dure une demi-minute ici et vingt secondes là. Elle est écourtée à
+ * `ALL_BETS_PLACED_MS` dès que tous les joueurs présents ont posé leurs jetons.
+ */
+export const ROULETTE_BETTING_MS = 20_000;
 
 /**
  * Durée du lancer.
@@ -88,24 +94,19 @@ export const ROULETTE_ODDS: Record<RouletteSpotKind, number> = {
 };
 
 /**
- * Plafond par type de mise.
+ * Mise minimale sur une case, et pas entre deux mises.
  *
- * Plus le rapport est fort, plus la mise est bridée — c'est la règle des vraies
- * tables, et ici elle protège l'économie du site : un plein à 2 500 MC paierait
- * 87 500 MC et rendrait tous les autres jeux sans intérêt pour qui touche une
- * fois. Le plafond de 100 borne ce gain à 3 500 MC.
+ * **Il n'y a plus de plafond** : ni par case, ni par tour. Le seul maximum est
+ * ce que le joueur possède, et le débit atomique du porte-monnaie s'en charge.
+ * Les anciennes limites — un plein bridé à 100 MC pour borner son rapport de
+ * 35:1 — protégeaient l'économie du site ; c'est un arbitrage assumé au profit
+ * de la liberté de jeu.
+ *
+ * Le pas de 10 n'est pas un plafond et reste en place : il garantit des
+ * versements entiers sur tous les barèmes du site.
  */
-export const ROULETTE_MAX_BET: Record<RouletteSpotKind, number> = {
-  straight: 100,
-  dozen1: 800, dozen2: 800, dozen3: 800,
-  column1: 800, column2: 800, column3: 800,
-  red: 2_000, black: 2_000, even: 2_000, odd: 2_000, low: 2_000, high: 2_000,
-};
-
 export const ROULETTE_MIN_BET = 10;
 export const ROULETTE_BET_STEP = 10;
-/** Total engagé par tour et par joueur, toutes cases confondues. */
-export const ROULETTE_MAX_TOTAL = 2_500;
 
 /** Gain brut d'une case gagnante, mise comprise. */
 export function rouletteReturn(kind: RouletteSpotKind, amount: number): number {
@@ -202,7 +203,6 @@ export const rouletteBetSchema = z.object({
           .number()
           .int()
           .min(ROULETTE_MIN_BET)
-          .max(ROULETTE_MAX_TOTAL)
           .refine((amount) => amount % ROULETTE_BET_STEP === 0, {
             message: `La mise doit être un multiple de ${ROULETTE_BET_STEP}.`,
           }),
@@ -220,8 +220,6 @@ export type RouletteTableRefInput = z.infer<typeof rouletteTableRefSchema>;
 export const ROULETTE_ERROR_LABELS = {
   ROULETTE_BETTING_CLOSED: "Rien ne va plus, les mises sont fermées.",
   ROULETTE_BET_INVALID: "Cette mise n'est pas autorisée.",
-  ROULETTE_BET_OVER_LIMIT: "Cette case a un maximum, et il est dépassé.",
-  ROULETTE_TOTAL_OVER_LIMIT: "Tu dépasses le maximum engagé pour un tour.",
 } as const;
 
 export type RouletteErrorCode = keyof typeof ROULETTE_ERROR_LABELS;

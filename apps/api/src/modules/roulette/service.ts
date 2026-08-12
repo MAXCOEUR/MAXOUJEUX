@@ -16,12 +16,11 @@
 
 import { randomInt, randomUUID } from "node:crypto";
 import {
+  ALL_BETS_PLACED_MS,
   ROULETTE_BETTING_MS,
   ROULETTE_DISCONNECT_GRACE_MS,
   ROULETTE_HISTORY,
-  ROULETTE_MAX_BET,
   ROULETTE_MAX_PLAYERS,
-  ROULETTE_MAX_TOTAL,
   ROULETTE_MIN_BET,
   ROULETTE_RESULT_MS,
   ROULETTE_SPIN_MS,
@@ -89,6 +88,7 @@ const tableByUser = new Map<string, string>();
 
 const durations = {
   betting: ROULETTE_BETTING_MS,
+  allBetsPlaced: ALL_BETS_PLACED_MS,
   spin: ROULETTE_SPIN_MS,
   result: ROULETTE_RESULT_MS,
   grace: ROULETTE_DISCONNECT_GRACE_MS,
@@ -165,6 +165,18 @@ function schedule(table: RouletteTable, duration: number, work: () => Promise<vo
     if (table.timerGeneration !== generation) return;
     void enqueue(table, work).catch((error: unknown) => console.error("Minuterie roulette", error));
   }, duration);
+}
+
+/**
+ * Écourte la minuterie en cours.
+ *
+ * Ne fait qu'**avancer** l'échéance, jamais la repousser : sans ce contrôle, une
+ * mise de dernière seconde rallongerait la fenêtre au lieu de la fermer.
+ */
+function hasten(table: RouletteTable, duration: number, work: () => Promise<void>): void {
+  if (table.deadline === null) return;
+  if (table.deadline - Date.now() <= duration) return;
+  schedule(table, duration, work);
 }
 
 function enqueue<T>(table: RouletteTable, work: () => Promise<T>): Promise<T> {
@@ -279,9 +291,9 @@ function wagerOf(player: Participant): number {
  * passe ou rien ne passe ». Le joueur peut confirmer plusieurs fois tant que la
  * fenêtre est ouverte, chaque confirmation s'ajoutant à la précédente.
  *
- * Les plafonds sont rejoués ici même si le front les connaît : un contrôle
- * client seul ne protège de rien, et c'est le plafond du plein qui empêche un
- * gain de 87 500 MC en un tour.
+ * Il n'y a plus de plafond : le minimum et le pas sont rejoués ici parce qu'un
+ * contrôle client ne protège de rien, mais le seul maximum est le solde du
+ * joueur, que le débit atomique fait respecter à lui seul.
  */
 export function betRoulette(userId: string, tableId: string, requested: PlacedBet[]): Promise<void> {
   const table = tables.get(tableId);
@@ -295,8 +307,7 @@ export function betRoulette(userId: string, tableId: string, requested: PlacedBe
     if (!player) fail("NOT_IN_GAME", "Tu n'es pas à cette table.", 403);
 
     // Le client peut envoyer deux fois la même case : on regroupe avant de
-    // contrôler, sinon chaque moitié passerait sous le plafond et la somme le
-    // dépasserait.
+    // débiter, pour n'écrire qu'un seul mouvement par case.
     const grouped = new Map<string, PlacedBet>();
     for (const bet of requested) {
       if (!Number.isInteger(bet.amount) || bet.amount < ROULETTE_MIN_BET || bet.amount % 10 !== 0) {
@@ -307,18 +318,11 @@ export function betRoulette(userId: string, tableId: string, requested: PlacedBe
       grouped.set(key, { spot: bet.spot, amount: (current?.amount ?? 0) + bet.amount });
     }
 
+    // Plus aucun plafond, par case ni au total : le seul maximum est le solde,
+    // et c'est le débit atomique du porte-monnaie qui le fait respecter.
     let addition = 0;
-    for (const [key, bet] of grouped) {
-      const already = player.bets.get(key)?.amount ?? 0;
-      if (already + bet.amount > ROULETTE_MAX_BET[bet.spot.kind]) {
-        fail("ROULETTE_BET_OVER_LIMIT", "Cette case a un maximum, et il est dépassé.");
-      }
-      addition += bet.amount;
-    }
+    for (const bet of grouped.values()) addition += bet.amount;
     if (addition <= 0) fail("ROULETTE_BET_INVALID", "Cette mise n'est pas autorisée.", 400);
-    if (wagerOf(player) + addition > ROULETTE_MAX_TOTAL) {
-      fail("ROULETTE_TOTAL_OVER_LIMIT", "Tu dépasses le maximum engagé pour un tour.");
-    }
 
     const first = table.phase === "idle";
     const roundId = first ? randomUUID() : table.roundId;
@@ -354,6 +358,12 @@ export function betRoulette(userId: string, tableId: string, requested: PlacedBe
     table.result = null;
     table.version += 1;
     if (first) schedule(table, durations.betting, () => spin(table));
+    // Tous les joueurs présents ont posé quelque chose : la bille peut partir.
+    // Quelqu'un qui regarde sans miser laisse la fenêtre entière se dérouler,
+    // il lui reste le temps de se décider.
+    if ([...table.players.values()].every((entry) => entry.bets.size > 0)) {
+      hasten(table, durations.allBetsPlaced, () => spin(table));
+    }
     publish(table);
   });
 }

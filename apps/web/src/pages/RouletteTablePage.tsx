@@ -1,6 +1,4 @@
 import {
-  ROULETTE_MAX_BET,
-  ROULETTE_MAX_TOTAL,
   ROULETTE_MIN_BET,
   formatCoins,
   formatCoinsDelta,
@@ -19,7 +17,7 @@ import { cn } from "@/lib/cn";
 import type { ChipValue } from "@/lib/chips";
 import { navigate } from "@/lib/route";
 import { useRoulette } from "@/lib/roulette";
-import { draftTotal, spotLabel } from "@/lib/roulette-ui";
+import { draftTotal } from "@/lib/roulette-ui";
 import { request } from "@/lib/socket";
 import { pushToast } from "@/lib/toast";
 
@@ -56,19 +54,21 @@ export function RouletteTablePage({ user, view }: { user: CurrentUser; view: Rou
   const moi = view.players.find((player) => player.userId === user.id) ?? null;
   const engage = moi?.totalWager ?? 0;
   const ouvert = view.phase === "idle" || view.phase === "betting";
-  const restant = Math.min(ROULETTE_MAX_TOTAL - engage, user.balance) - compose;
+  // Plus aucun plafond de case ni de tour : ce qui reste à engager, c'est le
+  // solde, moins ce qui est déjà composé sur le tapis.
+  const restant = user.balance - compose;
 
   function poser(spot: RouletteSpot) {
     const key = spotKey(spot);
-    const dejaConfirme = view.bets.find((bet) => spotKey(bet.spot) === key)?.mine ?? 0;
     const brouillon = draft.get(key)?.amount ?? 0;
 
     if (jeton > restant) {
-      pushToast("erreur", restant > 0 ? `Il te reste ${formatCoins(restant)} à engager.` : "Tu as atteint ton maximum pour ce tour.");
-      return;
-    }
-    if (dejaConfirme + brouillon + jeton > ROULETTE_MAX_BET[spot.kind]) {
-      pushToast("erreur", `${spotLabel(spot)} est plafonné à ${formatCoins(ROULETTE_MAX_BET[spot.kind])}.`);
+      pushToast(
+        "erreur",
+        restant > 0
+          ? `Il te reste ${formatCoins(restant)} à engager.`
+          : "Tu as engagé tout ton solde pour ce tour.",
+      );
       return;
     }
 

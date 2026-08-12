@@ -1,6 +1,5 @@
 import { rouletteColor } from "@maxoujeux/engines";
 import {
-  ROULETTE_MAX_BET,
   formatCoins,
   spotKey,
   type RouletteSpot,
@@ -151,7 +150,6 @@ function Cell({
   const engage = pose?.mine ?? 0;
   const table = pose?.total ?? 0;
   const plein = spot.kind === "straight";
-  const sature = engage + brouillon >= ROULETTE_MAX_BET[spot.kind];
 
   const fond = plein
     ? {
@@ -164,14 +162,16 @@ function Cell({
   return (
     <button
       type="button"
-      disabled={!open || sature}
+      // Plus aucune case ne se sature : seul le solde borne la mise, et il est
+      // vérifié à la pose du jeton, pas case par case.
+      disabled={!open}
       onClick={() => onPlace(spot)}
       aria-label={spotAria(spot, engage + brouillon, table + brouillon)}
       className={cn(
         "relative grid place-items-center rounded-[0.2rem] border text-cream transition-[transform,border-color]",
         compact ? "min-h-8 px-1" : "min-h-11",
         plein ? "border-brass-deep/60" : "border-line-strong bg-felt-raised/70",
-        open && !sature
+        open
           ? "cursor-pointer hover:border-brass active:translate-y-px"
           : "cursor-not-allowed opacity-70",
         "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-brass",

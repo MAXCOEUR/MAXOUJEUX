@@ -1,23 +1,30 @@
 import { describe, expect, it } from "vitest";
 import { formatClock, formatDuration } from "./economy.js";
-import { isValidStake, stakeOptions, winPayout } from "./tables.js";
+import { isValidStake, stakeSuggestions, winPayout } from "./tables.js";
 
 describe("mises autorisées", () => {
-  it("propose les paliers de 10 à 100 par pas de 10", () => {
-    expect(stakeOptions("connect4")).toEqual([10, 20, 30, 40, 50, 60, 70, 80, 90, 100]);
-    expect(stakeOptions("tictactoe")).toEqual([10, 20, 30, 40, 50, 60, 70, 80, 90, 100]);
+  it("propose des paliers qui montent en puissance", () => {
+    expect(stakeSuggestions("connect4")).toEqual([10, 50, 100, 250, 500, 1_000]);
+    expect(stakeSuggestions("tictactoe")).toEqual([10, 50, 100, 250, 500, 1_000]);
   });
 
-  it("accepte un palier valide", () => {
-    for (const stake of stakeOptions("connect4")) {
+  it("accepte un palier proposé", () => {
+    for (const stake of stakeSuggestions("connect4")) {
       expect(isValidStake("connect4", stake)).toBe(true);
     }
   });
 
-  it("refuse une mise hors des bornes", () => {
+  it("n'oppose plus aucun plafond : le solde est la seule limite", () => {
+    // Ces trois montants étaient refusés du temps du plafond à 100 MC.
+    expect(isValidStake("connect4", 110)).toBe(true);
+    expect(isValidStake("connect4", 50_000)).toBe(true);
+    expect(isValidStake("blackjack", 1_000_000)).toBe(true);
+  });
+
+  it("refuse une mise sous le minimum", () => {
     expect(isValidStake("connect4", 0)).toBe(false);
     expect(isValidStake("connect4", 9)).toBe(false);
-    expect(isValidStake("connect4", 110)).toBe(false);
+    expect(isValidStake("connect4", -100)).toBe(false);
   });
 
   it("refuse une mise qui ne tombe pas sur le pas", () => {
@@ -36,10 +43,13 @@ describe("mises autorisées", () => {
     expect(isValidStake("echecs", 10)).toBe(false);
   });
 
-  it("traite la mise fixe du Motus", () => {
-    expect(stakeOptions("motus")).toEqual([100]);
+  it("laisse Motus choisir sa mise", () => {
+    // Le prix fixe de 100 MC a disparu : c'est une mise comme une autre.
+    expect(isValidStake("motus", 10)).toBe(true);
     expect(isValidStake("motus", 100)).toBe(true);
-    expect(isValidStake("motus", 50)).toBe(false);
+    expect(isValidStake("motus", 5_000)).toBe(true);
+    expect(isValidStake("motus", 5)).toBe(false);
+    expect(isValidStake("motus", 55)).toBe(false);
   });
 });
 
@@ -57,8 +67,10 @@ describe("versement au vainqueur", () => {
     expect(stake * 2 - winPayout("connect4", stake)).toBe(5);
   });
 
-  it("verse tous les paliers en montants entiers", () => {
-    for (const stake of stakeOptions("connect4")) {
+  it("verse un montant entier pour toute mise au pas de 10", () => {
+    // Le pas de 10 n'est pas un plafond déguisé : c'est lui qui garantit que le
+    // multiplicateur de 1,5 ne tombe jamais sur une demi-pièce.
+    for (let stake = 10; stake <= 10_000; stake += 10) {
       expect(Number.isInteger(winPayout("connect4", stake))).toBe(true);
     }
   });

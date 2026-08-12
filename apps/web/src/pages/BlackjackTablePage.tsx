@@ -1,4 +1,5 @@
 import {
+  BLACKJACK_BET_MIN,
   BLACKJACK_IDLE_ROUNDS_MAX,
   formatCoins,
   formatCoinsDelta,
@@ -32,8 +33,11 @@ import { navigate } from "@/lib/route";
 import { request } from "@/lib/socket";
 import { pushToast } from "@/lib/toast";
 
-const MISE_MIN = 10;
-const MISE_MAX = 2_500;
+/**
+ * Il n'y a plus de mise maximale : le plafond est le solde du joueur, et rien
+ * d'autre. Le minimum et le pas viennent du contrat partagé.
+ */
+const MISE_MIN = BLACKJACK_BET_MIN;
 
 const ACTIONS: Record<BlackjackAction, { label: string; aide: string; icon: typeof Plus }> = {
   hit: { label: "Carte", aide: "Tirer une carte de plus", icon: Plus },
@@ -67,7 +71,7 @@ export function BlackjackTablePage({ user, view }: { user: CurrentUser; view: Bl
   const mine = view.seats.find((seat) => seat.seat === view.you) ?? null;
   const spectateur = view.you === null;
   const peutMiser = (view.phase === "idle" || view.phase === "betting") && mine !== null && !mine.participating;
-  const plafond = Math.min(MISE_MAX, user.balance);
+  const plafond = user.balance;
   const mainCourante = view.turn?.seat === view.you ? view.turn.handIndex : null;
 
   async function intention(nom: string, envoi: Parameters<typeof request<null>>[0]): Promise<boolean> {

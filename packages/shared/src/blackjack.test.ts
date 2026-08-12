@@ -8,10 +8,16 @@ import {
 } from "./blackjack.js";
 
 describe("intentions Blackjack", () => {
-  it("accepte uniquement une mise de 10 à 2 500 MC par pas de 10", () => {
-    expect(blackjackBetSchema.safeParse({ tableId: crypto.randomUUID(), amount: 10, version: 0 }).success).toBe(true);
-    expect(blackjackBetSchema.safeParse({ tableId: crypto.randomUUID(), amount: 2_500, version: 2 }).success).toBe(true);
-    expect(blackjackBetSchema.safeParse({ tableId: crypto.randomUUID(), amount: 25, version: 0 }).success).toBe(false);
+  it("accepte toute mise d'au moins 10 MC par pas de 10, sans plafond", () => {
+    const bet = (amount: number) =>
+      blackjackBetSchema.safeParse({ tableId: crypto.randomUUID(), amount, version: 0 }).success;
+
+    expect(bet(10)).toBe(true);
+    expect(bet(2_500)).toBe(true);
+    // Au-dessus de l'ancien plafond : c'est désormais le solde qui tranche.
+    expect(bet(1_000_000)).toBe(true);
+    expect(bet(25)).toBe(false);
+    expect(bet(0)).toBe(false);
     expect(BLACKJACK_BET_OPTIONS).toEqual([10, 50, 100, 250, 500, 1_000, 2_500]);
   });
 

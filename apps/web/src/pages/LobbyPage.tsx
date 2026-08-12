@@ -205,10 +205,14 @@ function GameCard({
   delay: number;
 }) {
   const locked = game.status !== "live";
+  // Sans plafond, il n'y a plus d'intervalle à afficher : « à partir de » dit
+  // exactement ce qu'est devenue la règle.
   const wager =
-    game.wager.min === game.wager.max
-      ? formatCoins(game.wager.min)
-      : `${formatCoins(game.wager.min)} – ${formatCoins(game.wager.max)}`;
+    game.wager.max === undefined
+      ? `dès ${formatCoins(game.wager.min)}`
+      : game.wager.min === game.wager.max
+        ? formatCoins(game.wager.min)
+        : `${formatCoins(game.wager.min)} – ${formatCoins(game.wager.max)}`;
 
   const ouvertes = counts?.waiting ?? 0;
   const enCours = counts?.playing ?? 0;
@@ -269,7 +273,12 @@ function GameCard({
 
             <div>
               <dt className="text-cream-faint">
-                {game.wager.label} {game.wager.min === game.wager.max ? "fixe" : "min. / max."}
+                {game.wager.label}{" "}
+                {game.wager.max === undefined
+                  ? "minimale"
+                  : game.wager.min === game.wager.max
+                    ? "fixe"
+                    : "min. / max."}
               </dt>
               <dd className="tabular mt-0.5 text-brass">{wager}</dd>
             </div>

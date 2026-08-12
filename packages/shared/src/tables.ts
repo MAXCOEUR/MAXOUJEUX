@@ -21,6 +21,19 @@ import type { RouletteView } from "./roulette.js";
 export const TURN_MS = 30_000;
 
 /**
+ * Ce qu'il reste à attendre quand tout le monde a misé.
+ *
+ * La fenêtre de mise est dimensionnée pour le joueur le plus lent, pas pour une
+ * table déjà prête. Dès que chaque personne présente a engagé sa mise, la faire
+ * patienter le reste du compte à rebours n'attend plus personne : on écourte au
+ * strict nécessaire, le temps de voir les jetons des autres se poser.
+ *
+ * Partagé par le blackjack et la roulette : c'est la même règle, elle ne doit
+ * pas exister en deux exemplaires.
+ */
+export const ALL_BETS_PLACED_MS = 3_000;
+
+/**
  * Sursis après la perte de la dernière socket d'un joueur.
  *
  * Un rechargement de page, un tunnel de métro ou un passage du Wi-Fi à la 4G
@@ -250,28 +263,31 @@ export type TableRefInput = z.infer<typeof tableRefSchema>;
 export type PlayInput = z.infer<typeof playSchema>;
 
 /**
- * Mises proposées pour un jeu, du minimum au maximum par pas.
+ * Paliers de mise proposés d'un geste.
  *
- * Le front construit son sélecteur là-dessus et le serveur valide contre la
- * même liste : impossible d'engager 37 MaxouCoin en modifiant la requête.
+ * Ce sont des **suggestions**, plus une liste fermée : depuis que le plafond a
+ * disparu, l'écran de mise accepte n'importe quel montant valide au-delà. Les
+ * paliers montent en puissance plutôt que par pas réguliers — un joueur qui
+ * mise gros ne veut pas faire défiler cinquante boutons pour y arriver.
  */
-export function stakeOptions(game: GameCode): number[] {
+export function stakeSuggestions(game: GameCode): number[] {
   const definition = getGame(game);
   if (!definition) return [];
-  const { min, max, step } = definition.wager;
-  if (!step || step <= 0) return min === max ? [min] : [min, max];
 
-  const options: number[] = [];
-  for (let value = min; value <= max; value += step) options.push(value);
-  return options;
+  const { min, max } = definition.wager;
+  const paliers = [min, min * 5, min * 10, min * 25, min * 50, min * 100];
+  return paliers.filter((value) => max === undefined || value <= max);
 }
 
 /**
  * La mise est-elle autorisée pour ce jeu ?
  *
- * Le front s'en sert pour griser un bouton, le serveur pour refuser une
- * requête forgée. Les deux appellent la même fonction : un contrôle client
- * seul ne protège de rien.
+ * Le front s'en sert pour griser un bouton, le serveur pour refuser une requête
+ * forgée. Les deux appellent la même fonction : un contrôle client seul ne
+ * protège de rien.
+ *
+ * **Aucun plafond n'est vérifié ici** — le seul maximum est le solde du joueur,
+ * et il n'est connu que du porte-monnaie, dont le débit atomique tranche.
  */
 export function isValidStake(game: GameCode, stake: number): boolean {
   const definition = getGame(game);
@@ -279,7 +295,8 @@ export function isValidStake(game: GameCode, stake: number): boolean {
   if (!Number.isInteger(stake)) return false;
 
   const { min, max, step } = definition.wager;
-  if (stake < min || stake > max) return false;
+  if (stake < min) return false;
+  if (max !== undefined && stake > max) return false;
   return !step || (stake - min) % step === 0;
 }
 

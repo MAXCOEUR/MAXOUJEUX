@@ -285,6 +285,15 @@ export const motusAttempts = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     slotStart: timestamp("slot_start", { withTimezone: true }).notNull(),
+    /**
+     * Mise engagée sur cette tentative.
+     *
+     * Portée par la ligne et non par une constante : la mise est libre depuis
+     * que le prix fixe a disparu, et le barème verse un multiple de ce montant.
+     * La valeur par défaut est l'ancien prix, pour que les tentatives d'avant la
+     * migration gardent un versement cohérent.
+     */
+    stake: bigint("stake", { mode: "number" }).notNull().default(100),
     guesses: jsonb("guesses").notNull().default([]),
     solved: boolean("solved").notNull().default(false),
     /** Récompense effectivement versée. Empêche un second versement au même créneau. */

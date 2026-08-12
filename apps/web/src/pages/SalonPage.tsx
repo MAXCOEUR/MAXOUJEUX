@@ -149,7 +149,9 @@ function SalonContent({
           <p className="mt-1 text-sm text-cream-dim">{definition.tagline}</p>
           <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
             <span className="tabular text-brass">
-              {formatCoins(definition.wager.min)} – {formatCoins(definition.wager.max)}
+              {definition.wager.max === undefined
+                ? `dès ${formatCoins(definition.wager.min)}`
+                : `${formatCoins(definition.wager.min)} – ${formatCoins(definition.wager.max)}`}
             </span>
             <span className="text-cream-faint">·</span>
             <span className="text-cream-dim">{definition.wager.payout}</span>

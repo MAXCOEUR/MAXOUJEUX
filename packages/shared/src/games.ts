@@ -15,12 +15,21 @@ export type GameStatus = "live" | "soon";
 export interface GameWager {
   /** Libellé affiché dans le lobby : une cave pour le poker, une mise ailleurs. */
   label: "Cave" | "Mise";
-  /** Bornes obligatoires, en MaxouCoin. Deux valeurs égales indiquent une mise fixe. */
+  /** Mise minimale, en MaxouCoin. */
   min: number;
-  max: number;
+  /**
+   * Mise maximale, en MaxouCoin.
+   *
+   * **Absente partout aujourd'hui** : le seul plafond est ce que le joueur
+   * possède. Le champ reste dans le contrat pour un jeu qui aurait un jour une
+   * vraie limite de règle, pas de prudence économique.
+   */
+  max?: number;
   /**
    * Pas entre deux mises autorisées, en MaxouCoin.
-   * Absent pour une mise fixe ou pour une cave choisie librement.
+   *
+   * Ce n'est pas un plafond : il garantit que les barèmes en 1,5 × ou en 3:2
+   * tombent toujours sur un nombre entier de MaxouCoin.
    */
   step?: number;
   /**
@@ -45,7 +54,7 @@ export interface GameDefinition {
   maxPlayers: number;
   /** Le jeu consomme-t-il des jetons virtuels ? */
   usesChips: boolean;
-  /** Mise obligatoire et toujours plafonnée. */
+  /** Mise obligatoire, bornée par le bas seulement. */
   wager: GameWager;
   /**
    * Nombre de parties simultanées autorisées sur le serveur.
@@ -80,7 +89,7 @@ export const GAMES: readonly GameDefinition[] = [
     minPlayers: 2,
     maxPlayers: 9,
     usesChips: true,
-    wager: { label: "Cave", min: 500, max: 10_000 },
+    wager: { label: "Cave", min: 500 },
     maxTables: 1,
     status: "soon",
     milestone: 4,
@@ -94,7 +103,7 @@ export const GAMES: readonly GameDefinition[] = [
     minPlayers: 1,
     maxPlayers: 5,
     usesChips: true,
-    wager: { label: "Mise", min: 10, max: 2500, step: 10, payout: "Blackjack 3:2" },
+    wager: { label: "Mise", min: 10, step: 10, payout: "Blackjack 3:2" },
     maxTables: 1,
     status: "live",
     milestone: 3,
@@ -107,9 +116,7 @@ export const GAMES: readonly GameDefinition[] = [
     minPlayers: 1,
     maxPlayers: 8,
     usesChips: true,
-    // Le maximum affiché est celui du total engagé sur un tour. Chaque case a
-    // son propre plafond, plus bas quand le rapport monte : voir `roulette.ts`.
-    wager: { label: "Mise", min: 10, max: 2500, step: 10, payout: "Plein 35:1" },
+    wager: { label: "Mise", min: 10, step: 10, payout: "Plein 35:1" },
     maxTables: 1,
     status: "live",
     milestone: 3,
@@ -122,7 +129,7 @@ export const GAMES: readonly GameDefinition[] = [
     minPlayers: 1,
     maxPlayers: 1,
     usesChips: true,
-    wager: { label: "Mise", min: 100, max: 100, payout: "100 à 600 MC" },
+    wager: { label: "Mise", min: 10, step: 10, payout: "1 × à 6 × la mise" },
     maxTables: 10,
     status: "live",
     milestone: 2,
@@ -135,7 +142,7 @@ export const GAMES: readonly GameDefinition[] = [
     minPlayers: 2,
     maxPlayers: 2,
     usesChips: true,
-    wager: { label: "Mise", min: 10, max: 100, step: 10, winMultiplier: 1.5, payout: "1,5 × la mise" },
+    wager: { label: "Mise", min: 10, step: 10, winMultiplier: 1.5, payout: "1,5 × la mise" },
     maxTables: 10,
     status: "live",
     milestone: 1,
@@ -148,7 +155,7 @@ export const GAMES: readonly GameDefinition[] = [
     minPlayers: 2,
     maxPlayers: 2,
     usesChips: true,
-    wager: { label: "Mise", min: 10, max: 100, step: 10, winMultiplier: 1.5, payout: "1,5 × la mise" },
+    wager: { label: "Mise", min: 10, step: 10, winMultiplier: 1.5, payout: "1,5 × la mise" },
     maxTables: 10,
     status: "live",
     milestone: 1,

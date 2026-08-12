@@ -9,6 +9,8 @@ import { releaseActivity, reserveActivity } from "../games/activity.js";
 import { abandon, activeCount, guess, shutdown, start, unwatch, watch } from "./service.js";
 
 const created = trackCreated();
+/** Mise des tests. Reprend l'ancien prix fixe, pour garder les montants lisibles. */
+const MISE = 100;
 const NOW = new Date("2026-08-11T12:30:00.000Z");
 const LATER = new Date("2026-08-11T18:30:00.000Z");
 const touchedSlots = new Set<number>();
@@ -61,7 +63,9 @@ describe("démarrage Motus", () => {
 
     const view = await watch(userId, "socket-1", NOW);
 
-    expect(view).toMatchObject({ status: "available", length: 5, stake: 100, version: 0 });
+    // Sans tentative en cours, la mise annoncée est le minimum : c'est la
+    // proposition de départ de l'écran, pas un prix imposé.
+    expect(view).toMatchObject({ status: "available", length: 5, stake: 10, version: 0 });
     expect(await balanceOf(userId)).toBe(1_000);
   });
 
@@ -70,8 +74,8 @@ describe("démarrage Motus", () => {
     const userId = await player();
 
     const [first, second] = await Promise.all([
-      start(userId, "socket-1", NOW),
-      start(userId, "socket-1", NOW),
+      start(userId, "socket-1", MISE, NOW),
+      start(userId, "socket-1", MISE, NOW),
     ]);
 
     expect(first.status).toBe("playing");
@@ -89,7 +93,7 @@ describe("démarrage Motus", () => {
     await fixedSlot(NOW);
     const userId = await player(50);
 
-    const error = await appError(() => start(userId, "socket-1", NOW));
+    const error = await appError(() => start(userId, "socket-1", MISE, NOW));
     expect(error.code).toBe("INSUFFICIENT_FUNDS");
     expect(await db.select().from(motusAttempts).where(eq(motusAttempts.userId, userId))).toHaveLength(0);
   });
@@ -101,7 +105,7 @@ describe("démarrage Motus", () => {
     reserveActivity(userId, table);
 
     try {
-      const error = await appError(() => start(userId, "socket-1", NOW));
+      const error = await appError(() => start(userId, "socket-1", MISE, NOW));
       expect(error.code).toBe("ALREADY_IN_GAME");
     } finally {
       releaseActivity(userId, table);
@@ -112,11 +116,11 @@ describe("démarrage Motus", () => {
     await fixedSlot(NOW);
     for (let index = 0; index < 10; index += 1) {
       const userId = await player();
-      await start(userId, `socket-${index}`, NOW);
+      await start(userId, `socket-${index}`, MISE, NOW);
     }
     const overflow = await player();
 
-    const error = await appError(() => start(overflow, "socket-overflow", NOW));
+    const error = await appError(() => start(overflow, "socket-overflow", MISE, NOW));
 
     expect(error.code).toBe("MOTUS_CAPACITY_REACHED");
     expect(await balanceOf(overflow)).toBe(1_000);
@@ -127,7 +131,7 @@ describe("propositions Motus", () => {
   it("verse 600 MC pour une solution trouvée au premier essai", async () => {
     await fixedSlot(NOW);
     const userId = await player();
-    const initial = await start(userId, "socket-1", NOW);
+    const initial = await start(userId, "socket-1", MISE, NOW);
 
     const result = await guess(userId, "socket-1", { guess: "école", version: initial.version }, NOW);
 
@@ -152,7 +156,7 @@ describe("propositions Motus", () => {
   it("refuse un mot inconnu ou trop long sans consommer d'essai", async () => {
     await fixedSlot(NOW);
     const userId = await player();
-    const initial = await start(userId, "socket-1", NOW);
+    const initial = await start(userId, "socket-1", MISE, NOW);
 
     expect((await appError(() => guess(userId, "socket-1", { guess: "QZXQZ", version: 0 }, NOW))).code).toBe(
       "MOTUS_UNKNOWN_WORD",
@@ -168,7 +172,7 @@ describe("propositions Motus", () => {
   it("refuse une proposition calculée sur une version périmée", async () => {
     await fixedSlot(NOW);
     const userId = await player();
-    await start(userId, "socket-1", NOW);
+    await start(userId, "socket-1", MISE, NOW);
     await guess(userId, "socket-1", { guess: "SALON", version: 0 }, NOW);
 
     const error = await appError(() => guess(userId, "socket-2", { guess: "SABLE", version: 0 }, NOW));
@@ -178,7 +182,7 @@ describe("propositions Motus", () => {
   it("n'accepte qu'une proposition lorsque deux appareils jouent la même version", async () => {
     await fixedSlot(NOW);
     const userId = await player();
-    await start(userId, "socket-1", NOW);
+    await start(userId, "socket-1", MISE, NOW);
 
     const results = await Promise.allSettled([
       guess(userId, "socket-1", { guess: "SALON", version: 0 }, NOW),
@@ -195,7 +199,7 @@ describe("propositions Motus", () => {
   it("clôt le sixième échec sans gain et sans révéler le secret", async () => {
     await fixedSlot(NOW);
     const userId = await player();
-    let view = await start(userId, "socket-1", NOW);
+    let view = await start(userId, "socket-1", MISE, NOW);
 
     for (const word of ["SALON", "SABLE", "LIVRE", "PLAGE", "ROUTE", "TABLE"]) {
       view = await guess(userId, "socket-1", { guess: word, version: view.version }, NOW);
@@ -211,7 +215,7 @@ describe("reprise et abandon", () => {
   it("compte un compte multi-onglets une seule fois et libère la dernière page", async () => {
     await fixedSlot(NOW);
     const userId = await player();
-    await start(userId, "socket-1", NOW);
+    await start(userId, "socket-1", MISE, NOW);
     await watch(userId, "socket-2", NOW);
 
     expect(activeCount()).toBe(1);
@@ -227,7 +231,7 @@ describe("reprise et abandon", () => {
     await fixedSlot(NOW);
     await fixedSlot(LATER, "SALON");
     const userId = await player();
-    const original = await start(userId, "socket-1", NOW);
+    const original = await start(userId, "socket-1", MISE, NOW);
     unwatch(userId, "socket-1");
 
     const resumed = await watch(userId, "socket-2", LATER);
@@ -239,10 +243,10 @@ describe("reprise et abandon", () => {
   it("rend l'abandon définitif pour le créneau", async () => {
     await fixedSlot(NOW);
     const userId = await player();
-    await start(userId, "socket-1", NOW);
+    await start(userId, "socket-1", MISE, NOW);
 
     const abandoned = await abandon(userId, "socket-1", NOW);
-    const replay = await start(userId, "socket-1", NOW);
+    const replay = await start(userId, "socket-1", MISE, NOW);
 
     expect(abandoned).toMatchObject({ status: "lost", endReason: "abandoned", net: -100 });
     expect(replay).toMatchObject({ status: "lost", endReason: "abandoned" });

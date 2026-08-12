@@ -6,6 +6,17 @@ export const BLACKJACK_ACTION_MS = 30_000;
 export const BLACKJACK_RESULT_MS = 8_000;
 export const BLACKJACK_DISCONNECT_GRACE_MS = 45_000;
 export const BLACKJACK_MAX_HANDS = 4;
+/**
+ * Mise minimale et pas entre deux mises.
+ *
+ * **Il n'y a plus de plafond** : le seul maximum est le solde du joueur. Le pas
+ * de 10 n'en est pas un — il garantit que le 3:2 d'un blackjack tombe toujours
+ * sur un entier.
+ */
+export const BLACKJACK_BET_MIN = 10;
+export const BLACKJACK_BET_STEP = 10;
+
+/** Jetons proposés d'un geste. La saisie libre reste ouverte au-delà. */
 export const BLACKJACK_BET_OPTIONS = [10, 50, 100, 250, 500, 1_000, 2_500] as const;
 export const BLACKJACK_MAX_SEATS = 5;
 
@@ -122,7 +133,13 @@ const tableVersionSchema = z.object({
 });
 
 export const blackjackBetSchema = tableVersionSchema.extend({
-  amount: z.number().int().min(10).max(2_500).refine((amount) => amount % 10 === 0),
+  amount: z
+    .number()
+    .int()
+    .min(BLACKJACK_BET_MIN)
+    .refine((amount) => amount % BLACKJACK_BET_STEP === 0, {
+      message: `La mise doit être un multiple de ${BLACKJACK_BET_STEP}.`,
+    }),
 });
 
 export const blackjackInsuranceSchema = tableVersionSchema.extend({

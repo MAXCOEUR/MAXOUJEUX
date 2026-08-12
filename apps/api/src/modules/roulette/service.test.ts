@@ -59,6 +59,13 @@ async function matchStatus(roundId: string): Promise<string | undefined> {
   return row?.status;
 }
 
+/** Millisecondes restantes avant la fin de la phase, vues du joueur. */
+function restant(tableId: string, userId: string): number {
+  const deadline = viewRoulette(tableId, userId)?.deadlineAt;
+  if (!deadline) throw new Error("échéance absente");
+  return new Date(deadline).getTime() - Date.now();
+}
+
 /** Identifiant du tour en cours, enregistré pour le nettoyage. */
 function currentRound(tableId: string, userId: string): string {
   const roundId = viewRoulette(tableId, userId)?.roundId;
@@ -70,7 +77,13 @@ function currentRound(tableId: string, userId: string): string {
 beforeAll(() => runMigrations(), 60_000);
 afterEach(() => {
   resetRouletteForTests();
-  setRouletteDurationsForTests({ betting: 30_000, spin: 7_000, result: 8_000, grace: 45_000 });
+  setRouletteDurationsForTests({
+    betting: 30_000,
+    allBetsPlaced: 3_000,
+    spin: 7_000,
+    result: 8_000,
+    grace: 45_000,
+  });
 });
 afterAll(() => created.cleanup());
 
@@ -136,53 +149,91 @@ describe("table de roulette", () => {
     expect(vue?.bets.find((bet) => spotKey(bet.spot) === "black")).toMatchObject({ total: 80, mine: 30 });
   });
 
-  it("regroupe une case envoyée deux fois avant de contrôler son plafond", async () => {
+  it("écourte la fenêtre dès que tous les joueurs ont misé", async () => {
     const host = await player();
+    const invite = await player();
     const tableId = await createRouletteTable(host);
+    await joinRouletteTable(invite, tableId);
 
-    // Séparément, chaque moitié passe sous le plafond de 100 du plein. Sans
-    // regroupement préalable, la somme le dépasserait sans être vue.
-    const erreur = await errorOf(() =>
-      betRoulette(host.userId, tableId, [
-        { spot: plein(17), amount: 60 },
-        { spot: plein(17), amount: 60 },
-      ]),
-    );
-    expect(erreur.code).toBe("ROULETTE_BET_OVER_LIMIT");
-    expect(await balanceOf(host.userId)).toBe(5_000);
+    await betRoulette(host.userId, tableId, [{ spot: { kind: "red" }, amount: 10 }]);
+    currentRound(tableId, host.userId);
+    const apresLaPremiere = restant(tableId, host.userId);
+
+    await betRoulette(invite.userId, tableId, [{ spot: { kind: "black" }, amount: 10 }]);
+    const apresLaSeconde = restant(tableId, host.userId);
+
+    // La fenêtre entière court tant qu'un joueur n'a pas posé ses jetons.
+    expect(apresLaPremiere).toBeGreaterThan(10_000);
+    // Puis elle tombe au strict nécessaire : plus personne n'est attendu.
+    expect(apresLaSeconde).toBeLessThanOrEqual(3_000);
   });
 
-  it("plafonne chaque type de case, cumul des confirmations compris", async () => {
+  it("n'écourte rien tant qu'un joueur regarde sans miser", async () => {
     const host = await player();
+    const spectateur = await player();
     const tableId = await createRouletteTable(host);
+    await joinRouletteTable(spectateur, tableId);
 
-    await betRoulette(host.userId, tableId, [{ spot: plein(5), amount: 100 }]);
+    await betRoulette(host.userId, tableId, [{ spot: { kind: "red" }, amount: 10 }]);
     currentRound(tableId, host.userId);
 
-    // Le plein est déjà à son maximum : dix de plus le dépassent.
-    expect((await errorOf(() => betRoulette(host.userId, tableId, [{ spot: plein(5), amount: 10 }]))).code)
-      .toBe("ROULETTE_BET_OVER_LIMIT");
-    // Une douzaine accepte bien davantage.
-    await betRoulette(host.userId, tableId, [{ spot: { kind: "dozen1" }, amount: 800 }]);
-    expect((await errorOf(() => betRoulette(host.userId, tableId, [{ spot: { kind: "dozen1" }, amount: 10 }]))).code)
-      .toBe("ROULETTE_BET_OVER_LIMIT");
+    // Le voisin a encore toute la fenêtre pour se décider.
+    expect(restant(tableId, host.userId)).toBeGreaterThan(10_000);
   });
 
-  it("plafonne le total engagé sur un tour", async () => {
+  it("ne rallonge jamais la fenêtre par une mise tardive", async () => {
+    const host = await player();
+    const tableId = await createRouletteTable(host);
+    setRouletteDurationsForTests({ betting: 1_000 });
+
+    await betRoulette(host.userId, tableId, [{ spot: { kind: "red" }, amount: 10 }]);
+    currentRound(tableId, host.userId);
+
+    // Le repli à 3 s ne doit pas repousser une échéance déjà plus proche.
+    expect(restant(tableId, host.userId)).toBeLessThanOrEqual(1_000);
+  });
+
+  it("regroupe une case envoyée deux fois en un seul débit", async () => {
+    const host = await player();
+    const tableId = await createRouletteTable(host);
+
+    await betRoulette(host.userId, tableId, [
+      { spot: plein(17), amount: 60 },
+      { spot: plein(17), amount: 60 },
+    ]);
+
+    expect(await balanceOf(host.userId)).toBe(5_000 - 120);
+  });
+
+  it("n'oppose plus aucun plafond de case : seul le solde borne la mise", async () => {
+    const host = await player(50_000);
+    const tableId = await createRouletteTable(host);
+
+    // 25 000 sur un plein paierait 900 000 MC. C'est un arbitrage assumé au
+    // profit de la liberté de jeu : le seul refus vient du porte-monnaie.
+    await betRoulette(host.userId, tableId, [{ spot: plein(5), amount: 25_000 }]);
+    currentRound(tableId, host.userId);
+    await betRoulette(host.userId, tableId, [{ spot: plein(5), amount: 10_000 }]);
+
+    expect(await balanceOf(host.userId)).toBe(15_000);
+  });
+
+  it("laisse engager tout son solde sur un tour, sans plafond de total", async () => {
     const host = await player(10_000);
     const tableId = await createRouletteTable(host);
 
     await betRoulette(host.userId, tableId, [
-      { spot: { kind: "red" }, amount: 2_000 },
-      { spot: { kind: "dozen1" }, amount: 500 },
+      { spot: { kind: "red" }, amount: 6_000 },
+      { spot: { kind: "dozen1" }, amount: 4_000 },
     ]);
     currentRound(tableId, host.userId);
 
+    // Tout est engagé : le refus suivant vient des fonds, pas d'une limite.
     const erreur = await errorOf(() =>
       betRoulette(host.userId, tableId, [{ spot: { kind: "even" }, amount: 10 }]),
     );
-    expect(erreur.code).toBe("ROULETTE_TOTAL_OVER_LIMIT");
-    expect(await balanceOf(host.userId)).toBe(7_500);
+    expect(erreur.code).toBe("INSUFFICIENT_FUNDS");
+    expect(await balanceOf(host.userId)).toBe(0);
   });
 
   it("refuse une mise sans fonds sans modifier la table", async () => {

@@ -1,6 +1,6 @@
 /** Transport Socket.IO de Motus : validation, accusés de réception et diffusion. */
 
-import { motusGuessSchema, type MotusView } from "@maxoujeux/shared";
+import { motusGuessSchema, motusStartSchema, type MotusView } from "@maxoujeux/shared";
 import type { MotusNotifier } from "../modules/motus/service.js";
 import {
   abandon,
@@ -36,9 +36,10 @@ export function registerMotusHandlers(socket: GameSocket): void {
     unwatch(userId, socket.id);
   });
 
-  socket.on("motus:start", (ack) => {
+  socket.on("motus:start", (payload, ack) => {
     void withAck<null>(socket, "motus:start", ack, async () => {
-      await start(userId, socket.id);
+      const input = motusStartSchema.parse(payload);
+      await start(userId, socket.id, input.stake);
       return null;
     });
   });

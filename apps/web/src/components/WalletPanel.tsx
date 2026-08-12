@@ -2,7 +2,7 @@ import {
   COIN_NAME,
   formatCoins,
   formatCoinsDelta,
-  MOTUS_REWARDS,
+  MOTUS_MULTIPLIERS,
   WALLET_REASON_LABELS,
   type WalletEntry,
   type WalletSummary,
@@ -156,8 +156,7 @@ function DailyBonusCard({ summary }: { summary: WalletSummary }) {
 
 function MotusCard({ nextSlotAt }: { nextSlotAt: string }) {
   const remaining = useCountdown(nextSlotAt);
-  const best = Math.max(...MOTUS_REWARDS);
-  const worst = Math.min(...MOTUS_REWARDS);
+  const best = Math.max(...MOTUS_MULTIPLIERS);
 
   return (
     <section className="panel p-5">
@@ -171,8 +170,8 @@ function MotusCard({ nextSlotAt }: { nextSlotAt: string }) {
         {formatDuration(remaining)}
       </p>
       <p className="mt-1 text-xs text-cream-dim">
-        Un mot toutes les 6 h. De {worst} à {best} MC selon le nombre d'essais — bien jouer
-        rapporte davantage.
+        Un mot toutes les 6 h. Tu choisis ta mise et récupères de 1 × à {best} × selon le nombre
+        d'essais — bien jouer rapporte davantage.
       </p>
       <p className="mt-2 text-xs text-cream-faint">Disponible au lot 2.</p>
     </section>

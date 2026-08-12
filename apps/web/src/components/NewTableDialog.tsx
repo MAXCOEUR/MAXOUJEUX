@@ -1,6 +1,7 @@
 import {
   formatCoins,
-  stakeOptions,
+  isValidStake,
+  stakeSuggestions,
   winPayout,
   type GameDefinition,
 } from "@maxoujeux/shared";
@@ -28,11 +29,14 @@ export function NewTableDialog({
   loading,
   error,
 }: NewTableDialogProps) {
-  const options = stakeOptions(game.code);
-  const [stake, setStake] = useState(options[0] ?? game.wager.min);
+  const options = stakeSuggestions(game.code);
+  const [stake, setStake] = useState(game.wager.min);
 
-  const payout = winPayout(game.code, stake);
-  const affordable = stake <= balance;
+  // Le montant saisi peut être n'importe quoi : on ne calcule le gain que
+  // lorsqu'il est valide, sinon `winPayout` lèverait sur une demi-pièce.
+  const valide = isValidStake(game.code, stake);
+  const payout = valide ? winPayout(game.code, stake) : 0;
+  const affordable = valide && stake <= balance;
   /**
    * Jeux de casino : on s'assoit gratuitement, on mise ensuite sur le tapis,
    * manche après manche. Réclamer une mise pour ouvrir la table serait une
@@ -63,19 +67,31 @@ export function NewTableDialog({
     >
       {!sansMise && <>
         <p className="text-xs font-semibold uppercase tracking-[0.08em] text-cream-faint">Ta mise</p>
-        <StakePicker options={options} value={stake} onChange={setStake} balance={balance} disabled={loading} className="mt-3" />
+        <StakePicker
+          options={options}
+          value={stake}
+          onChange={setStake}
+          min={game.wager.min}
+          step={game.wager.step ?? game.wager.min}
+          balance={balance}
+          disabled={loading}
+          className="mt-3"
+        />
       </>}
 
       <div className="mt-5 space-y-1.5 rounded-xl border border-line bg-felt-deep/50 px-4 py-3 text-sm">
         {sansMise ? <>
           {game.code === "blackjack" ? <>
             <p className="text-cream">La table accueille jusqu’à cinq joueurs face au croupier.</p>
-            <p className="text-cream-dim">Chacun choisit sa mise, de 10 à 2 500 MC, au début de chaque manche.</p>
+            <p className="text-cream-dim">
+              Chacun choisit sa mise au début de chaque manche, à partir de{" "}
+              {formatCoins(game.wager.min)} et sans plafond.
+            </p>
           </> : <>
             <p className="text-cream">La table accueille jusqu’à huit joueurs autour du cylindre.</p>
             <p className="text-cream-dim">
-              Tu poses les jetons que tu veux sur le tapis, tour après tour, de{" "}
-              {formatCoins(game.wager.min)} à {formatCoins(game.wager.max)} par case.
+              Tu poses les jetons que tu veux sur le tapis, tour après tour, à partir de{" "}
+              {formatCoins(game.wager.min)} par case et sans plafond.
             </p>
           </>}
           <p className="text-xs text-cream-faint">Ouvrir ou rejoindre la table ne débite aucun jeton.</p>

@@ -5,6 +5,7 @@ import {
   MOTUS_WORD_LENGTHS,
   currentMotusSlot,
   getGame,
+  isValidStake,
   motusReward,
   type MotusGuessInput,
   type MotusGuessView,
@@ -23,8 +24,8 @@ type Attempt = typeof motusAttempts.$inferSelect;
 type Slot = typeof motusSlots.$inferSelect;
 type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
-const MOTUS_STAKE = getGame("motus")?.wager.min ?? 100;
 const MAX_ACTIVE = getGame("motus")?.maxTables ?? 10;
+const MOTUS_MIN_STAKE = getGame("motus")?.wager.min ?? 10;
 
 export interface MotusNotifier {
   state(userId: string, view: MotusView): void;
@@ -175,9 +176,11 @@ async function attemptView(
     attemptsLeft: Math.max(0, MOTUS_MAX_ATTEMPTS - guesses.length),
     status,
     endReason,
-    stake: MOTUS_STAKE,
+    // Sans tentative en cours, la mise affichée est le minimum : l'écran s'en
+    // sert comme proposition de départ dans son champ de saisie.
+    stake: attempt?.stake ?? MOTUS_MIN_STAKE,
     payout,
-    net: attempt ? payout - MOTUS_STAKE : 0,
+    net: attempt ? payout - attempt.stake : 0,
     version: attempt?.version ?? 0,
     now: now.toISOString(),
   };
@@ -240,7 +243,18 @@ export function unwatch(userId: string, socketId: string): void {
   releaseSession(userId);
 }
 
-export async function start(userId: string, socketId: string, now = new Date()): Promise<MotusView> {
+export async function start(
+  userId: string,
+  socketId: string,
+  stake: number,
+  now = new Date(),
+): Promise<MotusView> {
+  // Rejoué côté serveur : le front propose des paliers, mais rien n'empêche
+  // d'envoyer 37 MaxouCoin à la main. Le plafond, lui, est le solde et c'est le
+  // débit atomique qui le fait respecter.
+  if (!isValidStake("motus", stake)) {
+    fail("MOTUS_STAKE_INVALID", MOTUS_ERROR_LABELS.MOTUS_STAKE_INVALID, 400);
+  }
   addWatcher(userId, socketId);
   const before = await state(userId, now);
   reserveSession(userId, before.status === "playing" ? before.slotStart : currentMotusSlot(now).start.toISOString());
@@ -264,7 +278,7 @@ export async function start(userId: string, socketId: string, now = new Date()):
       const slot = await ensureSlot(tx, now);
       const [inserted] = await tx
         .insert(motusAttempts)
-        .values({ userId, slotStart: slot.slotStart })
+        .values({ userId, slotStart: slot.slotStart, stake })
         .onConflictDoNothing()
         .returning();
 
@@ -278,7 +292,7 @@ export async function start(userId: string, socketId: string, now = new Date()):
         return attemptView(tx, userId, existing, slot, now);
       }
 
-      balance = await debitInTx(tx, userId, MOTUS_STAKE, "motus_stake");
+      balance = await debitInTx(tx, userId, stake, "motus_stake");
       return attemptView(tx, userId, inserted, slot, now);
     });
 
@@ -339,7 +353,7 @@ export async function guess(
     const evaluation = evaluateMotusGuess(slot.word, normalized);
     const guesses = [...storedGuesses(attempt.guesses), normalized];
     const finished = evaluation.solved || guesses.length >= MOTUS_MAX_ATTEMPTS;
-    const reward = motusReward(guesses.length, evaluation.solved);
+    const reward = motusReward(guesses.length, evaluation.solved, attempt.stake);
     if (reward > 0) balance = await creditInTx(tx, userId, reward, "motus_reward");
 
     const [updated] = await tx

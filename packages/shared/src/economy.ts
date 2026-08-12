@@ -79,19 +79,32 @@ export const MOTUS_SLOT_HOURS = 6;
 export const MOTUS_MAX_ATTEMPTS = 6;
 
 /**
- * Récompense par nombre d'essais utilisés, du 1er au 6e.
+ * Multiplicateur de la mise par nombre d'essais utilisés, du 1er au 6e.
+ *
  * Barème dégressif volontaire : trouver en deux coups ne peut pas rapporter
- * autant qu'en six, sinon autant tenter au hasard. La moyenne d'un joueur
- * correct tourne autour de 250 MC.
+ * autant qu'en six, sinon autant tenter au hasard. Trouver au dernier essai
+ * rend exactement la mise — le joueur ne perd rien mais ne gagne rien.
+ *
+ * Le barème est passé d'un montant fixe à un multiplicateur le jour où la mise
+ * est devenue libre. Chaque valeur n'a **qu'une décimale** : combinée au pas de
+ * mise de 10 MaxouCoin, la propriété garantit un versement toujours entier.
  */
-export const MOTUS_REWARDS = [600, 450, 350, 250, 175, 100] as const;
+export const MOTUS_MULTIPLIERS = [6, 4.5, 3.5, 2.5, 1.8, 1] as const;
 
-/** Récompense d'une tentative. Un mot non trouvé ne rapporte rien. */
-export function motusReward(attempts: number, solved: boolean): number {
+/** Récompense d'une tentative, mise comprise. Un mot non trouvé ne rapporte rien. */
+export function motusReward(attempts: number, solved: boolean, stake: number): number {
   if (!solved) return 0;
   const index = Math.floor(attempts) - 1;
-  if (index < 0 || index >= MOTUS_REWARDS.length) return 0;
-  return MOTUS_REWARDS[index] ?? 0;
+  const multiplier = MOTUS_MULTIPLIERS[index];
+  if (index < 0 || multiplier === undefined) return 0;
+
+  const reward = stake * multiplier;
+  // Un barème futur qui casserait la propriété doit échouer bruyamment plutôt
+  // que d'arrondir en silence au détriment du joueur.
+  if (!Number.isInteger(reward)) {
+    throw new Error(`Gain Motus non entier pour une mise de ${stake} (× ${multiplier})`);
+  }
+  return reward;
 }
 
 // ---------------------------------------------------------------------------
