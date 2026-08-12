@@ -6,6 +6,8 @@ import { Countdown } from "./Countdown";
 import { blackjackResume } from "@/lib/blackjack-state";
 import { useBlackjack } from "@/lib/blackjack";
 import { useGame } from "@/lib/game";
+import { useRoulette } from "@/lib/roulette";
+import { rouletteResume } from "@/lib/roulette-ui";
 import { navigate, useRoute } from "@/lib/route";
 
 /**
@@ -23,6 +25,7 @@ import { navigate, useRoute } from "@/lib/route";
 export function ResumeBanner() {
   const match = useGame((state) => state.match);
   const blackjack = useBlackjack((state) => state.view);
+  const roulette = useRoulette((state) => state.view);
   const route = useRoute();
   const tableAffichee = route.name === "table" ? route.tableId : null;
 
@@ -52,6 +55,23 @@ export function ResumeBanner() {
         ) : bj.seated ? (
           <span className="text-cream-dim"> — ta place est gardée</span>
         ) : null}
+      </Banner>
+    );
+  }
+
+  const repriseRoulette = rouletteResume(roulette, tableAffichee);
+  if (repriseRoulette) {
+    return (
+      <Banner
+        icon={<Flag className="size-4 shrink-0 text-brass" aria-hidden />}
+        tableId={repriseRoulette.tableId}
+      >
+        Table de Roulette
+        {repriseRoulette.wager > 0 ? (
+          <span className="text-cream-dim"> — {formatCoins(repriseRoulette.wager)} en jeu</span>
+        ) : (
+          <span className="text-cream-dim"> — ta place est gardée</span>
+        )}
       </Banner>
     );
   }

@@ -22,6 +22,29 @@ export function isNewerRouletteView(current: RouletteView | null, incoming: Roul
   return !current || current.id !== incoming.id || incoming.version > current.version;
 }
 
+/** Informations minimales affichées par le bandeau d'une table quittée du regard. */
+export interface RouletteResume {
+  tableId: string;
+  wager: number;
+  phase: RouletteView["phase"];
+  deadlineAt: string | null;
+}
+
+/** Résume la roulette encore active lorsque le joueur consulte un autre écran. */
+export function rouletteResume(
+  view: RouletteView | null,
+  currentTableId: string | null,
+): RouletteResume | null {
+  if (!view || view.id === currentTableId) return null;
+  const mine = view.players.find((player) => player.userId === view.you);
+  return {
+    tableId: view.id,
+    wager: mine?.totalWager ?? 0,
+    phase: view.phase,
+    deadlineAt: view.deadlineAt,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Disposition du tapis
 // ---------------------------------------------------------------------------

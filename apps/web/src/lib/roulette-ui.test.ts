@@ -10,6 +10,7 @@ import {
   draftTotal,
   isNewerRouletteView,
   pocketAngle,
+  rouletteResume,
   spotAria,
   spotLabel,
   wheelRotation,
@@ -36,6 +37,62 @@ test("rejette un état de roulette plus ancien que celui affiché", () => {
   assert.equal(isNewerRouletteView(vue(4), vue(3)), false);
   assert.equal(isNewerRouletteView(vue(4), vue(5)), true);
   assert.equal(isNewerRouletteView(vue(8), vue(1, "table-2")), true);
+});
+
+test("ne propose rien sans table ou lorsque la roulette est déjà affichée", () => {
+  assert.equal(rouletteResume(null, null), null);
+  assert.equal(rouletteResume(vue(3), "table-1"), null);
+});
+
+test("résume la roulette gardée derrière le joueur", () => {
+  const courant: RouletteView = {
+    ...vue(4),
+    phase: "betting",
+    players: [{
+      userId: "u1",
+      pseudo: "Maxou",
+      avatarSeed: "maxou",
+      connected: true,
+      totalWager: 0,
+      roundNet: null,
+    }],
+    you: "u1",
+    deadlineAt: "2026-08-12T00:00:30.000Z",
+  };
+
+  assert.deepEqual(rouletteResume(courant, null), {
+    tableId: "table-1",
+    wager: 0,
+    phase: "betting",
+    deadlineAt: "2026-08-12T00:00:30.000Z",
+  });
+});
+
+test("le résumé expose uniquement la mise du joueur destinataire", () => {
+  const courant: RouletteView = {
+    ...vue(5),
+    players: [
+      {
+        userId: "u1",
+        pseudo: "Maxou",
+        avatarSeed: "maxou",
+        connected: true,
+        totalWager: 250,
+        roundNet: null,
+      },
+      {
+        userId: "u2",
+        pseudo: "Léa",
+        avatarSeed: "lea",
+        connected: true,
+        totalWager: 1_000,
+        roundNet: null,
+      },
+    ],
+    you: "u1",
+  };
+
+  assert.equal(rouletteResume(courant, null)?.wager, 250);
 });
 
 test("le tapis porte les trente-six numéros, une fois chacun", () => {
