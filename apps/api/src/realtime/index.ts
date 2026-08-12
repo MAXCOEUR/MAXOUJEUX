@@ -16,6 +16,7 @@ import { setWalletNotifier } from "./notify.js";
 import { addConnection, presenceSnapshot, removeConnection } from "./presence.js";
 import { createTableNotifier, registerTableHandlers } from "./tables.js";
 import { registerBlackjackHandlers } from "./blackjack.js";
+import { registerRouletteHandlers } from "./roulette.js";
 import { userRoom, type GameServer } from "./types.js";
 import { setMotusNotifier, unwatch as unwatchMotus } from "../modules/motus/service.js";
 
@@ -104,6 +105,7 @@ export function attachRealtime(app: FastifyInstance): GameServer {
 
     registerTableHandlers(socket);
     registerBlackjackHandlers(socket);
+    registerRouletteHandlers(socket);
     registerMotusHandlers(socket);
 
     /**
@@ -118,6 +120,7 @@ export function attachRealtime(app: FastifyInstance): GameServer {
     if (resumed) {
       const view = activeViewFor(resumed, player.userId);
       if (view?.game === "blackjack") socket.emit("blackjack:state", view);
+      else if (view?.game === "roulette") socket.emit("roulette:state", view);
       else if (view) socket.emit("match:state", view);
     }
 

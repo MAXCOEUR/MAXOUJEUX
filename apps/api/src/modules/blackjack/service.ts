@@ -27,12 +27,13 @@ import {
 } from "@maxoujeux/engines";
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "../../db/index.js";
-import { matchPlayers, matches, stats, walletTx } from "../../db/schema.js";
+import { matchPlayers, matches, stats } from "../../db/schema.js";
 import { AppError } from "../../lib/errors.js";
 import { notifyWallet } from "../../realtime/notify.js";
 import { connectionCount } from "../../realtime/presence.js";
 import { releaseActivity, reserveActivity } from "../games/activity.js";
 import type { PlayerIdentity } from "../tables/manager.js";
+import { recoverOpenRounds } from "../tables/recovery.js";
 import { creditInTx, debitInTx } from "../wallet/service.js";
 
 interface Hand {
@@ -952,34 +953,16 @@ export function blackjackCounts(): TableCounts {
   };
 }
 
-/** Rembourse les engagements dont la transaction de règlement n'a jamais abouti. */
-export async function recoverBlackjackRounds(): Promise<void> {
-  const open = await db
-    .select({ id: matches.id })
-    .from(matches)
-    .where(and(eq(matches.game, "blackjack"), sql`${matches.status} not in ('finished', 'cancelled')`));
-
-  for (const match of open) {
-    const balances = await db.transaction(async (tx) => {
-      const rows = await tx
-        .select({
-          userId: walletTx.userId,
-          total: sql<number>`coalesce(sum(${walletTx.delta}), 0)::int`,
-        })
-        .from(walletTx)
-        .where(eq(walletTx.matchId, match.id))
-        .groupBy(walletTx.userId);
-      const result = new Map<string, number>();
-      for (const row of rows) {
-        if (row.total < 0) {
-          result.set(row.userId, await creditInTx(tx, row.userId, -row.total, "blackjack_refund", match.id));
-        }
-      }
-      await tx.update(matches).set({ status: "cancelled", endedAt: new Date() }).where(eq(matches.id, match.id));
-      return result;
-    });
-    for (const [userId, balance] of balances) notifyWallet(userId, balance);
-  }
+/**
+ * Rembourse les engagements dont la transaction de règlement n'a jamais abouti.
+ *
+ * Le corps vit dans `tables/recovery.ts` : la roulette a exactement le même
+ * besoin, au nom du jeu près, et deux copies de cette logique divergeraient —
+ * or c'est du code de reprise après incident, celui qu'on relit le moins et
+ * dont on a le plus besoin qu'il soit juste.
+ */
+export function recoverBlackjackRounds(): Promise<void> {
+  return recoverOpenRounds("blackjack", "blackjack_refund");
 }
 
 export function shutdownBlackjack(): void {

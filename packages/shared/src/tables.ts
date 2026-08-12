@@ -15,6 +15,7 @@
 import { z } from "zod";
 import { getGame, type GameCode } from "./games.js";
 import type { BlackjackView } from "./blackjack.js";
+import type { RouletteView } from "./roulette.js";
 
 /** Temps accordé pour jouer un coup. Passé ce délai, le joueur perd la partie. */
 export const TURN_MS = 30_000;
@@ -162,7 +163,7 @@ export interface MatchView {
 }
 
 /** Vue autoritaire de la partie active, discriminée par `game`. */
-export type ActiveMatchView = MatchView | BlackjackView;
+export type ActiveMatchView = MatchView | BlackjackView | RouletteView;
 
 // ---------------------------------------------------------------------------
 // Codes d'erreur métier
@@ -218,12 +219,17 @@ export type ActionReply<T = null> =
 /** Jeux ouverts au lot 1. Les autres codes sont refusés par le serveur. */
 export const DUEL_GAMES = ["connect4", "tictactoe"] as const;
 export type DuelGame = (typeof DUEL_GAMES)[number];
-export const TABLE_GAMES = ["connect4", "tictactoe", "blackjack"] as const;
+export const TABLE_GAMES = ["connect4", "tictactoe", "blackjack", "roulette"] as const;
 export type TableGame = (typeof TABLE_GAMES)[number];
 
+/**
+ * Le Blackjack et la Roulette n'ont pas de mise à l'ouverture : elle se pose
+ * manche par manche, sur la table. Les jeux de duel engagent la leur d'emblée.
+ */
 export const createTableSchema = z.discriminatedUnion("game", [
   z.object({ game: z.enum(DUEL_GAMES), stake: z.number().int() }),
   z.object({ game: z.literal("blackjack") }),
+  z.object({ game: z.literal("roulette") }),
 ]);
 
 export const tableRefSchema = z.object({

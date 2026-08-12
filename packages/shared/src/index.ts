@@ -4,6 +4,7 @@ export * from "./economy.js";
 export * from "./games.js";
 export * from "./motus.js";
 export * from "./realtime.js";
+export * from "./roulette.js";
 export * from "./tables.js";
 
 /** Enveloppe d'erreur uniforme renvoyée par l'API sur tout statut >= 400. */

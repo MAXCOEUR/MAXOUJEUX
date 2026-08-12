@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { BLACKJACK_ACTION_MS, BLACKJACK_BETTING_MS } from "@maxoujeux/shared";
-import { arcPose, cardLabel, chipStack, handVerdict, phaseDurationMs, seatOrder } from "./blackjack-ui.js";
+import { arcPose, cardLabel, handVerdict, phaseDurationMs, seatOrder } from "./blackjack-ui.js";
+import { chipStack } from "./chips.js";
 
 test("décompose une mise avec le moins de jetons possible", () => {
   assert.deepEqual(chipStack(2_500), [2_500]);

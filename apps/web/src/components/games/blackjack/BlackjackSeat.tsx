@@ -11,7 +11,7 @@ import { Avatar } from "@/components/Avatar";
 import { ProgressRing } from "@/components/ProgressRing";
 import { arcPose, dealOriginX, handVerdict } from "@/lib/blackjack-ui";
 import { cn } from "@/lib/cn";
-import { ChipStack } from "./Chips";
+import { ChipStack } from "@/components/games/casino/Chips";
 import { PlayingCard } from "./PlayingCard";
 
 interface SeatProps {

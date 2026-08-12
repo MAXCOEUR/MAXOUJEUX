@@ -10,6 +10,7 @@ import { io } from "socket.io-client";
 import { create } from "zustand";
 import { bindGameEvents, useGame } from "./game.js";
 import { bindBlackjackEvents, useBlackjack } from "./blackjack.js";
+import { bindRouletteEvents, useRoulette } from "./roulette.js";
 import {
   bindMotusEvents,
   isWatchingMotus,
@@ -68,10 +69,12 @@ export const useRealtime = create<RealtimeState>((set, get) => ({
       socket.emit("match:sync", (reply) => {
         if (!reply.ok) return;
         if (reply.data?.game === "blackjack") useBlackjack.getState().apply(reply.data);
+        else if (reply.data?.game === "roulette") useRoulette.getState().apply(reply.data);
         else if (reply.data) useGame.getState().apply(reply.data);
         else {
           useGame.getState().clear();
           useBlackjack.getState().clear();
+          useRoulette.getState().clear();
         }
       });
 
@@ -113,6 +116,7 @@ export const useRealtime = create<RealtimeState>((set, get) => ({
 
     bindGameEvents(socket);
     bindBlackjackEvents(socket);
+    bindRouletteEvents(socket);
     bindMotusEvents(socket);
 
     set({ socket });

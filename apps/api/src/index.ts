@@ -13,6 +13,7 @@ import { purgeExpiredSessions } from "./modules/auth/session.js";
 import { walletRoutes } from "./modules/wallet/routes.js";
 import { attachRealtime } from "./realtime/index.js";
 import { recoverBlackjackRounds } from "./modules/blackjack/service.js";
+import { recoverRouletteRounds } from "./modules/roulette/service.js";
 
 const app = Fastify({
   logger: {
@@ -76,6 +77,7 @@ async function start(): Promise<void> {
   app.log.info({ driver: dbDriver }, "Application des migrations");
   await runMigrations();
   await recoverBlackjackRounds();
+  await recoverRouletteRounds();
   await purgeExpiredSessions();
 
   // Purge quotidienne des sessions expirées. `unref` pour ne pas retenir le

@@ -572,6 +572,7 @@ describe("lecture et arrêt", () => {
       connect4: { waiting: 0, playing: 1, max: 10 },
       tictactoe: { waiting: 1, playing: 0, max: 10 },
       blackjack: { waiting: 0, playing: 0, max: 1 },
+      roulette: { waiting: 0, playing: 0, max: 1 },
     });
   });
 

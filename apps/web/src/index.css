@@ -45,6 +45,15 @@
   --color-game-motus: #f0c02c;
   --color-game-connect4: #e05a45;
   --color-game-tictactoe: #d8d2c4;
+  --color-game-roulette: #9d2f24;
+
+  /* Cylindre de roulette. Le rouge est plus profond que celui des cartes : il
+     est laqué sur du bois, pas imprimé sur du carton, et il doit tenir à côté
+     d'un noir sans que les deux se confondent à distance. Le vert du zéro est
+     plus clair que le feutre, sinon la case disparaîtrait dans le tapis. */
+  --color-roulette-rouge: #8f2a20;
+  --color-roulette-noir: #14100f;
+  --color-roulette-vert: #1f7a4d;
 
   --color-win: #58c98a;
   --color-danger: #e8756a;
@@ -303,6 +312,30 @@
   to {
     opacity: 0;
     transform: translateY(-9rem) scale(0.55);
+  }
+}
+
+/* Le cylindre de roulette.
+   L'angle d'arrivée est fourni en ligne — il dépend du numéro tiré par le
+   serveur — et l'accélération est concentrée au départ : une bille qui
+   ralentirait linéairement n'aurait aucun poids. La bille tourne en sens
+   inverse, comme au casino ; c'est ce contresens qui rend le mouvement
+   crédible, deux rotations dans le même sens se lisant comme un seul bloc. */
+@keyframes roue-tourne {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(var(--roue-fin, 1800deg));
+  }
+}
+
+@keyframes bille-tourne {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(var(--bille-fin, -2880deg));
   }
 }
 

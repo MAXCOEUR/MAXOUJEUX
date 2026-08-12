@@ -33,6 +33,7 @@ import type {
   BlackjackTableRefInput,
   BlackjackView,
 } from "./blackjack.js";
+import type { RouletteBetInput, RouletteTableRefInput, RouletteView } from "./roulette.js";
 
 export interface PresencePlayer {
   userId: string;
@@ -77,6 +78,7 @@ export interface ServerToClientEvents {
   "motus:state": (view: MotusView) => void;
   /** État Blackjack : cartes des joueurs publiques, carte fermée du croupier masquée. */
   "blackjack:state": (view: BlackjackView) => void;
+  "roulette:state": (view: RouletteView) => void;
 }
 
 /** Événements client → serveur. */
@@ -130,6 +132,15 @@ export interface ClientToServerEvents {
   "blackjack:sit": (payload: BlackjackSitInput, ack: (reply: ActionReply) => void) => void;
   /** Rendre sa place et redevenir spectateur, sans quitter la table. */
   "blackjack:stand": (payload: BlackjackTableRefInput, ack: (reply: ActionReply) => void) => void;
+
+  /**
+   * Confirmer une mise de roulette : plusieurs cases d'un coup, un seul débit.
+   * Le joueur compose sur le tapis avant d'envoyer, et peut confirmer plusieurs
+   * fois tant que la fenêtre est ouverte.
+   */
+  "roulette:bet": (payload: RouletteBetInput, ack: (reply: ActionReply) => void) => void;
+  /** Reprendre l'intégralité de ses jetons, tant que la bille n'est pas partie. */
+  "roulette:clear": (payload: RouletteTableRefInput, ack: (reply: ActionReply) => void) => void;
 }
 
 /** Données attachées à la socket côté serveur, résolues au handshake. */

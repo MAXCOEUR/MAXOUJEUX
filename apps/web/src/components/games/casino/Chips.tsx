@@ -1,5 +1,5 @@
 import { formatCoins } from "@maxoujeux/shared";
-import { CHIP_COLORS, CHIP_INK, CHIP_VALUES, chipStack, type ChipValue } from "@/lib/blackjack-ui";
+import { CHIP_COLORS, CHIP_INK, CHIP_VALUES, chipStack, type ChipValue } from "@/lib/chips";
 import { cn } from "@/lib/cn";
 
 /**
@@ -128,31 +128,42 @@ export function ChipRack({
   current,
   max,
   disabled = false,
+  selected,
   onAdd,
 }: {
   balance: number;
   current: number;
   max: number;
   disabled?: boolean;
+  /**
+   * Jeton actuellement choisi, quand le râtelier sert à **sélectionner** plutôt
+   * qu'à ajouter — c'est le cas de la roulette, où l'on choisit sa valeur puis
+   * on clique les cases du tapis. Sans cette marque, rien ne dirait ce qu'un
+   * clic sur le tapis va poser.
+   */
+  selected?: ChipValue;
   onAdd: (value: ChipValue) => void;
 }) {
   return (
     <div className="flex flex-wrap items-center justify-center gap-2" role="group" aria-label="Poser un jeton">
       {[...CHIP_VALUES].reverse().map((value) => {
         const trop = current + value > max || current + value > balance;
+        const choisi = selected === value;
         return (
           <button
             key={value}
             type="button"
             disabled={disabled || trop}
             onClick={() => onAdd(value)}
-            aria-label={`Poser ${formatCoins(value)}`}
+            aria-pressed={selected === undefined ? undefined : choisi}
+            aria-label={`${selected === undefined ? "Poser" : "Choisir le jeton de"} ${formatCoins(value)}`}
             className={cn(
               "rounded-full transition-transform duration-150",
               "[--jeton-l:2.75rem] sm:[--jeton-l:3rem]",
               trop
                 ? "cursor-not-allowed opacity-30"
                 : "hover:-translate-y-1 active:translate-y-0 active:scale-95",
+              choisi && "-translate-y-1 ring-2 ring-brass ring-offset-2 ring-offset-felt",
               "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brass",
             )}
           >

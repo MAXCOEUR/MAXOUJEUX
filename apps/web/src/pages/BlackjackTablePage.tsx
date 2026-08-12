@@ -1,4 +1,5 @@
 import {
+  BLACKJACK_IDLE_ROUNDS_MAX,
   formatCoins,
   formatCoinsDelta,
   type BlackjackAction,
@@ -20,10 +21,11 @@ import {
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Button } from "@/components/Button";
-import { Lien } from "@/components/Lien";
+import { Modal } from "@/components/Modal";
 import { BlackjackTable } from "@/components/games/BlackjackTable";
-import { ChipRack, ChipStack } from "@/components/games/blackjack/Chips";
-import { chipStack, phaseLabel, type ChipValue } from "@/lib/blackjack-ui";
+import { ChipRack, ChipStack } from "@/components/games/casino/Chips";
+import { phaseLabel } from "@/lib/blackjack-ui";
+import { chipStack, type ChipValue } from "@/lib/chips";
 import { useBlackjack } from "@/lib/blackjack";
 import { cn } from "@/lib/cn";
 import { navigate } from "@/lib/route";
@@ -56,6 +58,10 @@ export function BlackjackTablePage({ user, view }: { user: CurrentUser; view: Bl
 
   /** Place demandée, réponse du serveur en attente. */
   const [sitting, setSitting] = useState<number | null>(null);
+
+  /** Dialogue de sortie ouvert par la flèche de retour. */
+  const [sortie, setSortie] = useState(false);
+  const [leaving, setLeaving] = useState(false);
 
   const mise = poses.reduce((somme, jeton) => somme + jeton, 0);
   const mine = view.seats.find((seat) => seat.seat === view.you) ?? null;
@@ -119,15 +125,35 @@ export function BlackjackTablePage({ user, view }: { user: CurrentUser; view: Bl
     );
   }
 
+  const engage = (mine?.participating ?? false) && view.phase !== "idle" && view.phase !== "result";
+
   async function quitter() {
-    const engage = mine?.participating && view.phase !== "idle" && view.phase !== "result";
-    if (engage && !window.confirm("Ta main restera automatiquement. Quitter la table ?")) return;
+    setLeaving(true);
     const reponse = await request<null>((socket, ack) => socket.emit("match:leave", { tableId: view.id }, ack));
+    setLeaving(false);
     if (!reponse.ok && reponse.code !== "TABLE_GONE") {
       pushToast("erreur", reponse.message);
       return;
     }
+    setSortie(false);
     useBlackjack.getState().clear();
+    navigate({ name: "salon", game: "blackjack" });
+  }
+
+  /** Départ demandé depuis l'en-tête, sans passer par le dialogue de sortie. */
+  function quitterDepuisEntete() {
+    if (engage && !window.confirm("Ta main restera automatiquement. Quitter la table ?")) return;
+    void quitter();
+  }
+
+  /**
+   * Aller voir ailleurs sans rendre sa place.
+   *
+   * L'état n'est **pas** vidé : c'est lui qui alimente le bandeau de reprise, et
+   * le vider ferait disparaître le seul rappel que le joueur est encore engagé.
+   */
+  function garderMaPlace() {
+    setSortie(false);
     navigate({ name: "salon", game: "blackjack" });
   }
 
@@ -158,12 +184,16 @@ export function BlackjackTablePage({ user, view }: { user: CurrentUser; view: Bl
   return (
     <div className="space-y-4 pb-40 sm:pb-4">
       <div className="flex items-center justify-between gap-3">
-        <Lien
-          to={{ name: "salon", game: "blackjack" }}
+        {/* Pas un lien : partir de la page ne rend ni la place ni la mise, et
+            découvrir la chose après coup était incompréhensible. La flèche pose
+            donc la question au lieu d'y répondre à la place du joueur. */}
+        <button
+          type="button"
+          onClick={() => setSortie(true)}
           className="inline-flex items-center gap-1.5 text-sm text-cream-dim transition-colors hover:text-cream"
         >
           <ArrowLeft className="size-4" aria-hidden /> Blackjack
-        </Lien>
+        </button>
         <div className="flex items-center gap-1">
           {!spectateur && (
             <Button
@@ -177,7 +207,7 @@ export function BlackjackTablePage({ user, view }: { user: CurrentUser; view: Bl
               {mine?.standingAfterRound ? "Tu te lèves après" : "Se lever"}
             </Button>
           )}
-          <Button variant="ghost" onClick={() => void quitter()} className="text-xs">
+          <Button variant="ghost" onClick={quitterDepuisEntete} loading={leaving} className="text-xs">
             Quitter la table
           </Button>
         </div>
@@ -247,10 +277,94 @@ export function BlackjackTablePage({ user, view }: { user: CurrentUser; view: Bl
         )}
       </section>
 
+      <LeaveDialog
+        open={sortie}
+        onClose={() => setSortie(false)}
+        spectateur={spectateur}
+        engage={engage}
+        wager={mine?.totalWager ?? 0}
+        leaving={leaving}
+        onGarder={garderMaPlace}
+        onQuitter={() => void quitter()}
+      />
+
       <p aria-live="polite" aria-atomic="true" className="sr-only">
         {annonce}
       </p>
     </div>
+  );
+}
+
+/**
+ * Sortie de la page — deux issues, jamais la même.
+ *
+ * Le tapis ne se ferme pas quand on tourne le dos : la place, la mise et le
+ * verrou d'activité restent acquis jusqu'à un vrai départ. Un simple lien de
+ * retour laissait donc le joueur engagé sans qu'il le sache, et le salon lui
+ * refusait ensuite toute autre table sans qu'il comprenne pourquoi.
+ *
+ * On nomme donc les deux issues au moment du geste, plutôt que d'en deviner une.
+ */
+function LeaveDialog({
+  open,
+  onClose,
+  spectateur,
+  engage,
+  wager,
+  leaving,
+  onGarder,
+  onQuitter,
+}: {
+  open: boolean;
+  onClose: () => void;
+  spectateur: boolean;
+  engage: boolean;
+  wager: number;
+  leaving: boolean;
+  onGarder: () => void;
+  onQuitter: () => void;
+}) {
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Quitter cette page ?"
+      footer={
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <Button onClick={onGarder} disabled={leaving} className="flex-1">
+            {spectateur ? "Rester à la table" : "Garder ma place"}
+          </Button>
+          <Button variant="outline" onClick={onQuitter} loading={leaving} className="flex-1">
+            <LogOut className="size-4" aria-hidden /> Quitter la table
+          </Button>
+        </div>
+      }
+    >
+      <div className="space-y-3 text-sm">
+        <p className="text-cream">
+          {spectateur
+            ? "Tu peux aller au salon sans cesser de suivre cette table : un bandeau te ramènera ici en un clic."
+            : "Tu peux aller au salon sans rendre ta place : un bandeau te ramènera ici en un clic."}
+        </p>
+
+        {engage && (
+          <p className="rounded-xl border border-brass/40 bg-brass/10 px-4 py-3 text-cream">
+            {formatCoins(wager)} sont engagés sur cette manche. Ils restent en jeu dans les deux
+            cas, et ta main restera automatiquement si ton tour expire sans toi.
+          </p>
+        )}
+
+        <p className="text-cream-dim">
+          {spectateur
+            ? "Quitter la table libère ton audience et te rend l'accès aux autres jeux."
+            : `Quitter la table rend ta place aux autres joueurs. Rester sans miser pendant ${BLACKJACK_IDLE_ROUNDS_MAX} manches te lève de toi-même.`}
+        </p>
+
+        <p className="text-xs text-cream-faint">
+          Tant que tu es à cette table, spectateur compris, tu ne peux pas rejoindre un autre jeu.
+        </p>
+      </div>
+    </Modal>
   );
 }
 

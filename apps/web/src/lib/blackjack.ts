@@ -1,7 +1,6 @@
 import type { BlackjackView } from "@maxoujeux/shared";
 import { create } from "zustand";
 import { syncServerClock } from "./clock.js";
-import { navigate, useRouteStore } from "./route.js";
 import type { GameSocket } from "./socket-types.js";
 import { pushToast } from "./toast.js";
 import { isNewerBlackjackView } from "./blackjack-state.js";
@@ -51,12 +50,20 @@ export const useBlackjack = create<BlackjackStore>((set, get) => ({
   },
 }));
 
+/**
+ * Branche l'état de la table.
+ *
+ * **Aucune navigation ici.** L'état d'une table de blackjack arrive à chaque
+ * carte, à chaque mise et à chaque minuterie : rediriger sur sa réception
+ * happait le joueur dès qu'il tentait de partir, même seul à la table, et la
+ * page se rouvrait toute seule. Ce n'était pas un garde-fou contre les départs
+ * sauvages mais un effet de bord, aux jeux de duel le même gestionnaire ne
+ * navigue qu'au **démarrage** d'une partie.
+ *
+ * Le retour se fait par le bandeau de reprise, et c'est le salon qui navigue
+ * après un `tables:join`. Quitter la page ne coupe rien : la place et la mise
+ * restent au joueur, exactement comme aux autres jeux.
+ */
 export function bindBlackjackEvents(socket: GameSocket): void {
-  socket.on("blackjack:state", (view) => {
-    useBlackjack.getState().apply(view);
-    const route = useRouteStore.getState().route;
-    if (!(route.name === "table" && route.tableId === view.id)) {
-      navigate({ name: "table", tableId: view.id });
-    }
-  });
+  socket.on("blackjack:state", (view) => useBlackjack.getState().apply(view));
 }

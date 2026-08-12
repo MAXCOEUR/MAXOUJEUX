@@ -54,6 +54,7 @@ export function createTableNotifier(io: GameServer): TableNotifier {
         const view = activeViewFor(tableId, userId);
         if (!view) continue;
         if (view.game === "blackjack") io.to(userRoom(userId)).emit("blackjack:state", view);
+        else if (view.game === "roulette") io.to(userRoom(userId)).emit("roulette:state", view);
         else io.to(userRoom(userId)).emit("match:state", view);
       }
     },

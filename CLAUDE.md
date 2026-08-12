@@ -13,7 +13,7 @@ pnpm install
 pnpm dev                 # API :3000 + front :5173 en parallèle
 pnpm typecheck           # tsc --noEmit sur les 4 paquets — à lancer avant tout commit
 pnpm build               # tsup (API) + tsc && vite build (front)
-pnpm test                # 190 tests (58 partagés, 46 moteurs, 72 API, 14 web)
+pnpm test                # 286 tests (58 partagés, 64 moteurs, 100 API, 64 web)
 pnpm db:generate         # OBLIGATOIRE après toute modification de src/db/schema.ts
 ```
 
@@ -382,6 +382,37 @@ Ce qui est déjà en place et **à consommer sans le réécrire** :
   fermée du croupier est déjà à l'écran quand elle s'ouvre. Et **le recul d'un siège sur
   l'arc est en `rem`, jamais en pourcentage de sa hauteur** : un siège vide fait le quart
   d'un siège à deux mains séparées, et l'arc se tordait autour des places libres.
+- **Roulette** est livrée dans `modules/roulette/` : table unique, un à huit joueurs, mises
+  **simultanées** et agrégées par case. C'est le patron le plus proche du poker pour tout
+  ce qui touche à plusieurs joueurs engagés sur le même tour.
+
+  Quatre points s'y tiennent :
+
+  1. Le numéro est tiré au **début** de `spinning` et voyage dans l'état. Un joueur peut
+     le lire dans le réseau avant l'arrêt de la bille — sans conséquence, les mises étant
+     fermées — et c'est le seul moyen pour qu'un joueur arrivant en cours de lancer voie
+     une roue cohérente. Ne pas « cacher » ce numéro pour faire plus sûr : on casserait
+     la reprise sans rien gagner.
+  2. `roulette:bet` porte **un tableau de cases et aucun numéro de version**. Le joueur
+     compose sur le tapis puis confirme : une transaction, un débit, tout ou rien. Un
+     garde de version ferait échouer une mise composée pendant que le voisin posait la
+     sienne, la version bougeant à chaque confirmation.
+  3. Les plafonds sont **par type de case** (`ROULETTE_MAX_BET`), plus bas quand le
+     rapport monte. Le plein est limité à 100 MC : à 2 500 il paierait 87 500 MC et
+     rendrait tous les autres jeux du site sans intérêt en un tour.
+  4. Le zéro fait tout perdre sauf le plein sur zéro. Les deux pièges à ne jamais
+     réintroduire : 0 est pair, et 0 est inférieur à 18 — les laisser gagner supprimerait
+     l'avantage de la maison. Un test du moteur les verrouille.
+
+  Côté front, `components/games/casino/Chips.tsx` et `lib/chips.ts` sont **communs au
+  blackjack et à la roulette** : un jeton n'appartient à aucun jeu, et deux codes couleur
+  pour la même valeur seraient un contresens.
+
+- **La reprise des tours interrompus** est factorisée dans `modules/tables/recovery.ts`
+  (`recoverOpenRounds`). Le blackjack et la roulette l'appellent ; tout nouveau jeu à
+  mises doit faire de même plutôt que recopier la requête. C'est du code d'après-incident,
+  celui qu'on relit le moins et dont on a le plus besoin qu'il soit juste.
+
 - **Elo** : la colonne `stats.elo` existe et reste à 1 000. Le classement est au lot 5 ;
   `settle.ts` ne doit pas y toucher avant.
 

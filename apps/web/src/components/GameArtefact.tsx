@@ -93,6 +93,39 @@ export function GameArtefact({ code, className }: GameArtefactProps) {
         </svg>
       );
 
+    case "roulette":
+      return (
+        <svg {...shared}>
+          {/* Le cylindre, vu de trois quarts : une ellipse et non un cercle,
+              sinon l'artefact se lit comme une cible et non comme une roue
+              posée sur une table. */}
+          <ellipse cx="60" cy="50" rx="42" ry="30" fill="#1a2e23" stroke="#8a6a28" strokeWidth="2" />
+          {/* Huit cases alternées, assez pour donner le motif sans le compter. */}
+          {[0, 1, 2, 3, 4, 5, 6, 7].map((index) => {
+            const debut = (index * Math.PI) / 4;
+            const fin = debut + Math.PI / 4;
+            const point = (angle: number, rx: number, ry: number) =>
+              `${(60 + rx * Math.cos(angle)).toFixed(1)} ${(50 + ry * Math.sin(angle)).toFixed(1)}`;
+            return (
+              <path
+                key={index}
+                d={`M ${point(debut, 18, 13)} L ${point(debut, 40, 28)} A 40 28 0 0 1 ${point(fin, 40, 28)} L ${point(fin, 18, 13)} Z`}
+                fill={index % 2 === 0 ? "#8f2a20" : "#14100f"}
+                stroke="#8a6a28"
+                strokeWidth="0.6"
+              />
+            );
+          })}
+          {/* Moyeu de laiton, et la bille sur la piste. */}
+          <ellipse cx="60" cy="50" rx="17" ry="12" fill="#122019" stroke="#c8a250" strokeWidth="1.5" />
+          <ellipse cx="60" cy="50" rx="6" ry="4" fill="#c8a250" />
+          <circle cx="88" cy="38" r="4" fill={CREAM} />
+          {/* Deux jetons posés au bord, pour l'échelle. */}
+          <ellipse cx="22" cy="76" rx="13" ry="4.5" fill="#8a6a28" />
+          <ellipse cx="22" cy="72" rx="13" ry="4.5" fill="#c8a250" />
+        </svg>
+      );
+
     case "motus":
       return (
         <svg {...shared}>

@@ -156,6 +156,9 @@ export const WALLET_REASONS = [
   "blackjack_bet",
   "blackjack_payout",
   "blackjack_refund",
+  "roulette_bet",
+  "roulette_payout",
+  "roulette_refund",
 ] as const;
 
 export type WalletReason = (typeof WALLET_REASONS)[number];
@@ -174,6 +177,9 @@ export const WALLET_REASON_LABELS: Record<WalletReason, string> = {
   blackjack_bet: "Mise blackjack",
   blackjack_payout: "Gain blackjack",
   blackjack_refund: "Remboursement blackjack",
+  roulette_bet: "Mise roulette",
+  roulette_payout: "Gain roulette",
+  roulette_refund: "Remboursement roulette",
 };
 
 // ---------------------------------------------------------------------------

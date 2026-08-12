@@ -18,10 +18,12 @@ import { TicTacToeBoard } from "@/components/games/TicTacToeBoard";
 import { cn } from "@/lib/cn";
 import { useGame } from "@/lib/game";
 import { useBlackjack } from "@/lib/blackjack";
+import { useRoulette } from "@/lib/roulette";
 import { navigate } from "@/lib/route";
 import { request, useRealtime } from "@/lib/socket";
 import { pushToast } from "@/lib/toast";
 import { BlackjackTablePage } from "@/pages/BlackjackTablePage";
+import { RouletteTablePage } from "@/pages/RouletteTablePage";
 
 /**
  * Table de jeu.
@@ -33,20 +35,23 @@ import { BlackjackTablePage } from "@/pages/BlackjackTablePage";
 export function TablePage({ user, tableId }: { user: CurrentUser; tableId: string }) {
   const match = useGame((state) => state.match);
   const blackjack = useBlackjack((state) => state.view);
+  const roulette = useRoulette((state) => state.view);
   const status = useRealtime((state) => state.status);
 
   // Demande de resynchronisation à l'arrivée : le joueur a pu ouvrir cette
   // adresse directement, ou recharger sa page en pleine partie.
   useEffect(() => {
-    if (match?.id === tableId || blackjack?.id === tableId) return;
+    if (match?.id === tableId || blackjack?.id === tableId || roulette?.id === tableId) return;
     void request<ActiveMatchView | null>((socket, ack) => socket.emit("match:sync", ack)).then((reply) => {
       if (!reply.ok || !reply.data) return;
       if (reply.data.game === "blackjack") useBlackjack.getState().apply(reply.data);
+      else if (reply.data.game === "roulette") useRoulette.getState().apply(reply.data);
       else useGame.getState().apply(reply.data);
     });
-  }, [tableId, match?.id, blackjack?.id]);
+  }, [tableId, match?.id, blackjack?.id, roulette?.id]);
 
   if (blackjack?.id === tableId) return <BlackjackTablePage user={user} view={blackjack} />;
+  if (roulette?.id === tableId) return <RouletteTablePage user={user} view={roulette} />;
 
   // Garde séparé du contenu : tout ce qui suit a besoin d'une partie chargée, et
   // la passer en propriété évite de la revérifier dans chaque gestionnaire.

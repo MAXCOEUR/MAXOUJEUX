@@ -6,7 +6,7 @@
  * les autres apparaissent grisés dans le lobby avec leur lot de livraison.
  */
 
-export const GAME_CODES = ["connect4", "tictactoe", "motus", "blackjack", "poker"] as const;
+export const GAME_CODES = ["connect4", "tictactoe", "motus", "blackjack", "roulette", "poker"] as const;
 
 export type GameCode = (typeof GAME_CODES)[number];
 
@@ -99,6 +99,21 @@ export const GAMES: readonly GameDefinition[] = [
     status: "live",
     milestone: 3,
     accent: "var(--color-game-blackjack)",
+  },
+  {
+    code: "roulette",
+    name: "Roulette",
+    tagline: "Trente-sept cases, une bille. Faites vos jeux.",
+    minPlayers: 1,
+    maxPlayers: 8,
+    usesChips: true,
+    // Le maximum affiché est celui du total engagé sur un tour. Chaque case a
+    // son propre plafond, plus bas quand le rapport monte : voir `roulette.ts`.
+    wager: { label: "Mise", min: 10, max: 2500, step: 10, payout: "Plein 35:1" },
+    maxTables: 1,
+    status: "live",
+    milestone: 3,
+    accent: "var(--color-game-roulette)",
   },
   {
     code: "motus",

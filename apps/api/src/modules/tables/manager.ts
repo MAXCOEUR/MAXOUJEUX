@@ -60,6 +60,22 @@ import {
   shutdownBlackjack,
   viewBlackjack,
 } from "../blackjack/service.js";
+import {
+  attachRoulette,
+  createRouletteTable,
+  detachRoulette,
+  hasRouletteTable,
+  joinRouletteTable,
+  leaveRoulette,
+  resetRouletteForTests,
+  rouletteCounts,
+  roulettePlayersOf,
+  rouletteSalonSnapshot,
+  rouletteTableOf,
+  setRouletteNotifier,
+  shutdownRoulette,
+  viewRoulette,
+} from "../roulette/service.js";
 
 /**
  * Durée pendant laquelle une table terminée reste consultable.
@@ -150,6 +166,11 @@ export function setTableNotifier(next: TableNotifier): void {
   setBlackjackNotifier({
     table: next.match,
     salon: () => next.salon("blackjack"),
+    counts: next.counts,
+  });
+  setRouletteNotifier({
+    table: next.match,
+    salon: () => next.salon("roulette"),
     counts: next.counts,
   });
 }
@@ -318,6 +339,7 @@ export async function createTable(
   stake?: number,
 ): Promise<string> {
   if (game === "blackjack") return createBlackjackTable(player);
+  if (game === "roulette") return createRouletteTable(player);
   if (stake === undefined) fail("STAKE_INVALID", "Cette mise n'est pas autorisée.", 400);
   if (!isValidStake(game, stake)) {
     fail("STAKE_INVALID", "Cette mise n'est pas autorisée.", 400);
@@ -411,6 +433,7 @@ export async function joinTable(player: PlayerIdentity, tableId: string): Promis
   // se choisit ensuite, siège par siège, via `blackjack:sit`. Voir
   // `watchBlackjackTable` pour la raison.
   if (!table && hasBlackjackTable(tableId)) return watchBlackjackTable(player, tableId);
+  if (!table && hasRouletteTable(tableId)) return joinRouletteTable(player, tableId);
 
   // --- Réservation synchrone. ---
   if (!table || !isLive(table)) fail("TABLE_GONE", "Cette table n'existe plus.", 404);
@@ -525,6 +548,7 @@ export async function play(
 export async function leave(userId: string, tableId: string): Promise<void> {
   const table = tables.get(tableId);
   if (!table && hasBlackjackTable(tableId)) return leaveBlackjack(userId, tableId);
+  if (!table && hasRouletteTable(tableId)) return leaveRoulette(userId, tableId);
   if (!table || !isLive(table)) fail("TABLE_GONE", "Cette table n'existe plus.", 404);
 
   const occupant = occupantOf(table, userId);
@@ -628,7 +652,7 @@ async function cancel(table: Table): Promise<void> {
  */
 export function attach(userId: string): string | null {
   const tableId = tableByUser.get(userId);
-  if (!tableId) return attachBlackjack(userId);
+  if (!tableId) return attachBlackjack(userId) ?? attachRoulette(userId);
 
   const table = tables.get(tableId);
   if (!table) return null;
@@ -652,6 +676,7 @@ export function detach(userId: string): void {
   const tableId = tableByUser.get(userId);
   if (!tableId) {
     detachBlackjack(userId);
+    detachRoulette(userId);
     return;
   }
 
@@ -675,16 +700,21 @@ export function detach(userId: string): void {
 // ---------------------------------------------------------------------------
 
 export function tableOf(userId: string): string | null {
-  return tableByUser.get(userId) ?? blackjackTableOf(userId);
+  return tableByUser.get(userId) ?? blackjackTableOf(userId) ?? rouletteTableOf(userId);
 }
 
 export function gameOf(tableId: string): TableGame | null {
-  return tables.get(tableId)?.game ?? (hasBlackjackTable(tableId) ? "blackjack" : null);
+  if (tables.has(tableId)) return tables.get(tableId)?.game ?? null;
+  if (hasBlackjackTable(tableId)) return "blackjack";
+  if (hasRouletteTable(tableId)) return "roulette";
+  return null;
 }
 
 export function playersOf(tableId: string): string[] {
   const table = tables.get(tableId);
-  return table ? occupants(table).map((seat) => seat.userId) : blackjackPlayersOf(tableId);
+  if (table) return occupants(table).map((seat) => seat.userId);
+  const blackjack = blackjackPlayersOf(tableId);
+  return blackjack.length > 0 ? blackjack : roulettePlayersOf(tableId);
 }
 
 function toTableSeat(occupant: Occupant): TableSeat {
@@ -748,17 +778,19 @@ export function viewFor(tableId: string, userId: string | null): MatchView | nul
 }
 
 export function activeViewFor(tableId: string, userId: string | null): import("@maxoujeux/shared").ActiveMatchView | null {
-  return viewFor(tableId, userId) ?? viewBlackjack(tableId, userId);
+  return viewFor(tableId, userId) ?? viewBlackjack(tableId, userId) ?? viewRoulette(tableId, userId);
 }
 
 export function salonSnapshot(game: TableGame): SalonSnapshot {
-  if (game === "blackjack") {
-    const table = blackjackSalonSnapshot();
+  // Le Blackjack et la Roulette tiennent leur propre table en mémoire : le
+  // gestionnaire n'en connaît que l'instantané.
+  if (game === "blackjack" || game === "roulette") {
+    const table = game === "blackjack" ? blackjackSalonSnapshot() : rouletteSalonSnapshot();
     return {
       game,
       tables: table ? [table] : [],
       used: table ? 1 : 0,
-      max: getGame("blackjack")?.maxTables ?? 1,
+      max: getGame(game)?.maxTables ?? 1,
       now: new Date().toISOString(),
     };
   }
@@ -801,6 +833,7 @@ export function tableCounts(): Partial<Record<GameCode, TableCounts>> {
     counts[game] = { waiting: 0, playing: 0, max: maxTables(game) };
   }
   counts.blackjack = blackjackCounts();
+  counts.roulette = rouletteCounts();
 
   for (const table of tables.values()) {
     const entry = counts[table.game];
@@ -831,6 +864,7 @@ export function shutdown(): void {
     }
   }
   shutdownBlackjack();
+  shutdownRoulette();
 }
 
 /** Remet le gestionnaire à zéro. Réservé aux tests. */
@@ -845,6 +879,7 @@ export function resetForTests(): void {
   tableByUser.clear();
   notifier = NO_NOTIFIER;
   resetBlackjackForTests();
+  resetRouletteForTests();
 }
 
 /** Nombre de minuteries encore armées. Réservé aux tests. */
