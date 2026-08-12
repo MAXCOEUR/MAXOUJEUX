@@ -161,12 +161,17 @@ function PhaseClock({
 }) {
   return (
     <div className="flex items-center gap-2">
+      {/* Aucune pastille au centre quand l'anneau compte les secondes : elle
+          passait derrière les chiffres et les rendait illisibles. */}
       {deadlineAt && durationMs ? (
-        <ProgressRing deadlineAt={deadlineAt} turnMs={durationMs} size={34} showSeconds>
-          <span aria-hidden className="size-2 rounded-full bg-brass" />
+        <ProgressRing deadlineAt={deadlineAt} turnMs={durationMs} size={38} showSeconds>
+          <span
+            aria-hidden
+            className="size-7 rounded-full border border-brass/25 bg-felt-deep/80"
+          />
         </ProgressRing>
       ) : (
-        <span aria-hidden className="grid size-[34px] place-items-center">
+        <span aria-hidden className="grid size-[38px] place-items-center">
           <span className="size-2 rounded-full bg-line-strong" />
         </span>
       )}

@@ -111,7 +111,7 @@ export function AppShell({ user, children }: AppShellProps) {
       </footer>
 
       <WalletPanel open={walletOpen} onClose={() => setWalletOpen(false)} />
-      <ChatPanel open={chatOpen} onClose={closeChat} />
+      <ChatPanel open={chatOpen} onClose={closeChat} meId={user.id} />
       <Toaster />
     </div>
   );

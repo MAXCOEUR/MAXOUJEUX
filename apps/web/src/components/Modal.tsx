@@ -114,11 +114,14 @@ export function Modal({
         aria-labelledby={label ? undefined : titleId}
         aria-label={label}
         className={cn(
-          "animate-rise relative flex flex-col overflow-y-auto bg-felt shadow-2xl",
+          "animate-rise relative flex flex-col bg-felt shadow-2xl",
           lateral
-            ? "h-full w-full max-w-md border-l border-line"
+            // Le panneau latéral ne défile pas lui-même : c'est son contenu qui
+            // scrolle. Sans cela, un contenu haut — le chat — pousse sa zone de
+            // saisie hors de l'écran au lieu de la garder collée en bas.
+            ? "h-full w-full max-w-md overflow-hidden border-l border-line"
             : cn(
-                "max-h-[92dvh] w-full rounded-t-2xl border border-line",
+                "max-h-[92dvh] w-full overflow-y-auto rounded-t-2xl border border-line",
                 "sm:max-w-lg sm:rounded-2xl",
                 // Zone sûre iOS : sans ce complément, la barre d'action d'une
                 // feuille basse passe sous la barre de gestes.
@@ -142,7 +145,9 @@ export function Modal({
           </Button>
         </header>
 
-        <div className="flex-1 px-5 py-5">{children}</div>
+        <div className={cn("flex-1 px-5 py-5", lateral && "min-h-0 overflow-y-auto")}>
+          {children}
+        </div>
 
         {footer && (
           <footer className="sticky bottom-0 border-t border-line bg-felt/95 px-5 py-4 backdrop-blur">

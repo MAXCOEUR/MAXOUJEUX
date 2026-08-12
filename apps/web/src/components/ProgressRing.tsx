@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 import { cn } from "@/lib/cn";
 import { msUntilServer } from "@/lib/clock";
 import { formatClock } from "@/lib/countdown";
@@ -49,14 +49,26 @@ export function ProgressRing({
 
   const radius = (size - STROKE) / 2;
   const circumference = 2 * Math.PI * radius;
-  const elapsed = Math.max(0, Math.min(turnMs, turnMs - msUntilServer(deadlineAt)));
+  /**
+   * Décalage figé pour toute la durée du tour.
+   *
+   * Il est calculé **une seule fois par échéance**, et c'est essentiel : le
+   * compte à rebours des secondes provoque un rendu par seconde. Recalculer
+   * `elapsed` à chaque rendu réécrivait `animation-delay` sur une animation
+   * déjà lancée, qui repartait donc une seconde plus loin à chaque seconde —
+   * l'anneau se vidait deux fois plus vite que les chiffres au centre.
+   */
+  const elapsed = useMemo(
+    () => Math.round(Math.max(0, Math.min(turnMs, turnMs - msUntilServer(deadlineAt)))),
+    [deadlineAt, turnMs],
+  );
   const urgent = remaining <= 6_000;
   const seconds = Math.ceil(remaining / 1_000);
   const secondsCounter = showSeconds ? (
     <span
       aria-label={`${seconds} ${seconds === 1 ? "seconde restante" : "secondes restantes"}`}
       className={cn(
-        "tabular pointer-events-none absolute inset-0 z-10 grid place-items-center text-[0.68rem] font-bold leading-none",
+        "tabular pointer-events-none absolute inset-0 z-10 grid place-items-center text-[0.78rem] font-bold leading-none",
         urgent ? "text-danger" : "text-cream",
       )}
     >
@@ -124,7 +136,7 @@ export function ProgressRing({
             // à toutes les tailles d'anneau.
             ["--circonference" as string]: circumference,
             animation: `tour-ring ${turnMs}ms linear forwards`,
-            animationDelay: `-${Math.round(elapsed)}ms`,
+            animationDelay: `-${elapsed}ms`,
           }}
         />
       </svg>

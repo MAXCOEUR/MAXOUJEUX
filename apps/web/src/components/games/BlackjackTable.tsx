@@ -168,12 +168,12 @@ function PitClock({
     <div className="flex flex-col items-center gap-1">
       {deadlineAt && durationMs ? (
         <ProgressRing deadlineAt={deadlineAt} turnMs={durationMs} size={44} showSeconds>
+          {/* Disque de fond seulement : une pastille au centre passerait
+              derrière les secondes et les rendrait illisibles. */}
           <span
             aria-hidden
-            className="grid size-8 place-items-center rounded-full border border-brass/30 bg-felt-deep/80"
-          >
-            <span className="size-2.5 rounded-full bg-brass" />
-          </span>
+            className="size-8 rounded-full border border-brass/30 bg-felt-deep/80"
+          />
         </ProgressRing>
       ) : (
         <span

@@ -36,6 +36,17 @@ test("affiche avatar, pseudo, heure et corps de chaque message", () => {
   assert.doesNotMatch(html, /aria-live/);
 });
 
+test("renvoie mes propres messages à droite, pas ceux des autres", () => {
+  const html = renderToStaticMarkup(
+    <ChatPanel open onClose={() => undefined} meId="user-1" messages={[message(1), message(2)]} />,
+  );
+
+  assert.equal((html.match(/flex-row-reverse/g) ?? []).length, 2); // ligne + en-tête
+  assert.match(html, />Moi</);
+  assert.match(html, />Bastien</);
+  assert.doesNotMatch(renderChat([message(1)]), /flex-row-reverse/);
+});
+
 test("plafonne visuellement le badge de messages non lus", () => {
   assert.equal(formatUnreadBadge(1_000), "999+");
 });
