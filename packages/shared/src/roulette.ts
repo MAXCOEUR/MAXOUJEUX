@@ -37,8 +37,14 @@ export const ROULETTE_BETTING_MS = 20_000;
  */
 export const ROULETTE_SPIN_MS = 7_000;
 
-/** Affichage du résultat avant le retour à la table vide. */
-export const ROULETTE_RESULT_MS = 8_000;
+/**
+ * Règlement des gains avant le retour à la table vide.
+ *
+ * Court volontairement : le numéro sorti reste au bandeau des derniers tirages
+ * et le solde est déjà à jour dans l'en-tête. Faire patienter huit secondes
+ * devant une table figée cassait le rythme entre deux lancers.
+ */
+export const ROULETTE_RESULT_MS = 2_000;
 
 export const ROULETTE_DISCONNECT_GRACE_MS = 45_000;
 

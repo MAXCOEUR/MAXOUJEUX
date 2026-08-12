@@ -3,7 +3,8 @@ import { z } from "zod";
 export const BLACKJACK_BETTING_MS = 20_000;
 export const BLACKJACK_INSURANCE_MS = 15_000;
 export const BLACKJACK_ACTION_MS = 30_000;
-export const BLACKJACK_RESULT_MS = 8_000;
+/** Règlement des gains avant la manche suivante. Voir `ROULETTE_RESULT_MS`. */
+export const BLACKJACK_RESULT_MS = 2_000;
 export const BLACKJACK_DISCONNECT_GRACE_MS = 45_000;
 export const BLACKJACK_MAX_HANDS = 4;
 /**
