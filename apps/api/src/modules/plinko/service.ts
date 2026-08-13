@@ -166,7 +166,9 @@ export function openPlinkoTable(player: PlayerIdentity): Promise<string> {
     // onglet. En revanche, un spectateur qui demande une table doit se voir
     // refuser : sinon il récupérerait celle qu'il est en train de regarder.
     if (tables.get(existing)?.owner.userId === player.userId) return Promise.resolve(existing);
-    fail("ALREADY_IN_GAME", "Tu regardes déjà une table. Quitte-la pour ouvrir la tienne.");
+    // Simple spectateur : ouvrir la sienne le fait sortir de celle qu'il
+    // regardait, plutôt que de lui opposer un refus qu'il ne comprendrait pas.
+    leavePlinkoTable(player.userId, existing);
   }
 
   if (tables.size >= MAX_TABLES) {
@@ -201,18 +203,28 @@ export function openPlinkoTable(player: PlayerIdentity): Promise<string> {
 /**
  * Regarder une table.
  *
- * Un spectateur consomme le verrou d'activité, comme au Blackjack : on ne
- * regarde pas une table en même temps qu'on joue ailleurs, sinon la règle
- * « une seule activité à la fois » ne veut plus rien dire.
+ * Regarder est libre et ne consomme **aucun** verrou : on peut suivre la partie
+ * d'un autre en ayant la sienne en cours ailleurs. La seule contrainte est
+ * d'être présent à un endroit à la fois — sinon le client recevrait deux états
+ * concurrents pour un seul écran.
  */
 export function watchPlinkoTable(player: PlayerIdentity, tableId: string): Promise<string> {
   const table = tables.get(tableId);
   if (!table) fail("TABLE_GONE", "Cette table n'existe plus.", 404);
 
   if (tableByUser.get(player.userId) === tableId) return Promise.resolve(tableId);
-  if (tableByUser.has(player.userId)) fail("ALREADY_IN_GAME", "Tu es déjà à une table.");
-  if (!reserveActivity(player.userId, { kind: "table", id: tableId })) {
-    fail("ALREADY_IN_GAME", "Tu joues déjà à un autre jeu.");
+  // Regarder est **libre** : aucun verrou d'activité n'est pris. Un joueur assis
+  // au blackjack peut donc venir voir jouer quelqu'un d'autre sans perdre sa
+  // place. Il ne peut en revanche être présent qu'à un endroit à la fois : on
+  // le retire proprement de là où il était.
+  const precedent = tableByUser.get(player.userId);
+  if (precedent) {
+    // Sauf s'il s'agit de la sienne : partir la fermerait, et personne ne
+    // s'attend à perdre sa table en allant voir celle du voisin.
+    if (tables.get(precedent)?.owner.userId === player.userId) {
+      fail("ALREADY_IN_GAME", "Ferme ta table avant d'en regarder une autre.");
+    }
+    leavePlinkoTable(player.userId, precedent);
   }
 
   table.watchers.set(player.userId, player);
@@ -240,7 +252,7 @@ export function leavePlinkoTable(userId: string, tableId: string): void {
 
   if (!table.watchers.delete(userId)) return;
   tableByUser.delete(userId);
-  releaseActivity(userId, { kind: "table", id: tableId });
+  // Rien à relâcher : un spectateur n'a jamais pris le verrou d'activité.
   table.version += 1;
   publish(table);
 }
@@ -250,10 +262,9 @@ function close(table: PlinkoTable): void {
   const audience = [table.owner.userId, ...table.watchers.keys()];
   tables.delete(table.id);
 
-  for (const userId of audience) {
-    tableByUser.delete(userId);
-    releaseActivity(userId, { kind: "table", id: table.id });
-  }
+  for (const userId of audience) tableByUser.delete(userId);
+  // Le propriétaire est le seul à avoir pris le verrou d'activité.
+  releaseActivity(table.owner.userId, { kind: "table", id: table.id });
 
   notifier.closed(table.id, audience);
   notifier.salon();
@@ -522,9 +533,7 @@ export function shutdownPlinko(): void {
   graceTimers.clear();
   for (const table of tables.values()) {
     if (table.sweeper) clearTimeout(table.sweeper);
-    for (const userId of [table.owner.userId, ...table.watchers.keys()]) {
-      releaseActivity(userId, { kind: "table", id: table.id });
-    }
+    releaseActivity(table.owner.userId, { kind: "table", id: table.id });
   }
   tables.clear();
   tableByUser.clear();

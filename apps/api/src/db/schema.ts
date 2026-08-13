@@ -378,6 +378,37 @@ export const plinkoDrops = pgTable(
 );
 
 // ---------------------------------------------------------------------------
+// Machine à sous (lot 6)
+// ---------------------------------------------------------------------------
+
+/**
+ * Historique des tirages de machine à sous.
+ *
+ * La ligne tirée est conservée telle quelle : c'est la seule façon de
+ * reconstituer un tirage contesté, l'animation des rouleaux n'étant qu'un rejeu
+ * de ces trois symboles.
+ */
+export const slotSpins = pgTable(
+  "slot_spins",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    stake: bigint("stake", { mode: "number" }).notNull(),
+    /** Les trois symboles, de gauche à droite, par leur index de barème. */
+    reels: jsonb("reels").notNull(),
+    /** `triple`, `pair` ou `none` : ce que la ligne a payé. */
+    kind: text("kind").notNull(),
+    /** Multiplicateur en dixièmes, recopié pour survivre à un changement de barème. */
+    multiplierTenths: integer("multiplier_tenths").notNull(),
+    payout: bigint("payout", { mode: "number" }).notNull(),
+    spunAt: timestamp("spun_at", { withTimezone: true }).notNull().default(now),
+  },
+  (table) => [index("slot_spins_user_spun_idx").on(table.userId, table.spunAt)],
+);
+
+// ---------------------------------------------------------------------------
 // Chat (lot 8)
 // ---------------------------------------------------------------------------
 

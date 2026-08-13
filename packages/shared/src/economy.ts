@@ -176,6 +176,8 @@ export const WALLET_REASONS = [
   "wheel_reward",
   "plinko_stake",
   "plinko_reward",
+  "slots_stake",
+  "slots_reward",
   "admin_adjustment",
 ] as const;
 
@@ -202,6 +204,8 @@ export const WALLET_REASON_LABELS: Record<WalletReason, string> = {
   wheel_reward: "Gain à la roue",
   plinko_stake: "Mise au Plinko",
   plinko_reward: "Gain au Plinko",
+  slots_stake: "Mise à la machine",
+  slots_reward: "Gain à la machine",
   admin_adjustment: "Ajustement administrateur",
 };
 

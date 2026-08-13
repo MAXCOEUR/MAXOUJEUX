@@ -44,10 +44,10 @@ test("une table de roulette s'ouvre sans droit d'entrée, même sans un jeton", 
 });
 
 test("le tour en cours n'interdit pas d'entrer à la roulette", () => {
-  assert.match(rendre(table({ status: "playing" })), /Rejoindre — tour en cours/);
+  assert.match(rendre(table({ status: "playing" })), />Regarder</);
 });
 
-test("une table de roulette pleine n'accepte plus personne", () => {
+test("une table de roulette pleine reste ouverte aux spectateurs", () => {
   const seats = Array.from({ length: 8 }, (_, index) => ({
     seat: index,
     userId: `joueur-${index}`,
@@ -56,7 +56,26 @@ test("une table de roulette pleine n'accepte plus personne", () => {
     connected: true,
   }));
 
-  assert.match(rendre(table({ seats })), />Complète</);
+  // Plus de « Complète » qui ferme la porte : on entre pour regarder, la place
+  // se prend ensuite au tapis.
+  const html = rendre(table({ seats }));
+  assert.match(html, />Regarder</);
+  assert.doesNotMatch(html, />Complète</);
+});
+
+test("un duel complet reste fermé : il se joue à huis clos", () => {
+  const seats = [0, 1].map((index) => ({
+    seat: index,
+    userId: `joueur-${index}`,
+    pseudo: `Joueur ${index}`,
+    avatarSeed: `graine-${index}`,
+    connected: true,
+  }));
+
+  assert.match(
+    rendre(table({ game: "connect4", stake: 100, maxSeats: 2, seats }), 500),
+    />Complète</,
+  );
 });
 
 test("un duel garde sa mise d'entrée et son gain", () => {

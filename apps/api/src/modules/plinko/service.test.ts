@@ -116,15 +116,25 @@ describe("spectateurs", () => {
     expect(erreur.code).toBe("PLINKO_NOT_OWNER");
   });
 
-  it("consomme aussi le verrou d'activité pour un spectateur", async () => {
+  it("ne consomme aucun verrou d'activité : regarder est libre", async () => {
     const hote = await player();
     const curieux = await player();
     const tableId = await openPlinkoTable(hote);
     await watchPlinkoTable(curieux, tableId);
 
-    expect(activityOf(curieux.userId)).toEqual({ kind: "table", id: tableId });
-    const erreur = await appError(async () => openPlinkoTable(curieux));
-    expect(erreur.code).toBe("ALREADY_IN_GAME");
+    // Un spectateur reste libre de jouer ailleurs : il n'a rien engagé.
+    expect(activityOf(curieux.userId)).toBeNull();
+  });
+
+  it("laisse un spectateur ouvrir la sienne, en quittant celle qu'il regardait", async () => {
+    const hote = await player();
+    const curieux = await player();
+    const tableId = await openPlinkoTable(hote);
+    await watchPlinkoTable(curieux, tableId);
+
+    const sienne = await openPlinkoTable(curieux);
+    expect(sienne).not.toBe(tableId);
+    expect(activityOf(curieux.userId)).toEqual({ kind: "table", id: sienne });
   });
 
   it("ferme la table et libère les spectateurs quand l'hôte part", async () => {

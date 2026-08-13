@@ -198,7 +198,7 @@ administrer en V1).
 | **Roulette** — mises agrégées, phases temporisées | 1 à 8 | oui | 3 — *livré* |
 | **Roue de la fortune** — salle publique, un lancer par 24 h | 1 + spectateurs | oui | 4 — *livré* |
 | **Plinko** — 10 tables, trois niveaux de risque | 1 + spectateurs | oui | 5 — *livré* |
-| **Machine à sous** — trois rouleaux, table de gains | 1 | oui | 6 |
+| **Machine à sous** — 10 machines, trois rouleaux | 1 + spectateurs | oui | 6 — *livré* |
 | **Texas Hold'em** | 2 à 9 | oui | 7 |
 
 L'ordre a été arrêté délibérément : trois jeux solo courts, à moteur simple et à
@@ -217,11 +217,11 @@ joueurs ne puisse pas saturer le petit serveur. Au lancement, les limites sont :
 | **Puissance 4** | 10 parties de 2 joueurs |
 | **Morpion** | 10 parties de 2 joueurs |
 | **Motus** | 10 sessions solo |
-| **Blackjack** | 1 table de 5 joueurs |
-| **Roulette** | 1 table de 8 joueurs |
+| **Blackjack** | 1 table de 5 joueurs assis, spectateurs illimités |
+| **Roulette** | 1 table de 8 joueurs assis, spectateurs illimités |
 | **Roue de la fortune** | 1 salle, 1 lancer à la fois, spectateurs illimités |
 | **Plinko** | 10 tables, spectateurs illimités |
-| **Machine à sous** | 10 machines solo |
+| **Machine à sous** | 10 machines, spectateurs illimités |
 | **Texas Hold'em** | 1 table de 9 joueurs |
 
 Il n'existe donc qu'une seule table de poker et une seule table de blackjack au
@@ -233,6 +233,20 @@ Ces plafonds sont appliqués par le serveur, depuis une configuration centralis�
 client ne peut ni les contourner ni créer directement une room. Un joueur ne peut
 participer qu'à **une seule partie active à la fois**, quel que soit le nombre d'onglets
 ou d'appareils connectés à son compte.
+
+**Regarder ne compte pas comme jouer.** Tout le casino accepte des spectateurs — table
+de blackjack, roulette, Plinko, machine à sous — et les suivre n'engage rien : ni jetons,
+ni verrou d'activité. On peut donc venir voir une table pendant qu'on a sa propre partie
+ailleurs. Le verrou se prend au moment où l'on s'engage : en s'asseyant au blackjack ou à
+la roulette, en ouvrant sa table de Plinko ou sa machine.
+
+Deux exceptions : le **Puissance 4** et le **Morpion** se jouent à huis clos — deux
+joueurs, pas de public. Et l'on ne peut être présent qu'à un seul endroit à la fois :
+entrer quelque part fait sortir d'où l'on était.
+
+À la roulette comme au blackjack, **entrer veut dire regarder** : prendre place au tapis
+est un geste distinct, et c'est lui qui ouvre le droit de miser. Une table pleine reste
+donc consultable.
 
 Lorsque la capacité d'un jeu est atteinte, aucune nouvelle partie n'est créée et le
 serveur renvoie une erreur métier explicite ; les parties déjà commencées continuent
@@ -301,7 +315,8 @@ chacun est accompagné d'un test qui **recalcule le taux de redistribution** à 
 des poids : une case qu'on retouche sans y penser doit faire échouer la suite, pas
 apparaître six mois plus tard dans les soldes.
 
-Le taux visé est de **90 à 95 %** sur le long terme. Les trois jeux retirent donc
+Le taux visé est de **95 à 97 %** sur le long terme — nettement plus généreux qu'un vrai
+casino, qui tourne autour de 90 %. Les trois jeux retirent donc
 lentement des MaxouCoin de l'économie : ce sont des puits, pas des sources. La seule
 source gratuite reste le bonus quotidien du lobby, et la roue **ne le remplace pas**.
 
@@ -351,17 +366,21 @@ risque, choisis avant le lancer, se partagent la même planche et ne changent qu
 
 | Risque | Barème des 13 fentes, du bord vers le centre | Redistribution |
 |---|---|---:|
-| Faible | 3 – 1,9 – 1,5 – 1,2 – 1,1 – 0,9 – **0,5** | 91,65 % |
-| Moyen | 8 – 3 – 2 – 1,5 – 1,1 – 0,8 – **0,4** | 91,25 % |
-| Élevé | 25 – 9 – 4 – 2 – 1,1 – 0,5 – **0,2** | 91,3 % |
+| Faible | 3 – 1,9 – 1,5 – 1,2 – 1 – 0,9 – **0,8** | 96,0 % |
+| Moyen | 8 – 3 – 2 – 1,4 – 1 – 0,9 – **0,6** | 96,1 % |
+| Élevé | 25 – 9 – 4 – 2 – 1,1 – 0,6 – **0,2** | 95,2 % |
 
 Tous les multiplicateurs sont des **dixièmes** : avec un pas de mise de 10 MaxouCoin,
 c'est ce qui garantit un versement entier. Un barème en centièmes ferait tomber une
 mise de 10 sur 10,5 MC, que le code refuserait plutôt que d'arrondir.
 
 Les trois tables sont symétriques et rendent au moins la mise dans 38,8 % des cas. Le
-risque ne change donc pas la fréquence des gains, seulement leur amplitude : en risque
-élevé, la fente centrale ne rend que 20 % de la mise, mais les bords paient ×25.
+risque ne change donc pas la fréquence des gains, seulement leur amplitude.
+
+Le taux ne dit pas tout : la bille tombe au centre six fois sur dix, et ce sont ces
+fentes-là qui font le ressenti du jeu. En risque faible elles rendent 0,8 à 1 fois la
+mise — on perd donc souvent un peu, plutôt que rarement beaucoup. C'est ce qui distingue
+une planche agréable d'une planche qui donne l'impression de ne jamais rien rendre.
 
 Une table de Plinko n'a **qu'un seul siège** : elle appartient à son joueur, et
 n'importe qui peut la regarder. Dix tables au maximum vivent en même temps, et un
@@ -391,16 +410,28 @@ qu'un tour sur cinq et la machine serait injouable.
 | Symbole | Poids /100 | Triple | Paire |
 |---|---:|---:|---:|
 | 🍒 Cerise | 34 | ×3 | ×1 |
-| 🔔 Cloche | 28 | ×4 | ×1 |
+| 🔔 Cloche | 28 | ×4 | ×1,1 |
 | 💰 Sac | 20 | ×6 | ×1,5 |
-| 👑 Couronne | 12 | ×12 | ×2 |
-| 💎 Diamant | 5 | ×30 | ×4 |
-| **MAXOU** | 1 | **×150** | ×10 |
+| 👑 Couronne | 12 | ×13 | ×2,2 |
+| 💎 Diamant | 5 | ×32 | ×4,5 |
+| **MAXOU** | 1 | **×150** | ×11 |
 
-Redistribution : **92,8 %**, dont 65 points viennent des paires et 27,8 des triples. Un
+Redistribution : **95,9 %**, dont 68 points viennent des paires et 28 des triples. Un
 tour sur 1,6 paie quelque chose. Le MAXOU triple sort une fois sur un million : à la mise
 maximale de 100 MC il verse 15 000 MC, et il n'est pas censé être vu — c'est ce qui en
 fait une histoire à raconter le jour où il tombe.
+
+Une paire paie le symbole **apparié, où qu'il soit sur la ligne** : n'accepter que les
+paires adjacentes serait une règle de plus à expliquer pour un gain nul.
+
+Comme le Plinko, une machine est une **table à un seul siège** : dix machines vivent en
+même temps, chacune appartient à son joueur, et n'importe qui peut la regarder. La mise
+se choisit tour par tour.
+
+Les trois rouleaux ne s'arrêtent pas ensemble — 1 200, 1 800 puis 2 400 ms. Ce décalage
+est tout le suspense de la machine à sous : deux MAXOU alignés et le troisième qui tourne
+encore. Les rouleaux occupent la machine pendant leur rotation, ce qui tient lieu de
+cadence : on ne relance pas tant que le dernier n'est pas tombé.
 
 ---
 
@@ -584,7 +615,7 @@ téléphone 360 px.
 |---|---|---|
 | **4** | Roue de la fortune : **livré** | — |
 | **5** | Plinko : **livré** | — |
-| **6** | Machine à sous : rouleaux pondérés, table de gains, rendu des rouleaux | 2–3 j |
+| **6** | Machine à sous : **livré** | — |
 | **7** | Poker Hold'em : moteur + ~60 tests, UI de table, timers, sit-out | 8–10 j |
 | **8** | Profils, classements Elo, chat, modération, sauvegardes | 3 j |
 

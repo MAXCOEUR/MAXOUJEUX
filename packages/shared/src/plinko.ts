@@ -5,7 +5,13 @@ import { z } from "zod";
  *
  * Une bille, douze rangées de picots, treize fentes. Le niveau de risque ne
  * change ni le plateau ni la fréquence des gains : uniquement ce que paie
- * chaque fente. Les trois barèmes rendent 91 à 92 % sur le long terme.
+ * chaque fente.
+ *
+ * Les trois barèmes rendent **95 à 96 %** — nettement plus qu'un vrai casino,
+ * qui tourne autour de 90 %. Ce n'est pas seulement le taux qui compte : la
+ * bille tombe au centre six fois sur dix, et ce sont ces fentes-là qui font le
+ * ressenti du jeu. Elles rendent donc 0,8 à 1 fois la mise en risque faible, au
+ * lieu de la moitié : on perd souvent un peu plutôt que rarement beaucoup.
  */
 
 /** Rangées de picots traversées par la bille. */
@@ -35,9 +41,9 @@ export const PLINKO_RISK_LABELS: Record<PlinkoRisk, string> = {
  * une mise de 10 sur 10,5 MC.
  */
 const HALF_TABLES: Record<PlinkoRisk, readonly number[]> = {
-  low: [30, 19, 15, 12, 11, 9, 5],
-  medium: [80, 30, 20, 15, 11, 8, 4],
-  high: [250, 90, 40, 20, 11, 5, 2],
+  low: [30, 19, 15, 12, 10, 9, 8],
+  medium: [80, 30, 20, 14, 10, 9, 6],
+  high: [250, 90, 40, 20, 11, 6, 2],
 };
 
 /** Barème complet d'un risque : treize fentes, de la gauche vers la droite. */

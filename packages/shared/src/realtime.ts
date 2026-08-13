@@ -33,9 +33,15 @@ import type {
   BlackjackTableRefInput,
   BlackjackView,
 } from "./blackjack.js";
-import type { RouletteBetInput, RouletteTableRefInput, RouletteView } from "./roulette.js";
+import type {
+  RouletteBetInput,
+  RouletteSitInput,
+  RouletteTableRefInput,
+  RouletteView,
+} from "./roulette.js";
 import type { PlinkoDropInput, PlinkoRiskInput, PlinkoTableView } from "./plinko.js";
 import type { WheelSpinInput, WheelView } from "./wheel.js";
+import type { SlotsSpinInput, SlotsTableView } from "./slots.js";
 import type { ChatMessage, ChatSendInput } from "./chat.js";
 
 export interface PresencePlayer {
@@ -100,6 +106,16 @@ export interface ServerToClientEvents {
    * pour tous, mais le délai de 24 h ne l'est pas.
    */
   "wheel:state": (view: WheelView) => void;
+  /**
+   * État d'une machine à sous, diffusé au propriétaire et à ses spectateurs.
+   *
+   * Le tirage en cours voyage dans cet état, résultat compris : un spectateur
+   * qui arrive pendant la rotation voit donc les mêmes rouleaux s'arrêter aux
+   * mêmes symboles que le joueur.
+   */
+  "slots:state": (view: SlotsTableView) => void;
+  /** La machine a fermé — son propriétaire est parti. */
+  "slots:closed": (payload: { tableId: string }) => void;
   "chat:message": (message: ChatMessage) => void;
 }
 
@@ -163,6 +179,13 @@ export interface ClientToServerEvents {
   "roulette:bet": (payload: RouletteBetInput, ack: (reply: ActionReply) => void) => void;
   /** Reprendre l'intégralité de ses jetons, tant que la bille n'est pas partie. */
   "roulette:clear": (payload: RouletteTableRefInput, ack: (reply: ActionReply) => void) => void;
+  /**
+   * Prendre place au tapis. On entre à la roulette pour regarder ; s'asseoir est
+   * le geste qui ouvre le droit de miser, comme au blackjack.
+   */
+  "roulette:sit": (payload: RouletteSitInput, ack: (reply: ActionReply) => void) => void;
+  /** Rendre sa place et redevenir spectateur, sans quitter la table. */
+  "roulette:stand": (payload: RouletteSitInput, ack: (reply: ActionReply) => void) => void;
 
   /** Entrer dans la salle de la roue : l'accusé porte l'état initial. */
   "wheel:enter": (ack: (reply: ActionReply<WheelView>) => void) => void;
@@ -171,7 +194,10 @@ export interface ClientToServerEvents {
   /** Miser et lancer. Une fois par 24 h, et seulement si la roue est libre. */
   "wheel:spin": (payload: WheelSpinInput, ack: (reply: ActionReply) => void) => void;
 
-  /** Lâcher une bille. Réservé au propriétaire de la planche. */
+  /** Tirer les rouleaux. Réservé au propriétaire de la machine. */
+  "slots:spin": (payload: SlotsSpinInput, ack: (reply: ActionReply) => void) => void;
+
+  /** Lâcher une bille. Réservé au propriétaire de la table. */
   "plinko:drop": (payload: PlinkoDropInput, ack: (reply: ActionReply) => void) => void;
   /** Changer de niveau de risque entre deux billes. */
   "plinko:risk": (payload: PlinkoRiskInput, ack: (reply: ActionReply) => void) => void;

@@ -60,9 +60,15 @@ interface Participant extends PlayerIdentity {
   leaveAfterRound: boolean;
 }
 
+interface Watcher extends PlayerIdentity {
+  sockets: number;
+}
+
 interface RouletteTable {
   id: string;
   players: Map<string, Participant>;
+  /** Présents sans avoir pris place : ils voient tout, ne misent rien. */
+  watchers: Map<string, Watcher>;
   phase: RoulettePhase;
   roundId: string | null;
   result: number | null;
@@ -207,6 +213,7 @@ export function createRouletteTable(player: PlayerIdentity): Promise<string> {
   const table: RouletteTable = {
     id,
     players: new Map(),
+    watchers: new Map(),
     phase: "idle",
     roundId: null,
     result: null,
@@ -240,9 +247,34 @@ export function joinRouletteTable(player: PlayerIdentity, tableId: string): Prom
   const table = tables.get(tableId);
   if (!table) fail("TABLE_GONE", "Cette table n'existe plus.", 404);
 
-  // Entrée idempotente : deux onglets sur la même table ne font pas deux joueurs.
+  // Entrée idempotente : deux onglets ne font pas deux présences.
   if (tableByUser.get(player.userId) === tableId) return Promise.resolve(tableId);
   if (tableByUser.has(player.userId)) fail("ALREADY_IN_GAME", "Tu es déjà à une table.");
+
+  // Aucun verrou d'activité ici : regarder la bille tourner n'engage rien et
+  // n'empêche pas de jouer ailleurs. C'est `sitRoulette` qui engage.
+  table.watchers.set(player.userId, { ...player, sockets: Math.max(1, connectionCount(player.userId)) });
+  tableByUser.set(player.userId, tableId);
+  table.version += 1;
+  publish(table);
+  return Promise.resolve(tableId);
+}
+
+/**
+ * Prendre place au tapis.
+ *
+ * Entrer à la roulette veut dire **regarder** ; s'asseoir est le geste distinct
+ * qui ouvre le droit de miser — exactement comme au blackjack. C'est ici, et
+ * seulement ici, que le verrou d'activité est pris.
+ *
+ * Tout le corps est **synchrone** : on contrôle la place et on l'occupe dans le
+ * même bloc, sans `await` au milieu. Node étant mono-thread, deux arrivées
+ * simultanées ne peuvent pas franchir le même plafond.
+ */
+export function sitRoulette(player: PlayerIdentity, tableId: string): void {
+  const table = tables.get(tableId);
+  if (!table) fail("TABLE_GONE", "Cette table n'existe plus.", 404);
+  if (table.players.has(player.userId)) return;
 
   const seat = freeSeat(table);
   if (seat < 0) fail("TABLE_FULL", "La table de Roulette est complète.");
@@ -250,14 +282,58 @@ export function joinRouletteTable(player: PlayerIdentity, tableId: string): Prom
     fail("ALREADY_IN_GAME", "Tu joues déjà à un autre jeu.");
   }
 
+  const watcher = table.watchers.get(player.userId);
+  table.watchers.delete(player.userId);
   table.players.set(
     player.userId,
-    freshParticipant(player, seat, Math.max(1, connectionCount(player.userId))),
+    freshParticipant(player, seat, watcher?.sockets ?? Math.max(1, connectionCount(player.userId))),
   );
   tableByUser.set(player.userId, tableId);
   table.version += 1;
   publish(table);
-  return Promise.resolve(tableId);
+}
+
+/**
+ * Rendre sa place et redevenir spectateur.
+ *
+ * Refusé tant qu'une mise est engagée sur le tour : se lever après avoir misé
+ * reviendrait à retirer ses jetons du tapis en cours de partie. Le joueur peut
+ * d'abord les reprendre avec `roulette:clear`.
+ */
+export function standRoulette(userId: string, tableId: string): void {
+  const table = tables.get(tableId);
+  if (!table) fail("TABLE_GONE", "Cette table n'existe plus.", 404);
+  const player = table.players.get(userId);
+  if (!player) return;
+
+  if (wagerOf(player) > 0) {
+    fail("ROULETTE_BET_ENGAGED", "Tes jetons sont sur le tapis. Reprends-les d'abord.");
+  }
+
+  if (player.graceTimer) clearTimeout(player.graceTimer);
+  table.players.delete(userId);
+  releaseActivity(userId, { kind: "table", id: tableId });
+  table.watchers.set(userId, {
+    userId: player.userId,
+    pseudo: player.pseudo,
+    avatarSeed: player.avatarSeed,
+    sockets: player.sockets,
+  });
+  table.version += 1;
+  publish(table);
+}
+
+/**
+ * Ferme la table si plus personne n'est là.
+ *
+ * « Personne » compte les spectateurs : une table sans joueur assis mais avec
+ * un public reste ouverte, sinon celui qui regarde verrait la salle disparaître
+ * sous ses yeux au départ du dernier miseur.
+ */
+function disposeIfDeserted(table: RouletteTable): void {
+  if (table.players.size > 0 || table.watchers.size > 0) return;
+  clearTimer(table);
+  tables.delete(table.id);
 }
 
 function removePlayer(table: RouletteTable, player: Participant): void {
@@ -266,10 +342,7 @@ function removePlayer(table: RouletteTable, player: Participant): void {
   tableByUser.delete(player.userId);
   releaseActivity(player.userId, { kind: "table", id: table.id });
   table.version += 1;
-  if (table.players.size === 0) {
-    clearTimer(table);
-    tables.delete(table.id);
-  }
+  disposeIfDeserted(table);
   publish(table);
 }
 
@@ -535,7 +608,17 @@ export async function leaveRoulette(userId: string, tableId: string): Promise<vo
   const table = tables.get(tableId);
   if (!table) fail("TABLE_GONE", "Cette table n'existe plus.", 404);
   const player = table.players.get(userId);
-  if (!player) fail("NOT_IN_GAME", "Tu n'es pas à cette table.", 403);
+  if (!player) {
+    // Simple spectateur : rien d'engagé, rien à rembourser.
+    if (table.watchers.delete(userId)) {
+      tableByUser.delete(userId);
+      table.version += 1;
+      disposeIfDeserted(table);
+      publish(table);
+      return;
+    }
+    fail("NOT_IN_GAME", "Tu n'es pas à cette table.", 403);
+  }
 
   const engaged = wagerOf(player);
   if (engaged > 0 && table.phase === "betting") {
@@ -572,8 +655,17 @@ export async function leaveRoulette(userId: string, tableId: string): Promise<vo
 export function attachRoulette(userId: string): string | null {
   const tableId = tableByUser.get(userId);
   const table = tableId ? tables.get(tableId) : null;
-  const player = table ? table.players.get(userId) : null;
-  if (!tableId || !table || !player) return null;
+  if (!tableId || !table) return null;
+
+  // Spectateur : rien à réveiller, il suffit de le rattacher à sa table.
+  const watcher = table.watchers.get(userId);
+  if (watcher) {
+    watcher.sockets += 1;
+    return tableId;
+  }
+
+  const player = table.players.get(userId);
+  if (!player) return null;
   player.sockets += 1;
   if (player.graceTimer) {
     clearTimeout(player.graceTimer);
@@ -587,8 +679,24 @@ export function attachRoulette(userId: string): string | null {
 export function detachRoulette(userId: string): void {
   const tableId = tableByUser.get(userId);
   const table = tableId ? tables.get(tableId) : null;
-  const player = table ? table.players.get(userId) : null;
-  if (!table || !player) return;
+  if (!table) return;
+
+  // Un spectateur qui ferme son dernier onglet sort simplement de la salle :
+  // il n'a ni mise à protéger ni sursis à armer.
+  const watcher = table.watchers.get(userId);
+  if (watcher) {
+    watcher.sockets = Math.max(0, watcher.sockets - 1);
+    if (watcher.sockets > 0) return;
+    table.watchers.delete(userId);
+    tableByUser.delete(userId);
+    table.version += 1;
+    disposeIfDeserted(table);
+    publish(table);
+    return;
+  }
+
+  const player = table.players.get(userId);
+  if (!player) return;
   player.sockets = Math.max(0, player.sockets - 1);
   if (player.sockets > 0 || player.graceTimer) return;
   table.version += 1;
@@ -641,6 +749,11 @@ export function viewRoulette(tableId: string, userId: string | null): RouletteVi
     })),
     maxPlayers: ROULETTE_MAX_PLAYERS,
     you: userId && table.players.has(userId) ? userId : null,
+    watchers: [...table.watchers.values()].map((watcher) => ({
+      userId: watcher.userId,
+      pseudo: watcher.pseudo,
+      avatarSeed: watcher.avatarSeed,
+    })),
     roundId: table.roundId,
     bets: [...aggregate.values()],
     result: table.result,
@@ -669,11 +782,13 @@ export function updateRouletteIdentity(
   const table = tableId ? tables.get(tableId) : undefined;
   const player = table?.players.get(userId);
   if (player) Object.assign(player, patch);
+  const watcher = table?.watchers.get(userId);
+  if (watcher) Object.assign(watcher, patch);
 }
 
 export function roulettePlayersOf(tableId: string): string[] {
   const table = tables.get(tableId);
-  return table ? [...table.players.keys()] : [];
+  return table ? [...table.players.keys(), ...table.watchers.keys()] : [];
 }
 
 export function rouletteSalonSnapshot(): TableSummary | null {

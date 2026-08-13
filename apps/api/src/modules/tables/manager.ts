@@ -77,6 +77,19 @@ import {
   viewRoulette,
 } from "../roulette/service.js";
 import {
+  attachSlots,
+  detachSlots,
+  hasSlotsTable,
+  leaveSlotsTable,
+  openSlotsTable,
+  resetSlotsForTests,
+  shutdownSlots,
+  slotsCounts,
+  slotsSalonSnapshot,
+  slotsTableOf,
+  watchSlotsTable,
+} from "../slots/service.js";
+import {
   attachPlinko,
   detachPlinko,
   hasPlinkoTable,
@@ -356,6 +369,9 @@ export async function createTable(
   // Au Plinko, « créer » c'est ouvrir sa propre table : il n'y a ni mise de
   // table ni adversaire à attendre.
   if (game === "plinko") return openPlinkoTable(player);
+  // Même principe à la machine à sous : « créer » c'est s'installer devant la
+  // sienne.
+  if (game === "slots") return openSlotsTable(player);
   if (stake === undefined) fail("STAKE_INVALID", "Cette mise n'est pas autorisée.", 400);
   if (!isValidStake(game, stake)) {
     fail("STAKE_INVALID", "Cette mise n'est pas autorisée.", 400);
@@ -453,6 +469,7 @@ export async function joinTable(player: PlayerIdentity, tableId: string): Promis
   // Rejoindre une table de Plinko, c'est toujours la regarder : le seul siège
   // est celui de son propriétaire.
   if (!table && hasPlinkoTable(tableId)) return watchPlinkoTable(player, tableId);
+  if (!table && hasSlotsTable(tableId)) return watchSlotsTable(player, tableId);
 
   // --- Réservation synchrone. ---
   if (!table || !isLive(table)) fail("TABLE_GONE", "Cette table n'existe plus.", 404);
@@ -569,6 +586,7 @@ export async function leave(userId: string, tableId: string): Promise<void> {
   if (!table && hasBlackjackTable(tableId)) return leaveBlackjack(userId, tableId);
   if (!table && hasRouletteTable(tableId)) return leaveRoulette(userId, tableId);
   if (!table && hasPlinkoTable(tableId)) return Promise.resolve(leavePlinkoTable(userId, tableId));
+  if (!table && hasSlotsTable(tableId)) return Promise.resolve(leaveSlotsTable(userId, tableId));
   if (!table || !isLive(table)) fail("TABLE_GONE", "Cette table n'existe plus.", 404);
 
   const occupant = occupantOf(table, userId);
@@ -672,7 +690,11 @@ async function cancel(table: Table): Promise<void> {
  */
 export function attach(userId: string): string | null {
   const tableId = tableByUser.get(userId);
-  if (!tableId) return attachBlackjack(userId) ?? attachRoulette(userId) ?? attachPlinko(userId);
+  if (!tableId) {
+    return (
+      attachBlackjack(userId) ?? attachRoulette(userId) ?? attachPlinko(userId) ?? attachSlots(userId)
+    );
+  }
 
   const table = tables.get(tableId);
   if (!table) return null;
@@ -698,6 +720,7 @@ export function detach(userId: string): void {
     detachBlackjack(userId);
     detachRoulette(userId);
     detachPlinko(userId);
+    detachSlots(userId);
     return;
   }
 
@@ -725,7 +748,8 @@ export function tableOf(userId: string): string | null {
     tableByUser.get(userId) ??
     blackjackTableOf(userId) ??
     rouletteTableOf(userId) ??
-    plinkoTableOf(userId)
+    plinkoTableOf(userId) ??
+    slotsTableOf(userId)
   );
 }
 
@@ -843,12 +867,12 @@ export function salonSnapshot(game: TableGame): SalonSnapshot {
   }
   // Le Plinko tient ses dix tables lui-même : le gestionnaire n'en connaît
   // que l'instantané, comme pour le Blackjack et la Roulette.
-  if (game === "plinko") {
-    const plinko = plinkoSalonSnapshot();
+  if (game === "plinko" || game === "slots") {
+    const liste = game === "plinko" ? plinkoSalonSnapshot() : slotsSalonSnapshot();
     return {
       game,
-      tables: plinko,
-      used: plinko.length,
+      tables: liste,
+      used: liste.length,
       max: getGame(game)?.maxTables ?? 10,
       now: new Date().toISOString(),
     };
@@ -894,6 +918,7 @@ export function tableCounts(): Partial<Record<GameCode, TableCounts>> {
   counts.blackjack = blackjackCounts();
   counts.roulette = rouletteCounts();
   counts.plinko = plinkoCounts();
+  counts.slots = slotsCounts();
 
   for (const table of tables.values()) {
     const entry = counts[table.game];
@@ -926,6 +951,7 @@ export function shutdown(): void {
   shutdownBlackjack();
   shutdownRoulette();
   shutdownPlinko();
+  shutdownSlots();
 }
 
 /** Remet le gestionnaire à zéro. Réservé aux tests. */
@@ -942,6 +968,7 @@ export function resetForTests(): void {
   resetBlackjackForTests();
   resetRouletteForTests();
   resetPlinkoForTests();
+  resetSlotsForTests();
 }
 
 /** Nombre de minuteries encore armées. Réservé aux tests. */

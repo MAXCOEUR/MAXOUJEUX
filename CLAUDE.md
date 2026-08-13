@@ -339,7 +339,8 @@ Le blackjack sert de référence pour :
 - reprise après reconnexion ;
 - rendu de table casino.
 
-Regarder une table consomme également le verrou d'activité.
+Regarder une table est libre : aucun verrou d'activité n'est pris. Le verrou
+se prend en s'asseyant.
 
 Se lever pendant une mise engagée doit attendre la fin de la manche.
 

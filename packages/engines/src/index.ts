@@ -13,6 +13,7 @@ export * from "./blackjack.js";
 export * from "./motus.js";
 export * from "./plinko.js";
 export * from "./roulette.js";
+export * from "./slots.js";
 export * from "./tictactoe.js";
 export * from "./wheel.js";
 

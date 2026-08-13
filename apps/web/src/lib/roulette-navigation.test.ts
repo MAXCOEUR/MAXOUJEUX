@@ -44,6 +44,7 @@ const view: RouletteView = {
   phase: "betting",
   players: [],
   maxPlayers: 8,
+  watchers: [],
   you: null,
   roundId: "round-1",
   bets: [],

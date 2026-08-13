@@ -199,7 +199,7 @@ export const GAMES: readonly GameDefinition[] = [
     usesChips: true,
     wager: { label: "Mise", min: 10, max: 100, step: 10, payout: "jusqu'à ×150" },
     maxTables: 10,
-    status: "soon",
+    status: "live",
     milestone: 6,
     accent: "var(--color-game-slots)",
   },

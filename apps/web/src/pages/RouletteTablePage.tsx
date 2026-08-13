@@ -54,11 +54,36 @@ export function RouletteTablePage({ user, view }: { user: CurrentUser; view: Rou
   const moi = view.players.find((player) => player.userId === user.id) ?? null;
   const engage = moi?.totalWager ?? 0;
   const ouvert = view.phase === "idle" || view.phase === "betting";
+  /**
+   * Assis ou spectateur ?
+   *
+   * Entrer à la roulette veut dire regarder ; le tapis ne s'ouvre qu'une fois
+   * la place prise. C'est la même distinction qu'au blackjack.
+   */
+  const assis = moi !== null;
+  const complet = view.players.length >= view.maxPlayers;
   // Plus aucun plafond de case ni de tour : ce qui reste à engager, c'est le
   // solde, moins ce qui est déjà composé sur le tapis.
   const restant = user.balance - compose;
 
+  async function prendrePlace() {
+    markPending("sit");
+    const reply = await request<null>((socket, ack) =>
+      socket.emit("roulette:sit", { tableId: view.id }, ack),
+    );
+    if (!reply.ok) {
+      clearPending();
+      pushToast("erreur", reply.message);
+    }
+  }
+
   function poser(spot: RouletteSpot) {
+    // Un spectateur n'a pas de jetons à poser : on l'invite à s'asseoir plutôt
+    // que de laisser le tapis répondre dans le vide.
+    if (!assis) {
+      pushToast("info", "Prends place à la table pour miser.");
+      return;
+    }
     const key = spotKey(spot);
     const brouillon = draft.get(key)?.amount ?? 0;
 
@@ -198,14 +223,28 @@ export function RouletteTablePage({ user, view }: { user: CurrentUser; view: Rou
       )}
 
       <section
-        aria-label="Tes mises"
+        aria-label={assis ? "Tes mises" : "Prendre place"}
         className={cn(
           "panel fixed inset-x-0 bottom-0 z-20 rounded-b-none p-3",
           "pb-[calc(0.75rem+env(safe-area-inset-bottom))]",
           "sm:static sm:rounded-panel sm:p-4 sm:pb-4",
         )}
       >
-        {!ouvert ? (
+        {!assis ? (
+          <div className="space-y-2 text-center">
+            <p className="text-sm text-cream-dim">
+              Tu regardes la table. Prends place pour poser tes jetons.
+            </p>
+            <Button
+              onClick={() => void prendrePlace()}
+              loading={pending === "sit"}
+              disabled={complet}
+              className="w-full sm:w-auto"
+            >
+              {complet ? "Table complète — tu peux rester regarder" : "Prendre place"}
+            </Button>
+          </div>
+        ) : !ouvert ? (
           <p className="text-center text-sm text-cream-dim">
             {view.phase === "spinning"
               ? "Rien ne va plus. La bille est lancée."

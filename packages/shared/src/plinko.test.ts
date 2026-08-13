@@ -36,18 +36,27 @@ describe("planche", () => {
 });
 
 describe("barèmes", () => {
-  it("redistribuent tous entre 90 et 95 %", () => {
+  it("redistribuent tous entre 95 et 97 %", () => {
+    // Plus généreux qu'un vrai casino — volontairement — mais la maison garde
+    // un avantage : sans lui, la masse de MaxouCoin n'aurait plus de fond.
     for (const risk of PLINKO_RISKS) {
       const rtp = plinkoReturnToPlayer(risk);
-      expect(rtp).toBeGreaterThanOrEqual(0.9);
-      expect(rtp).toBeLessThanOrEqual(0.95);
+      expect(rtp).toBeGreaterThanOrEqual(0.95);
+      expect(rtp).toBeLessThanOrEqual(0.97);
     }
   });
 
   it("valent les taux annoncés au cahier des charges", () => {
-    expect(plinkoReturnToPlayer("low")).toBeCloseTo(0.9165, 3);
-    expect(plinkoReturnToPlayer("medium")).toBeCloseTo(0.9125, 3);
-    expect(plinkoReturnToPlayer("high")).toBeCloseTo(0.913, 3);
+    expect(plinkoReturnToPlayer("low")).toBeCloseTo(0.9601, 3);
+    expect(plinkoReturnToPlayer("medium")).toBeCloseTo(0.9614, 3);
+    expect(plinkoReturnToPlayer("high")).toBeCloseTo(0.9517, 3);
+  });
+
+  it("garde les fentes centrales clémentes, là où tombent six billes sur dix", () => {
+    // C'est le vrai ressenti du jeu : perdre un peu souvent se supporte, perdre
+    // la moitié de sa mise à chaque bille ne se supporte pas.
+    expect(plinkoMultiplier("low", 6)).toBeGreaterThanOrEqual(8);
+    expect(plinkoMultiplier("medium", 6)).toBeGreaterThanOrEqual(6);
   });
 
   it("montent en amplitude avec le risque sans changer la fréquence", () => {

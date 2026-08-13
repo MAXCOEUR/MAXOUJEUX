@@ -23,6 +23,7 @@ function vue(partial: Partial<RouletteView> = {}): RouletteView {
     phase: "betting",
     players: [joueur()],
     maxPlayers: 8,
+    watchers: [],
     you: "u1",
     roundId: "round-1",
     bets: [],

@@ -10,6 +10,7 @@ export * from "./motus.js";
 export * from "./plinko.js";
 export * from "./realtime.js";
 export * from "./roulette.js";
+export * from "./slots.js";
 export * from "./tables.js";
 export * from "./wheel.js";
 

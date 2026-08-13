@@ -47,7 +47,10 @@ export function NewTableDialog({
    * pour toute la session.
    */
   const sansMise =
-    game.code === "blackjack" || game.code === "roulette" || game.code === "plinko";
+    game.code === "blackjack" ||
+    game.code === "roulette" ||
+    game.code === "plinko" ||
+    game.code === "slots";
 
   return (
     <Modal
@@ -98,11 +101,17 @@ export function NewTableDialog({
               Tu poses les jetons que tu veux sur le tapis, tour après tour, à partir de{" "}
               {formatCoins(game.wager.min)} par case et sans plafond.
             </p>
-          </> : <>
+          </> : game.code === "plinko" ? <>
             <p className="text-cream">La table est à toi, et n’importe qui peut venir la regarder.</p>
             <p className="text-cream-dim">
               Tu choisis ta mise à chaque bille, de {formatCoins(game.wager.min)} à{" "}
               {formatCoins(game.wager.max ?? 500)}, et tu peux les enchaîner.
+            </p>
+          </> : <>
+            <p className="text-cream">La machine est à toi, et n’importe qui peut venir la regarder.</p>
+            <p className="text-cream-dim">
+              Tu choisis ta mise à chaque tour, de {formatCoins(game.wager.min)} à{" "}
+              {formatCoins(game.wager.max ?? 100)}.
             </p>
           </>}
           <p className="text-xs text-cream-faint">Ouvrir ou rejoindre la table ne débite aucun jeton.</p>

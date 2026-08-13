@@ -25,7 +25,9 @@ import { pushToast } from "@/lib/toast";
 import { BlackjackTablePage } from "@/pages/BlackjackTablePage";
 import { RouletteTablePage } from "@/pages/RouletteTablePage";
 import { PlinkoPage } from "@/pages/PlinkoPage";
+import { SlotsPage } from "@/pages/SlotsPage";
 import { usePlinko } from "@/lib/plinko";
+import { useSlots } from "@/lib/slots";
 
 /**
  * Table de jeu.
@@ -39,6 +41,7 @@ export function TablePage({ user, tableId }: { user: CurrentUser; tableId: strin
   const blackjack = useBlackjack((state) => state.view);
   const roulette = useRoulette((state) => state.view);
   const plinko = usePlinko((state) => state.view);
+  const slots = useSlots((state) => state.view);
   const status = useRealtime((state) => state.status);
 
   // Demande de resynchronisation à l'arrivée : le joueur a pu ouvrir cette
@@ -55,9 +58,11 @@ export function TablePage({ user, tableId }: { user: CurrentUser; tableId: strin
 
   if (blackjack?.id === tableId) return <BlackjackTablePage user={user} view={blackjack} />;
   if (roulette?.id === tableId) return <RouletteTablePage user={user} view={roulette} />;
-  // La planche de Plinko a son propre canal d'état : `match:sync` ne la connaît
-  // pas, c'est `plinko:state` qui l'apporte à la connexion comme au retour.
+  // Le Plinko et la machine à sous ont leur propre canal d'état : `match:sync`
+  // ne les connaît pas, ce sont `plinko:state` et `slots:state` qui les
+  // apportent à la connexion comme au retour.
   if (plinko?.id === tableId) return <PlinkoPage user={user} tableId={tableId} />;
+  if (slots?.id === tableId) return <SlotsPage user={user} tableId={tableId} />;
 
   // Garde séparé du contenu : tout ce qui suit a besoin d'une partie chargée, et
   // la passer en propriété évite de la revérifier dans chaque gestionnaire.

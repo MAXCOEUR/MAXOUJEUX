@@ -42,6 +42,7 @@ const view: RouletteView = {
     roundNet: null,
   }],
   maxPlayers: 8,
+  watchers: [],
   you: "u1",
   roundId: "round-1",
   bets: [{ spot: { kind: "red" }, total: 100, mine: 100 }],

@@ -5,6 +5,7 @@ import { spotKey, type RouletteSpot } from "@maxoujeux/shared";
 import { db, runMigrations } from "../../db/index.js";
 import { matches } from "../../db/schema.js";
 import { AppError } from "../../lib/errors.js";
+import { activityOf } from "../games/activity.js";
 import { balanceOf, ledgerSum, trackCreated } from "../../test/fixtures.js";
 import type { PlayerIdentity } from "../tables/manager.js";
 import {
@@ -12,6 +13,8 @@ import {
   clearRoulette,
   createRouletteTable,
   joinRouletteTable,
+  sitRoulette,
+  standRoulette,
   leaveRoulette,
   recoverRouletteRounds,
   resetRouletteForTests,
@@ -74,6 +77,17 @@ function currentRound(tableId: string, userId: string): string {
   return roundId;
 }
 
+/**
+ * Entre à la table **et** prend place.
+ *
+ * Depuis que la roulette a un mode spectateur, entrer ne suffit plus à miser :
+ * la plupart des scénarios veulent un joueur assis au tapis.
+ */
+async function assied(identite: Awaited<ReturnType<typeof player>>, tableId: string): Promise<void> {
+  await joinRouletteTable(identite, tableId);
+  sitRoulette(identite, tableId);
+}
+
 beforeAll(() => runMigrations(), 60_000);
 afterEach(() => {
   resetRouletteForTests();
@@ -92,7 +106,7 @@ describe("table de roulette", () => {
     const host = await player();
     const tableId = await createRouletteTable(host);
     const invite = await player();
-    await joinRouletteTable(invite, tableId);
+    await assied(invite, tableId);
 
     const vue = viewRoulette(tableId, invite.userId);
     expect(vue).toMatchObject({ game: "roulette", phase: "idle", you: invite.userId, maxPlayers: 8 });
@@ -101,20 +115,55 @@ describe("table de roulette", () => {
     expect(await balanceOf(invite.userId)).toBe(5_000);
   });
 
-  it("refuse un neuvième joueur", async () => {
+  it("refuse une neuvième place, mais laisse entrer le surnuméraire", async () => {
     const host = await player();
     const tableId = await createRouletteTable(host);
-    for (let index = 1; index < 8; index += 1) await joinRouletteTable(await player(), tableId);
+    for (let index = 1; index < 8; index += 1) await assied(await player(), tableId);
 
     const surnumeraire = await player();
-    expect((await errorOf(() => joinRouletteTable(surnumeraire, tableId))).code).toBe("TABLE_FULL");
+    // Entrer reste possible : la table est pleine de joueurs, pas de public.
+    await joinRouletteTable(surnumeraire, tableId);
+    expect((await errorOf(async () => sitRoulette(surnumeraire, tableId))).code).toBe("TABLE_FULL");
+
+    const vue = viewRoulette(tableId, surnumeraire.userId);
+    expect(vue?.you).toBeNull();
+    expect(vue?.watchers.map((w) => w.userId)).toEqual([surnumeraire.userId]);
+  });
+
+  it("laisse regarder sans engager quoi que ce soit", async () => {
+    const host = await player();
+    const tableId = await createRouletteTable(host);
+    const curieux = await player();
+    await joinRouletteTable(curieux, tableId);
+
+    const vue = viewRoulette(tableId, curieux.userId);
+    expect(vue?.you).toBeNull();
+    expect(vue?.players).toHaveLength(1);
+    expect(await balanceOf(curieux.userId)).toBe(5_000);
+    // Aucun verrou : regarder la bille n'empêche pas de jouer ailleurs.
+    expect(activityOf(curieux.userId)).toBeNull();
+  });
+
+  it("assied puis relève un joueur, qui reste spectateur", async () => {
+    const host = await player();
+    const tableId = await createRouletteTable(host);
+    const invite = await player();
+    await assied(invite, tableId);
+    expect(activityOf(invite.userId)).toEqual({ kind: "table", id: tableId });
+
+    standRoulette(invite.userId, tableId);
+    const vue = viewRoulette(tableId, invite.userId);
+    expect(vue?.you).toBeNull();
+    expect(vue?.watchers.map((w) => w.userId)).toEqual([invite.userId]);
+    // Se lever rend le siège, donc le verrou : on peut aller jouer ailleurs.
+    expect(activityOf(invite.userId)).toBeNull();
   });
 
   it("débite le total d'un coup et le montre à toute la table", async () => {
     const host = await player();
     const tableId = await createRouletteTable(host);
     const temoin = await player();
-    await joinRouletteTable(temoin, tableId);
+    await assied(temoin, tableId);
 
     await betRoulette(host.userId, tableId, [
       { spot: { kind: "red" }, amount: 100 },
@@ -139,7 +188,7 @@ describe("table de roulette", () => {
     const host = await player();
     const tableId = await createRouletteTable(host);
     const invite = await player();
-    await joinRouletteTable(invite, tableId);
+    await assied(invite, tableId);
 
     await betRoulette(host.userId, tableId, [{ spot: { kind: "black" }, amount: 50 }]);
     currentRound(tableId, host.userId);
@@ -153,7 +202,7 @@ describe("table de roulette", () => {
     const host = await player();
     const invite = await player();
     const tableId = await createRouletteTable(host);
-    await joinRouletteTable(invite, tableId);
+    await assied(invite, tableId);
 
     await betRoulette(host.userId, tableId, [{ spot: { kind: "red" }, amount: 10 }]);
     currentRound(tableId, host.userId);
@@ -172,7 +221,7 @@ describe("table de roulette", () => {
     const host = await player();
     const spectateur = await player();
     const tableId = await createRouletteTable(host);
-    await joinRouletteTable(spectateur, tableId);
+    await assied(spectateur, tableId);
 
     await betRoulette(host.userId, tableId, [{ spot: { kind: "red" }, amount: 10 }]);
     currentRound(tableId, host.userId);
@@ -264,7 +313,7 @@ describe("table de roulette", () => {
     const host = await player();
     const tableId = await createRouletteTable(host);
     const invite = await player();
-    await joinRouletteTable(invite, tableId);
+    await assied(invite, tableId);
 
     await betRoulette(host.userId, tableId, [{ spot: { kind: "red" }, amount: 100 }]);
     currentRound(tableId, host.userId);
@@ -323,7 +372,7 @@ describe("tirage et règlement", () => {
     const gagnant = await player();
     const perdant = await player();
     const tableId = await createRouletteTable(gagnant);
-    await joinRouletteTable(perdant, tableId);
+    await assied(perdant, tableId);
 
     await betRoulette(gagnant.userId, tableId, [{ spot: { kind: "black" }, amount: 200 }]);
     const roundId = currentRound(tableId, gagnant.userId);
@@ -361,7 +410,7 @@ describe("départs et reprise", () => {
     const host = await player();
     const tableId = await createRouletteTable(host);
     const invite = await player();
-    await joinRouletteTable(invite, tableId);
+    await assied(invite, tableId);
 
     await betRoulette(invite.userId, tableId, [{ spot: { kind: "high" }, amount: 400 }]);
     currentRound(tableId, invite.userId);

@@ -13,6 +13,7 @@ import { useChat } from "./chat.js";
 import { bindBlackjackEvents, useBlackjack } from "./blackjack.js";
 import { bindRouletteEvents, useRoulette } from "./roulette.js";
 import { bindPlinkoEvents, usePlinko } from "./plinko.js";
+import { bindSlotsEvents, useSlots } from "./slots.js";
 import {
   bindWheelEvents,
   isInWheelRoom,
@@ -84,10 +85,11 @@ export const useRealtime = create<RealtimeState>((set, get) => ({
           useGame.getState().clear();
           useBlackjack.getState().clear();
           useRoulette.getState().clear();
-          // Pas de `usePlinko.clear()` ici : une planche n'est pas une partie au
-          // sens de `match:sync`, qui répond donc toujours « aucune » pour elle.
-          // L'effacer ferait disparaître la planche que le serveur vient tout
-          // juste de renvoyer à la reconnexion.
+          // Pas de `usePlinko.clear()` ni de `useSlots.clear()` ici : une table
+          // de Plinko ou de machine à sous n'est pas une partie au sens de
+          // `match:sync`, qui répond donc toujours « aucune » pour elles. Les
+          // effacer ferait disparaître la table que le serveur vient tout juste
+          // de renvoyer à la reconnexion.
         }
       });
 
@@ -140,6 +142,7 @@ export const useRealtime = create<RealtimeState>((set, get) => ({
     bindBlackjackEvents(socket);
     bindRouletteEvents(socket);
     bindPlinkoEvents(socket);
+    bindSlotsEvents(socket);
     bindWheelEvents(socket);
     bindMotusEvents(socket);
 
@@ -156,7 +159,10 @@ export const useRealtime = create<RealtimeState>((set, get) => ({
     // précédent.
     useGame.getState().clear();
     useBlackjack.getState().clear();
+    useRoulette.getState().clear();
     usePlinko.getState().clear();
+    useSlots.getState().clear();
+    useWheel.getState().clear();
     useMotus.getState().clear();
     useTables.getState().clear();
     useChat.getState().clear();

@@ -156,14 +156,28 @@ export interface RouletteSpotBet {
   mine: number;
 }
 
+export interface RoulettePlayerIdentity {
+  userId: string;
+  pseudo: string;
+  avatarSeed: string;
+}
+
 export interface RouletteView {
   id: string;
   game: "roulette";
   phase: RoulettePhase;
   players: RoulettePlayerView[];
   maxPlayers: number;
-  /** Identifiant du destinataire s'il est à la table. */
+  /** Identifiant du destinataire s'il a **pris place**. Null s'il regarde. */
   you: string | null;
+  /**
+   * Ceux qui regardent sans avoir pris place.
+   *
+   * Entrer à la roulette veut dire regarder : le tapis ne s'ouvre qu'une fois
+   * assis, comme au blackjack. C'est ce qui permet de suivre une table pleine,
+   * ou de venir voir tourner la bille en ayant sa partie ailleurs.
+   */
+  watchers: RoulettePlayerIdentity[];
   roundId: string | null;
   bets: RouletteSpotBet[];
   /** Numéro sorti. Rempli dès `spinning`, pour que la roue sache où s'arrêter. */
@@ -180,6 +194,10 @@ export interface RouletteView {
 // ---------------------------------------------------------------------------
 // Validation des intentions
 // ---------------------------------------------------------------------------
+
+/** Prendre place, ou rendre sa place : deux gestes distincts de l'entrée. */
+export const rouletteSitSchema = z.object({ tableId: z.string().uuid() });
+export type RouletteSitInput = z.infer<typeof rouletteSitSchema>;
 
 export const rouletteSpotSchema = z.union([
   z.object({ kind: z.literal("straight"), number: z.number().int().min(0).max(36) }),

@@ -1,4 +1,11 @@
-import { formatCoins, getGame, isMyTable, winPayout, type TableSummary } from "@maxoujeux/shared";
+import {
+  allowsSpectators,
+  formatCoins,
+  getGame,
+  isMyTable,
+  winPayout,
+  type TableSummary,
+} from "@maxoujeux/shared";
 import { Swords } from "lucide-react";
 import { Avatar } from "./Avatar";
 import { Button } from "./Button";
@@ -23,14 +30,13 @@ function libelleAction({
   tropCher: boolean;
   enCours: boolean;
 }): string {
-  if (busy) return "Déjà en partie";
-  if (spectateur) return complete ? "Regarder — table complète" : "Regarder";
-  if (casino) {
-    if (complete) return "Complète";
-    // Entrer pendant le lancer est permis : on annonce l'attente plutôt que de
-    // laisser croire qu'on va pouvoir miser tout de suite.
-    return enCours ? "Rejoindre — tour en cours" : "Rejoindre";
+  if (spectateur) {
+    // Le mot dit ce qui va se passer : on entre pour regarder, et on prend sa
+    // place — siège, levier ou tapis — une fois à la table.
+    if (complete || enCours) return "Regarder";
+    return casino ? "Rejoindre" : "Regarder";
   }
+  if (busy) return "Déjà en partie";
   if (complete) return "Complète";
   if (tropCher) return "Solde insuffisant";
   return "Rejoindre";
@@ -75,14 +81,17 @@ export function TableCard({
    */
   const casino = table.stake === null;
   /**
-   * Au blackjack, entrer veut dire **regarder** : la place se choisit ensuite,
-   * sur le tapis. Une table complète reste donc ouverte — c'est même là que le
-   * mode spectateur sert le plus. À la roulette il n'y a pas de siège : une
-   * table pleine est vraiment pleine.
+   * Partout dans le casino, entrer veut dire **regarder** : la place, le siège
+   * ou le levier se prennent ensuite. Une table complète ou en pleine partie
+   * reste donc accessible — c'est même là que le mode spectateur sert le plus.
+   * Seuls les duels se jouent à huis clos.
    */
-  const spectateur = table.game === "blackjack";
-  const joignable = casino
-    ? !mine && !busy && (spectateur || !complete)
+  const spectateur = allowsSpectators(table.game);
+  // Regarder ne consomme plus rien : même « déjà en partie » ailleurs, on peut
+  // venir voir. Seul le duel garde ses conditions d'entrée, puisqu'y entrer
+  // engage la mise.
+  const joignable = spectateur
+    ? !mine
     : !enCours && !complete && !mine && !busy && !tropCher;
 
   return (

@@ -14,6 +14,7 @@ import {
 import { updateBlackjackIdentity } from "../modules/blackjack/service.js";
 import { updateRouletteIdentity } from "../modules/roulette/service.js";
 import { setPlinkoNotifier, updatePlinkoIdentity, viewPlinko } from "../modules/plinko/service.js";
+import { setSlotsNotifier, updateSlotsIdentity, viewSlots } from "../modules/slots/service.js";
 import { leaveWheelRoom, setWheelNotifier, updateWheelIdentity } from "../modules/wheel/service.js";
 import { setRealtimeLogger } from "./guard.js";
 import { createMotusNotifier, registerMotusHandlers } from "./motus.js";
@@ -29,6 +30,7 @@ import { registerBlackjackHandlers } from "./blackjack.js";
 import { registerRouletteHandlers } from "./roulette.js";
 import { createPlinkoNotifier, registerPlinkoHandlers } from "./plinko.js";
 import { createWheelNotifier, registerWheelHandlers } from "./wheel.js";
+import { createSlotsNotifier, registerSlotsHandlers } from "./slots.js";
 import { registerChatHandlers } from "./chat.js";
 import { userRoom, type GameServer } from "./types.js";
 import { setMotusNotifier, unwatch as unwatchMotus } from "../modules/motus/service.js";
@@ -119,6 +121,7 @@ export function attachRealtime(app: FastifyInstance): GameServer {
     updateRouletteIdentity(userId, patch);
     updatePlinkoIdentity(userId, patch);
     updateWheelIdentity(userId, patch);
+    updateSlotsIdentity(userId, patch);
   });
 
   // Même principe pour les tables. Les deux journaliseurs sont injectés parce
@@ -126,6 +129,7 @@ export function attachRealtime(app: FastifyInstance): GameServer {
   setTableNotifier(createTableNotifier(io));
   setPlinkoNotifier(createPlinkoNotifier(io));
   setWheelNotifier(createWheelNotifier(io));
+  setSlotsNotifier(createSlotsNotifier(io));
   setMotusNotifier(createMotusNotifier(io));
   setTableLogger((error, message) => app.log.error({ err: error }, message));
   setRealtimeLogger((error, message) => app.log.error({ err: error }, message));
@@ -159,6 +163,7 @@ export function attachRealtime(app: FastifyInstance): GameServer {
     registerRouletteHandlers(socket);
     registerPlinkoHandlers(socket);
     registerWheelHandlers(socket);
+    registerSlotsHandlers(socket);
     registerMotusHandlers(socket);
     registerChatHandlers(io, socket);
 
@@ -182,6 +187,8 @@ export function attachRealtime(app: FastifyInstance): GameServer {
         // joueur — ou le spectateur — devant sa planche après une reconnexion.
         const planche = viewPlinko(resumed, player.userId);
         if (planche) socket.emit("plinko:state", planche);
+        const machine = viewSlots(resumed, player.userId);
+        if (machine) socket.emit("slots:state", machine);
       }
     }
 

@@ -23,6 +23,7 @@ const vue = (version: number, id = "table-1"): RouletteView => ({
   phase: "idle",
   players: [],
   maxPlayers: 8,
+  watchers: [],
   you: null,
   roundId: null,
   bets: [],

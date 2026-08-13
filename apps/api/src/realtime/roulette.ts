@@ -1,6 +1,12 @@
-import { rouletteBetSchema, rouletteTableRefSchema } from "@maxoujeux/shared";
-import { betRoulette, clearRoulette } from "../modules/roulette/service.js";
+import { rouletteBetSchema, rouletteSitSchema, rouletteTableRefSchema } from "@maxoujeux/shared";
+import {
+  betRoulette,
+  clearRoulette,
+  sitRoulette,
+  standRoulette,
+} from "../modules/roulette/service.js";
 import { withAck } from "./guard.js";
+import { socketIdentity } from "./identity.js";
 import type { GameSocket } from "./types.js";
 
 /**
@@ -18,6 +24,22 @@ export function registerRouletteHandlers(socket: GameSocket): void {
     void withAck<null>(socket, "roulette:bet", ack, async () => {
       const input = rouletteBetSchema.parse(payload);
       await betRoulette(userId, input.tableId, input.bets);
+      return null;
+    });
+  });
+
+  socket.on("roulette:sit", (payload, ack) => {
+    void withAck<null>(socket, "roulette:sit", ack, async () => {
+      const input = rouletteSitSchema.parse(payload);
+      sitRoulette(socketIdentity(socket), input.tableId);
+      return null;
+    });
+  });
+
+  socket.on("roulette:stand", (payload, ack) => {
+    void withAck<null>(socket, "roulette:stand", ack, async () => {
+      const input = rouletteSitSchema.parse(payload);
+      standRoulette(userId, input.tableId);
       return null;
     });
   });

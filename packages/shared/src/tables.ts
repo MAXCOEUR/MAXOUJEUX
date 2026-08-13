@@ -232,19 +232,20 @@ export type ActionReply<T = null> =
 /** Jeux ouverts au lot 1. Les autres codes sont refusés par le serveur. */
 export const DUEL_GAMES = ["connect4", "tictactoe"] as const;
 export type DuelGame = (typeof DUEL_GAMES)[number];
-export const TABLE_GAMES = ["connect4", "tictactoe", "blackjack", "roulette", "plinko"] as const;
+export const TABLE_GAMES = ["connect4", "tictactoe", "blackjack", "roulette", "plinko", "slots"] as const;
 export type TableGame = (typeof TABLE_GAMES)[number];
 
 /**
- * Le Blackjack, la Roulette et le Plinko n'ont pas de mise à l'ouverture : elle
- * se pose manche par manche — ou bille par bille — sur la table. Les jeux de
- * duel engagent la leur d'emblée.
+ * Le Blackjack, la Roulette, le Plinko et la machine à sous n'ont pas de mise à
+ * l'ouverture : elle se pose manche par manche — ou bille par bille, ou tour par
+ * tour — sur la table. Les jeux de duel engagent la leur d'emblée.
  */
 export const createTableSchema = z.discriminatedUnion("game", [
   z.object({ game: z.enum(DUEL_GAMES), stake: z.number().int() }),
   z.object({ game: z.literal("blackjack") }),
   z.object({ game: z.literal("roulette") }),
   z.object({ game: z.literal("plinko") }),
+  z.object({ game: z.literal("slots") }),
 ]);
 
 export const tableRefSchema = z.object({
@@ -257,6 +258,17 @@ export const playSchema = tableRefSchema.extend({
   /** Version d'état sur laquelle le joueur a cliqué. */
   version: z.number().int().nonnegative(),
 });
+
+/**
+ * Le jeu accepte-t-il des spectateurs ?
+ *
+ * Tout le casino les accepte : on peut suivre une table sans y jouer, et sans
+ * que cela empêche de jouer ailleurs. Les duels en sont exclus — une partie de
+ * Puissance 4 ou de Morpion se joue à deux, à huis clos.
+ */
+export function allowsSpectators(game: GameCode): boolean {
+  return !DUEL_GAMES.includes(game as DuelGame);
+}
 
 export const watchSchema = z.object({ game: z.enum(TABLE_GAMES) });
 

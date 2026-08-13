@@ -199,6 +199,9 @@ function vacateSeat(table: BlackjackTable, player: Occupant, keepWatching: boole
       sockets: player.sockets,
       graceTimer: null,
     });
+    // Redevenu spectateur : le siège est rendu, donc le verrou aussi. Rester
+    // regarder ne doit plus empêcher de jouer ailleurs.
+    releaseActivity(player.userId, { kind: "table", id: table.id });
   } else {
     tableByUser.delete(player.userId);
     releaseActivity(player.userId, { kind: "table", id: table.id });
@@ -317,9 +320,8 @@ export function watchBlackjackTable(player: PlayerIdentity, tableId: string): Pr
   if (table.watchers.size >= BLACKJACK_MAX_WATCHERS) {
     fail("BLACKJACK_WATCHERS_FULL", "Il y a déjà trop de spectateurs à cette table.");
   }
-  if (!reserveActivity(player.userId, { kind: "table", id: tableId })) {
-    fail("ALREADY_IN_GAME", "Tu joues déjà à un autre jeu.");
-  }
+  // Regarder est **libre** : aucun verrou d'activité n'est pris ici. Il ne l'est
+  // qu'en s'asseyant, parce que c'est là qu'on engage des jetons.
 
   table.watchers.set(player.userId, {
     ...player,
@@ -349,7 +351,9 @@ export function sitBlackjack(player: PlayerIdentity, tableId: string, seat: numb
   if (table.seats[seat] !== null) fail("BLACKJACK_SEAT_TAKEN", "Cette place vient d'être prise.");
 
   const watcher = table.watchers.get(player.userId);
-  if (!watcher && !reserveActivity(player.userId, { kind: "table", id: tableId })) {
+  // Le verrou se prend en s'asseyant, spectateur ou non : c'est le siège qui
+  // engage une partie, pas la présence dans la salle.
+  if (!reserveActivity(player.userId, { kind: "table", id: tableId })) {
     fail("ALREADY_IN_GAME", "Tu joues déjà à un autre jeu.");
   }
   if (watcher?.graceTimer) clearTimeout(watcher.graceTimer);
@@ -856,7 +860,7 @@ function removeWatcher(table: BlackjackTable, userId: string): void {
   if (watcher.graceTimer) clearTimeout(watcher.graceTimer);
   table.watchers.delete(userId);
   tableByUser.delete(userId);
-  releaseActivity(userId, { kind: "table", id: table.id });
+  // Rien à relâcher : un spectateur n'a jamais pris le verrou d'activité.
   table.version += 1;
   disposeIfDeserted(table);
   publish(table);
@@ -1027,8 +1031,8 @@ export function shutdownBlackjack(): void {
 export function resetBlackjackForTests(): void {
   shutdownBlackjack();
   for (const table of tables.values()) {
-    for (const userId of audience(table)) {
-      releaseActivity(userId, { kind: "table", id: table.id });
+    for (const seated of occupants(table)) {
+      releaseActivity(seated.userId, { kind: "table", id: table.id });
     }
   }
   tables.clear();

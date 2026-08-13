@@ -43,6 +43,13 @@
       "when": 1786604376639,
       "tag": "0005_tough_raider",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1786611301390,
+      "tag": "0006_thin_violations",
+      "breakpoints": true
     }
   ]
 }

@@ -85,8 +85,14 @@ function SalonContent({
   // Une partie en cours interdit d'en ouvrir une seconde : le serveur le refuse
   // de toute façon, autant ne pas proposer le geste.
   const busy = (match !== null && match.status !== "finished") || blackjack !== null || roulette !== null;
+  /**
+   * Une seule liste, dans l'ordre : les tables où l'on peut entrer d'abord, les
+   * parties déjà lancées ensuite. Les reléguer dans une section « en cours »
+   * les faisait passer pour terminées, alors qu'on peut les regarder.
+   */
   const attente = tables.filter((table) => table.status === "waiting");
   const enCours = tables.filter((table) => table.status === "playing");
+  const toutes = [...attente, ...enCours];
 
   async function creerTable(stake: number) {
     setCreating(true);
@@ -100,7 +106,9 @@ function SalonContent({
           ? socket.emit("tables:create", { game: "roulette" }, ack)
           : game === "plinko"
             ? socket.emit("tables:create", { game: "plinko" }, ack)
-            : socket.emit("tables:create", { game: game as DuelGame, stake }, ack),
+            : game === "slots"
+              ? socket.emit("tables:create", { game: "slots" }, ack)
+              : socket.emit("tables:create", { game: game as DuelGame, stake }, ack),
     );
 
     setCreating(false);
@@ -185,12 +193,15 @@ function SalonContent({
           <h2 id="tables-heading" className="font-display text-lg font-bold text-cream">
             Tables ouvertes
           </h2>
-          <span className="tabular text-xs text-cream-faint">{attente.length} en attente</span>
+          <span className="tabular text-xs text-cream-faint">
+            {attente.length} en attente
+            {enCours.length > 0 && ` · ${enCours.length} en cours`}
+          </span>
         </div>
 
         {status !== "connected" && tables.length === 0 ? (
           <p className="text-sm text-cream-faint">Connexion au serveur…</p>
-        ) : attente.length === 0 ? (
+        ) : toutes.length === 0 ? (
           <EmptyState
             artefact={definition.code}
             title="Aucune table ouverte"
@@ -210,7 +221,7 @@ function SalonContent({
           />
         ) : (
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {attente.map((table, index) => (
+            {toutes.map((table, index) => (
               <TableCard
                 key={table.id}
                 table={table}
@@ -227,32 +238,6 @@ function SalonContent({
           </div>
         )}
       </section>
-
-      {enCours.length > 0 && (
-        <section aria-labelledby="encours-heading">
-          <h2
-            id="encours-heading"
-            className="mb-3 font-display text-sm font-bold text-cream-dim"
-          >
-            Parties en cours ({enCours.length})
-          </h2>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {enCours.map((table, index) => (
-              <TableCard
-                key={table.id}
-                table={table}
-                userId={user.id}
-                balance={user.balance}
-                busy={busy}
-                joining={false}
-                onJoin={rejoindre}
-                onReprendre={(t) => navigate({ name: "table", tableId: t.id })}
-                delay={index * 60}
-              />
-            ))}
-          </div>
-        </section>
-      )}
 
       {/* Barre d'action collée, téléphone uniquement. */}
       <div

@@ -54,6 +54,11 @@
   --color-game-plinko: #4aa3a8;
   --color-game-slots: #a06bd6;
 
+  /* Les picots de la planche de Plinko. Plus clairs que la couleur du jeu :
+     ce sont cent trente petits points sur un fond sombre, et à cette taille
+     un ton trop proche du feutre les rend simplement invisibles. */
+  --color-plinko-picot: #7fc4c8;
+
   /* Cylindre de roulette. Le rouge est plus profond que celui des cartes : il
      est laqué sur du bois, pas imprimé sur du carton, et il doit tenir à côté
      d'un noir sans que les deux se confondent à distance. Le vert du zéro est
