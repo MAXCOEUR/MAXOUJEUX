@@ -2,18 +2,11 @@ import { PLINKO_ROWS, PLINKO_SLOTS, plinkoMultiplier, plinkoProbability } from "
 import { describe, expect, it } from "vitest";
 import { dropPlinkoBall, plinkoSlotOf } from "./plinko.js";
 
-/**
- * Aleas imposes.
- *
- * Le rebond se joue desormais sur dix mille : `randomIndex(10_000) < seuil`
- * envoie a droite. Un tirage de 0 va donc toujours a droite, et 9 999 toujours
- * a gauche — l'inverse du pile ou face d'avant.
- */
 const toujours = (value: number) => () => value;
 
 describe("chute de la bille", () => {
   it("tombe à gauche quand tous les rebonds vont à gauche", () => {
-    const drop = dropPlinkoBall(toujours(9_999), "high");
+    const drop = dropPlinkoBall(toujours(0), "high");
     expect(drop.path).toHaveLength(PLINKO_ROWS);
     expect(drop.path.every((step) => step === "left")).toBe(true);
     expect(drop.slot).toBe(0);
@@ -21,7 +14,7 @@ describe("chute de la bille", () => {
   });
 
   it("tombe à droite quand tous les rebonds vont à droite", () => {
-    const drop = dropPlinkoBall(toujours(0), "low");
+    const drop = dropPlinkoBall(toujours(1), "low");
     expect(drop.slot).toBe(PLINKO_SLOTS - 1);
     expect(drop.multiplierTenths).toBe(plinkoMultiplier("low", PLINKO_SLOTS - 1));
   });
@@ -29,7 +22,7 @@ describe("chute de la bille", () => {
   it("compte la fente comme le nombre de rebonds à droite", () => {
     let appel = 0;
     // Alternance stricte : six rebonds à droite sur douze, donc la fente 6.
-    const drop = dropPlinkoBall(() => (appel++ % 2 === 0 ? 0 : 9_999), "medium");
+    const drop = dropPlinkoBall(() => (appel++ % 2 === 0 ? 1 : 0), "medium");
     expect(drop.slot).toBe(6);
     expect(plinkoSlotOf(drop.path)).toBe(drop.slot);
   });

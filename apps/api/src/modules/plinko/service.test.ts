@@ -31,8 +31,8 @@ const created = trackCreated();
 const NOW = Date.now();
 
 /** Tous les rebonds du même côté : la bille tombe dans une fente connue. */
-const toutADroite = () => 0;
-const toutAGauche = () => 9_999;
+const toutADroite = () => 1;
+const toutAGauche = () => 0;
 
 async function player(balance = 5_000, suffix = "") {
   const userId = await created.user(balance);
@@ -175,10 +175,9 @@ describe("billes", () => {
     const bille = view?.balls[0];
     expect(bille?.slot).toBe(0);
     expect(bille?.multiplierTenths).toBe(plinkoMultiplier("high", 0));
-    // Bord de la planche en risque élevé : ×19.
-    expect(bille?.payout).toBe(1_900);
-    expect(await balanceOf(joueur.userId)).toBe(1_000 - 100 + 1_900);
-    expect(await ledgerSum(joueur.userId)).toBe(1_800);
+    expect(bille?.payout).toBe(2_500);
+    expect(await balanceOf(joueur.userId)).toBe(1_000 - 100 + 2_500);
+    expect(await ledgerSum(joueur.userId)).toBe(2_400);
   });
 
   it("renvoie un trajet complet, cohérent avec la fente", async () => {
@@ -289,12 +288,12 @@ describe("billes", () => {
 
     setPlinkoRisk(joueur.userId, tableId, "low");
     await dropBall(joueur.userId, tableId, 100, NOW);
-    expect(viewPlinko(tableId, joueur.userId, NOW)?.balls[0]?.payout).toBe(200);
+    expect(viewPlinko(tableId, joueur.userId, NOW)?.balls[0]?.payout).toBe(300);
 
     setPlinkoRisk(joueur.userId, tableId, "high");
     await dropBall(joueur.userId, tableId, 100, NOW + 1_000);
     const billes = viewPlinko(tableId, joueur.userId, NOW + 1_000)?.balls ?? [];
-    expect(billes[billes.length - 1]?.payout).toBe(1_900);
+    expect(billes[billes.length - 1]?.payout).toBe(2_500);
   });
 
   it("ne compte une bille qu'une fois qu'elle a touché le fond", async () => {
@@ -318,7 +317,7 @@ describe("billes", () => {
     const apres = viewPlinko(tableId, joueur.userId, NOW + PLINKO_FALL_MS + 400);
     expect(apres?.balls).toHaveLength(0);
     expect(apres?.wagered).toBe(200);
-    expect(apres?.returned).toBe(400);
+    expect(apres?.returned).toBe(600);
   });
 
   it("conserve chaque chute en base pour pouvoir la rejouer", async () => {

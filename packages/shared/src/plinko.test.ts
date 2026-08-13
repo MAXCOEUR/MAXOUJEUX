@@ -25,32 +25,13 @@ describe("planche", () => {
     }
   });
 
-  it("répartit les billes sur une distribution complète et symétrique", () => {
+  it("suit une loi binomiale dont les probabilités totalisent 1", () => {
     let total = 0;
     for (let slot = 0; slot < PLINKO_SLOTS; slot += 1) total += plinkoProbability(slot);
     expect(total).toBeCloseTo(1, 12);
-
-    // La poussée vers l'extérieur ne favorise aucun côté : la planche reste
-    // rigoureusement symétrique.
-    for (let slot = 0; slot < PLINKO_SLOTS; slot += 1) {
-      expect(plinkoProbability(slot)).toBeCloseTo(plinkoProbability(PLINKO_SLOTS - 1 - slot), 12);
-    }
-
-    // Le centre reste le plus probable — c'est une planche de Plinko, pas une
-    // roulette — mais sans écraser le reste.
-    for (let slot = 0; slot < 6; slot += 1) {
-      expect(plinkoProbability(slot)).toBeLessThan(plinkoProbability(slot + 1));
-    }
-  });
-
-  it("dégarnit le centre par rapport à une planche non biaisée", () => {
-    // Sans poussée, la loi binomiale envoie 61 % des billes dans les trois
-    // fentes centrales, et le jeu devient monotone. On vise la moitié.
-    const centre = plinkoProbability(5) + plinkoProbability(6) + plinkoProbability(7);
-    expect(centre).toBeGreaterThan(0.45);
-    expect(centre).toBeLessThan(0.55);
-    // Autrement dit : une bille sur deux sort du centre, contre 39 % avant.
-    expect(1 - centre).toBeGreaterThan(0.45);
+    // Une bille sur 4 096 touche le bord, 924 sur 4 096 le centre.
+    expect(plinkoProbability(0)).toBeCloseTo(1 / 4096, 12);
+    expect(plinkoProbability(6)).toBeCloseTo(924 / 4096, 12);
   });
 });
 
@@ -66,37 +47,16 @@ describe("barèmes", () => {
   });
 
   it("valent les taux annoncés au cahier des charges", () => {
-    expect(plinkoReturnToPlayer("low")).toBeCloseTo(0.9568, 3);
-    expect(plinkoReturnToPlayer("medium")).toBeCloseTo(0.9565, 3);
-    expect(plinkoReturnToPlayer("high")).toBeCloseTo(0.9539, 3);
+    expect(plinkoReturnToPlayer("low")).toBeCloseTo(0.9601, 3);
+    expect(plinkoReturnToPlayer("medium")).toBeCloseTo(0.9614, 3);
+    expect(plinkoReturnToPlayer("high")).toBeCloseTo(0.9517, 3);
   });
 
-  it("découpe la planche en moitié perdante, quart rendu, quart gagnant", () => {
-    // La structure du jeu, et ce qui le rend lisible : une bille sur deux fait
-    // perdre, une sur quatre rend la mise, une sur quatre paie.
-    for (const risk of PLINKO_RISKS) {
-      let perte = 0;
-      let rendue = 0;
-      let gain = 0;
-      for (let slot = 0; slot < PLINKO_SLOTS; slot += 1) {
-        const tenths = plinkoMultiplier(risk, slot);
-        const chance = plinkoProbability(slot);
-        if (tenths < 10) perte += chance;
-        else if (tenths === 10) rendue += chance;
-        else gain += chance;
-      }
-      expect(perte).toBeCloseTo(0.5, 1);
-      expect(rendue).toBeCloseTo(0.25, 1);
-      expect(gain).toBeCloseTo(0.25, 1);
-    }
-  });
-
-  it("fait peur au centre, d'autant plus que le risque monte", () => {
-    // Le centre est l'endroit où la bille tombe le plus souvent : c'est là que
-    // le barème doit se voir.
-    expect(plinkoMultiplier("low", 6)).toBe(7);
-    expect(plinkoMultiplier("medium", 6)).toBe(4);
-    expect(plinkoMultiplier("high", 6)).toBe(2);
+  it("garde les fentes centrales clémentes, là où tombent six billes sur dix", () => {
+    // C'est le vrai ressenti du jeu : perdre un peu souvent se supporte, perdre
+    // la moitié de sa mise à chaque bille ne se supporte pas.
+    expect(plinkoMultiplier("low", 6)).toBeGreaterThanOrEqual(8);
+    expect(plinkoMultiplier("medium", 6)).toBeGreaterThanOrEqual(6);
   });
 
   it("montent en amplitude avec le risque sans changer la fréquence", () => {
@@ -114,8 +74,6 @@ describe("barèmes", () => {
 
     expect(plinkoMultiplier("high", 0)).toBeGreaterThan(plinkoMultiplier("low", 0));
     expect(plinkoMultiplier("high", 6)).toBeLessThan(plinkoMultiplier("low", 6));
-    // Les bords paient moins qu'avant : ils sortent dix fois plus souvent.
-    expect(plinkoMultiplier("high", 0)).toBeLessThanOrEqual(200);
   });
 
   it("punissent le centre et paient les bords", () => {
