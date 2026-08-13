@@ -18,6 +18,7 @@ import { walletRoutes } from "./modules/wallet/routes.js";
 import { attachRealtime } from "./realtime/index.js";
 import { recoverBlackjackRounds } from "./modules/blackjack/service.js";
 import { recoverRouletteRounds } from "./modules/roulette/service.js";
+import { recoverPokerRounds } from "./modules/poker/service.js";
 
 const app = Fastify({
   logger: {
@@ -88,6 +89,7 @@ async function start(): Promise<void> {
   await bootstrapAdmin();
   await recoverBlackjackRounds();
   await recoverRouletteRounds();
+  await recoverPokerRounds();
   await purgeExpiredSessions();
 
   // Purge quotidienne des sessions expirées. `unref` pour ne pas retenir le

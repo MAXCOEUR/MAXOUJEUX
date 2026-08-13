@@ -212,7 +212,7 @@ export const GAMES: readonly GameDefinition[] = [
     usesChips: true,
     wager: { label: "Cave", min: 500 },
     maxTables: 1,
-    status: "soon",
+    status: "live",
     milestone: 7,
     accent: "var(--color-game-poker)",
   },

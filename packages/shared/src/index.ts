@@ -8,6 +8,7 @@ export * from "./economy.js";
 export * from "./games.js";
 export * from "./motus.js";
 export * from "./plinko.js";
+export * from "./poker.js";
 export * from "./realtime.js";
 export * from "./roulette.js";
 export * from "./slots.js";

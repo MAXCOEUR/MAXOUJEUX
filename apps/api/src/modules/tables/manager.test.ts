@@ -579,6 +579,8 @@ describe("lecture et arrêt", () => {
       // il n'y a personne à y attendre.
       plinko: { waiting: 0, playing: 0, max: 10 },
       slots: { waiting: 0, playing: 0, max: 10 },
+      // Une seule table de poker sur le site.
+      poker: { waiting: 0, playing: 0, max: 1 },
     });
   });
 

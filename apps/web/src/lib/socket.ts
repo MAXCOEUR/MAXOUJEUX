@@ -14,6 +14,7 @@ import { bindBlackjackEvents, useBlackjack } from "./blackjack.js";
 import { bindRouletteEvents, useRoulette } from "./roulette.js";
 import { bindPlinkoEvents, usePlinko } from "./plinko.js";
 import { bindSlotsEvents, useSlots } from "./slots.js";
+import { bindPokerEvents, usePoker } from "./poker.js";
 import {
   bindWheelEvents,
   isInWheelRoom,
@@ -80,6 +81,7 @@ export const useRealtime = create<RealtimeState>((set, get) => ({
         if (!reply.ok) return;
         if (reply.data?.game === "blackjack") useBlackjack.getState().apply(reply.data);
         else if (reply.data?.game === "roulette") useRoulette.getState().apply(reply.data);
+        else if (reply.data?.game === "poker") usePoker.getState().apply(reply.data);
         else if (reply.data) useGame.getState().apply(reply.data);
         else {
           useGame.getState().clear();
@@ -118,6 +120,7 @@ export const useRealtime = create<RealtimeState>((set, get) => ({
     socket.on("disconnect", () => {
       useMotus.getState().clearPending();
       useBlackjack.getState().clearPending();
+      usePoker.getState().clearPending();
       set({ status: "disconnected", presence: EMPTY_PRESENCE });
     });
     socket.on("presence:update", (presence) => set({ presence }));
@@ -143,6 +146,7 @@ export const useRealtime = create<RealtimeState>((set, get) => ({
     bindRouletteEvents(socket);
     bindPlinkoEvents(socket);
     bindSlotsEvents(socket);
+    bindPokerEvents(socket);
     bindWheelEvents(socket);
     bindMotusEvents(socket);
 
@@ -162,6 +166,7 @@ export const useRealtime = create<RealtimeState>((set, get) => ({
     useRoulette.getState().clear();
     usePlinko.getState().clear();
     useSlots.getState().clear();
+    usePoker.getState().clear();
     useWheel.getState().clear();
     useMotus.getState().clear();
     useTables.getState().clear();

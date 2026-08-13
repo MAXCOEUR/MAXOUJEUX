@@ -21,6 +21,7 @@ import {
 } from "@maxoujeux/shared";
 import type { TableNotifier } from "../modules/tables/manager.js";
 import {
+  createPokerTableWithConfig,
   createTable,
   activeViewFor,
   joinTable,
@@ -56,6 +57,7 @@ export function createTableNotifier(io: GameServer): TableNotifier {
         if (!view) continue;
         if (view.game === "blackjack") io.to(userRoom(userId)).emit("blackjack:state", view);
         else if (view.game === "roulette") io.to(userRoom(userId)).emit("roulette:state", view);
+        else if (view.game === "poker") io.to(userRoom(userId)).emit("poker:state", view);
         else io.to(userRoom(userId)).emit("match:state", view);
       }
     },
@@ -88,7 +90,17 @@ export function registerTableHandlers(socket: GameSocket): void {
   socket.on("tables:create", (payload, ack) => {
     void withAck<{ tableId: string }>(socket, "tables:create", ack, async () => {
       const input = createTableSchema.parse(payload);
-      const tableId = await createTable(socketIdentity(socket), input.game, "stake" in input ? input.stake : undefined);
+      // Le poker est le seul jeu dont la table se règle à l'ouverture : ses
+      // réglages voyagent dans la demande, là où les autres n'ont au plus
+      // qu'une mise.
+      const tableId =
+        input.game === "poker"
+          ? await createPokerTableWithConfig(socketIdentity(socket), input.config)
+          : await createTable(
+              socketIdentity(socket),
+              input.game,
+              "stake" in input ? input.stake : undefined,
+            );
       return { tableId };
     });
   });

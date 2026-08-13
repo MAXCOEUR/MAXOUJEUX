@@ -15,6 +15,7 @@ import { updateBlackjackIdentity } from "../modules/blackjack/service.js";
 import { updateRouletteIdentity } from "../modules/roulette/service.js";
 import { setPlinkoNotifier, updatePlinkoIdentity, viewPlinko } from "../modules/plinko/service.js";
 import { setSlotsNotifier, updateSlotsIdentity, viewSlots } from "../modules/slots/service.js";
+import { setPokerNotifier, updatePokerIdentity, viewPoker } from "../modules/poker/service.js";
 import { leaveWheelRoom, setWheelNotifier, updateWheelIdentity } from "../modules/wheel/service.js";
 import { setRealtimeLogger } from "./guard.js";
 import { createMotusNotifier, registerMotusHandlers } from "./motus.js";
@@ -31,6 +32,7 @@ import { registerRouletteHandlers } from "./roulette.js";
 import { createPlinkoNotifier, registerPlinkoHandlers } from "./plinko.js";
 import { createWheelNotifier, registerWheelHandlers } from "./wheel.js";
 import { createSlotsNotifier, registerSlotsHandlers } from "./slots.js";
+import { createPokerNotifier, registerPokerHandlers } from "./poker.js";
 import { registerChatHandlers } from "./chat.js";
 import { userRoom, type GameServer } from "./types.js";
 import { setMotusNotifier, unwatch as unwatchMotus } from "../modules/motus/service.js";
@@ -122,6 +124,7 @@ export function attachRealtime(app: FastifyInstance): GameServer {
     updatePlinkoIdentity(userId, patch);
     updateWheelIdentity(userId, patch);
     updateSlotsIdentity(userId, patch);
+    updatePokerIdentity(userId, patch);
   });
 
   // Même principe pour les tables. Les deux journaliseurs sont injectés parce
@@ -130,6 +133,7 @@ export function attachRealtime(app: FastifyInstance): GameServer {
   setPlinkoNotifier(createPlinkoNotifier(io));
   setWheelNotifier(createWheelNotifier(io));
   setSlotsNotifier(createSlotsNotifier(io));
+  setPokerNotifier(createPokerNotifier(io));
   setMotusNotifier(createMotusNotifier(io));
   setTableLogger((error, message) => app.log.error({ err: error }, message));
   setRealtimeLogger((error, message) => app.log.error({ err: error }, message));
@@ -164,6 +168,7 @@ export function attachRealtime(app: FastifyInstance): GameServer {
     registerPlinkoHandlers(socket);
     registerWheelHandlers(socket);
     registerSlotsHandlers(socket);
+    registerPokerHandlers(socket);
     registerMotusHandlers(socket);
     registerChatHandlers(io, socket);
 
@@ -180,6 +185,7 @@ export function attachRealtime(app: FastifyInstance): GameServer {
       const view = activeViewFor(resumed, player.userId);
       if (view?.game === "blackjack") socket.emit("blackjack:state", view);
       else if (view?.game === "roulette") socket.emit("roulette:state", view);
+      else if (view?.game === "poker") socket.emit("poker:state", view);
       else if (view) socket.emit("match:state", view);
       else {
         // Le Plinko ne passe pas par `activeViewFor` : son état n'est pas une
@@ -189,6 +195,8 @@ export function attachRealtime(app: FastifyInstance): GameServer {
         if (planche) socket.emit("plinko:state", planche);
         const machine = viewSlots(resumed, player.userId);
         if (machine) socket.emit("slots:state", machine);
+        const poker = viewPoker(resumed, player.userId);
+        if (poker) socket.emit("poker:state", poker);
       }
     }
 

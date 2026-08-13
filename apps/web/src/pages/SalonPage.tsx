@@ -1,4 +1,5 @@
 import {
+  POKER_DEFAULT_CONFIG,
   formatCoins,
   getGame,
   isGameCode,
@@ -94,7 +95,7 @@ function SalonContent({
   const enCours = tables.filter((table) => table.status === "playing");
   const toutes = [...attente, ...enCours];
 
-  async function creerTable(stake: number) {
+  async function creerTable(stake: number, pokerConfig = POKER_DEFAULT_CONFIG) {
     setCreating(true);
     setCreateError(undefined);
 
@@ -108,7 +109,9 @@ function SalonContent({
             ? socket.emit("tables:create", { game: "plinko" }, ack)
             : game === "slots"
               ? socket.emit("tables:create", { game: "slots" }, ack)
-              : socket.emit("tables:create", { game: game as DuelGame, stake }, ack),
+              : game === "poker"
+                ? socket.emit("tables:create", { game: "poker", config: pokerConfig }, ack)
+                : socket.emit("tables:create", { game: game as DuelGame, stake }, ack),
     );
 
     setCreating(false);

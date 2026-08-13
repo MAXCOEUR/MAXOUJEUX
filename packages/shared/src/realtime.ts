@@ -42,6 +42,15 @@ import type {
 import type { PlinkoDropInput, PlinkoRiskInput, PlinkoTableView } from "./plinko.js";
 import type { WheelSpinInput, WheelView } from "./wheel.js";
 import type { SlotsSpinInput, SlotsTableView } from "./slots.js";
+import type {
+  PokerActInput,
+  PokerBlindsInput,
+  PokerRebuyInput,
+  PokerSitInput,
+  PokerSitOutInput,
+  PokerTableRefInput,
+  PokerView,
+} from "./poker.js";
 import type { ChatMessage, ChatSendInput } from "./chat.js";
 
 export interface PresencePlayer {
@@ -114,6 +123,14 @@ export interface ServerToClientEvents {
    * mêmes symboles que le joueur.
    */
   "slots:state": (view: SlotsTableView) => void;
+  /**
+   * État d'une table de poker, **filtré par destinataire**.
+   *
+   * C'est le seul jeu où deux joueurs de la même table ne reçoivent pas le même
+   * message : les cartes privées d'un adversaire n'y figurent tout simplement
+   * pas.
+   */
+  "poker:state": (view: PokerView) => void;
   /** La machine a fermé — son propriétaire est parti. */
   "slots:closed": (payload: { tableId: string }) => void;
   "chat:message": (message: ChatMessage) => void;
@@ -193,6 +210,19 @@ export interface ClientToServerEvents {
   "wheel:leave": () => void;
   /** Miser et lancer. Une fois par 24 h, et seulement si la roue est libre. */
   "wheel:spin": (payload: WheelSpinInput, ack: (reply: ActionReply) => void) => void;
+
+  /** Prendre une place au tapis et se caver. */
+  "poker:sit": (payload: PokerSitInput, ack: (reply: ActionReply) => void) => void;
+  /** Rendre sa place, récupérer ses jetons, rester spectateur. */
+  "poker:stand": (payload: PokerTableRefInput, ack: (reply: ActionReply) => void) => void;
+  /** Se recaver, entre deux mains seulement. */
+  "poker:rebuy": (payload: PokerRebuyInput, ack: (reply: ActionReply) => void) => void;
+  /** Parler : se coucher, checker, suivre, miser, relancer, tapis. */
+  "poker:act": (payload: PokerActInput, ack: (reply: ActionReply) => void) => void;
+  /** Régler les blindes. Réservé au créateur, effet à la main suivante. */
+  "poker:blinds": (payload: PokerBlindsInput, ack: (reply: ActionReply) => void) => void;
+  /** Se mettre en pause, ou revenir. */
+  "poker:sitout": (payload: PokerSitOutInput, ack: (reply: ActionReply) => void) => void;
 
   /** Tirer les rouleaux. Réservé au propriétaire de la machine. */
   "slots:spin": (payload: SlotsSpinInput, ack: (reply: ActionReply) => void) => void;

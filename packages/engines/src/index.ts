@@ -12,6 +12,8 @@ export * from "./connect4.js";
 export * from "./blackjack.js";
 export * from "./motus.js";
 export * from "./plinko.js";
+export * from "./poker-hand.js";
+export * from "./poker.js";
 export * from "./roulette.js";
 export * from "./slots.js";
 export * from "./tictactoe.js";

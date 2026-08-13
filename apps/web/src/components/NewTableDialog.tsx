@@ -1,4 +1,5 @@
 import {
+  POKER_DEFAULT_CONFIG,
   formatCoins,
   isValidStake,
   stakeSuggestions,
@@ -50,7 +51,8 @@ export function NewTableDialog({
     game.code === "blackjack" ||
     game.code === "roulette" ||
     game.code === "plinko" ||
-    game.code === "slots";
+    game.code === "slots" ||
+    game.code === "poker";
 
   return (
     <Modal
@@ -107,11 +109,24 @@ export function NewTableDialog({
               Tu choisis ta mise à chaque bille, de {formatCoins(game.wager.min)} à{" "}
               {formatCoins(game.wager.max ?? 500)}, et tu peux les enchaîner.
             </p>
-          </> : <>
+          </> : game.code === "slots" ? <>
             <p className="text-cream">La machine est à toi, et n’importe qui peut venir la regarder.</p>
             <p className="text-cream-dim">
               Tu choisis ta mise à chaque tour, de {formatCoins(game.wager.min)} à{" "}
               {formatCoins(game.wager.max ?? 100)}.
+            </p>
+          </> : <>
+            <p className="text-cream">
+              Table de {POKER_DEFAULT_CONFIG.seats} places, blindes{" "}
+              {formatCoins(POKER_DEFAULT_CONFIG.smallBlind)} /{" "}
+              {formatCoins(POKER_DEFAULT_CONFIG.bigBlind)}.
+            </p>
+            <p className="text-cream-dim">
+              Tu t’assois en ouvrant, avec une cave de {formatCoins(POKER_DEFAULT_CONFIG.minBuyIn)}.
+              Les autres arrivent en spectateurs et prennent place quand ils veulent.
+            </p>
+            <p className="text-xs text-cream-faint">
+              Tes jetons repartent sur ton solde en quittant la table.
             </p>
           </>}
           <p className="text-xs text-cream-faint">Ouvrir ou rejoindre la table ne débite aucun jeton.</p>

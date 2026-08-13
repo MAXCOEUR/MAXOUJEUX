@@ -26,8 +26,10 @@ import { BlackjackTablePage } from "@/pages/BlackjackTablePage";
 import { RouletteTablePage } from "@/pages/RouletteTablePage";
 import { PlinkoPage } from "@/pages/PlinkoPage";
 import { SlotsPage } from "@/pages/SlotsPage";
+import { PokerTablePage } from "@/pages/PokerTablePage";
 import { usePlinko } from "@/lib/plinko";
 import { useSlots } from "@/lib/slots";
+import { usePoker } from "@/lib/poker";
 
 /**
  * Table de jeu.
@@ -42,6 +44,7 @@ export function TablePage({ user, tableId }: { user: CurrentUser; tableId: strin
   const roulette = useRoulette((state) => state.view);
   const plinko = usePlinko((state) => state.view);
   const slots = useSlots((state) => state.view);
+  const poker = usePoker((state) => state.view);
   const status = useRealtime((state) => state.status);
 
   // Demande de resynchronisation à l'arrivée : le joueur a pu ouvrir cette
@@ -52,6 +55,7 @@ export function TablePage({ user, tableId }: { user: CurrentUser; tableId: strin
       if (!reply.ok || !reply.data) return;
       if (reply.data.game === "blackjack") useBlackjack.getState().apply(reply.data);
       else if (reply.data.game === "roulette") useRoulette.getState().apply(reply.data);
+      else if (reply.data.game === "poker") usePoker.getState().apply(reply.data);
       else useGame.getState().apply(reply.data);
     });
   }, [tableId, match?.id, blackjack?.id, roulette?.id]);
@@ -63,6 +67,7 @@ export function TablePage({ user, tableId }: { user: CurrentUser; tableId: strin
   // apportent à la connexion comme au retour.
   if (plinko?.id === tableId) return <PlinkoPage user={user} tableId={tableId} />;
   if (slots?.id === tableId) return <SlotsPage user={user} tableId={tableId} />;
+  if (poker?.id === tableId) return <PokerTablePage user={user} tableId={tableId} />;
 
   // Garde séparé du contenu : tout ce qui suit a besoin d'une partie chargée, et
   // la passer en propriété évite de la revérifier dans chaque gestionnaire.

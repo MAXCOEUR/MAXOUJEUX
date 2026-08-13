@@ -16,6 +16,7 @@ import { z } from "zod";
 import { getGame, type GameCode } from "./games.js";
 import type { BlackjackView } from "./blackjack.js";
 import type { RouletteView } from "./roulette.js";
+import { pokerTableConfigSchema, type PokerView } from "./poker.js";
 
 /** Temps accordé pour jouer un coup. Passé ce délai, le joueur perd la partie. */
 export const TURN_MS = 30_000;
@@ -176,7 +177,7 @@ export interface MatchView {
 }
 
 /** Vue autoritaire de la partie active, discriminée par `game`. */
-export type ActiveMatchView = MatchView | BlackjackView | RouletteView;
+export type ActiveMatchView = MatchView | BlackjackView | RouletteView | PokerView;
 
 // ---------------------------------------------------------------------------
 // Codes d'erreur métier
@@ -232,7 +233,15 @@ export type ActionReply<T = null> =
 /** Jeux ouverts au lot 1. Les autres codes sont refusés par le serveur. */
 export const DUEL_GAMES = ["connect4", "tictactoe"] as const;
 export type DuelGame = (typeof DUEL_GAMES)[number];
-export const TABLE_GAMES = ["connect4", "tictactoe", "blackjack", "roulette", "plinko", "slots"] as const;
+export const TABLE_GAMES = [
+  "connect4",
+  "tictactoe",
+  "blackjack",
+  "roulette",
+  "plinko",
+  "slots",
+  "poker",
+] as const;
 export type TableGame = (typeof TABLE_GAMES)[number];
 
 /**
@@ -246,6 +255,9 @@ export const createTableSchema = z.discriminatedUnion("game", [
   z.object({ game: z.literal("roulette") }),
   z.object({ game: z.literal("plinko") }),
   z.object({ game: z.literal("slots") }),
+  // Le poker est le seul jeu dont la table se règle à l'ouverture : blindes,
+  // caves et nombre de sièges sont fixés par celui qui l'ouvre.
+  z.object({ game: z.literal("poker"), config: pokerTableConfigSchema }),
 ]);
 
 export const tableRefSchema = z.object({

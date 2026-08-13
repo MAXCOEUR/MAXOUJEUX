@@ -77,6 +77,20 @@ import {
   viewRoulette,
 } from "../roulette/service.js";
 import {
+  attachPoker,
+  createPokerTable,
+  detachPoker,
+  hasPokerTable,
+  leavePoker,
+  pokerCounts,
+  pokerSalonSnapshot,
+  pokerTableOf,
+  resetPokerForTests,
+  shutdownPoker,
+  viewPoker,
+  watchPokerTable,
+} from "../poker/service.js";
+import {
   attachSlots,
   detachSlots,
   hasSlotsTable,
@@ -372,6 +386,9 @@ export async function createTable(
   // Même principe à la machine à sous : « créer » c'est s'installer devant la
   // sienne.
   if (game === "slots") return openSlotsTable(player);
+  // Le poker porte ses réglages dans la demande de création : blindes, caves et
+  // nombre de sièges sont choisis par celui qui ouvre la table.
+  if (game === "poker") fail("STAKE_INVALID", "Les réglages de la table sont obligatoires.", 400);
   if (stake === undefined) fail("STAKE_INVALID", "Cette mise n'est pas autorisée.", 400);
   if (!isValidStake(game, stake)) {
     fail("STAKE_INVALID", "Cette mise n'est pas autorisée.", 400);
@@ -459,6 +476,14 @@ export async function createTable(
  * demandes simultanées verraient sinon toutes les deux un siège libre pendant
  * l'attente de la base, et la table finirait avec trois joueurs.
  */
+/** Ouvre la table de poker avec ses réglages. Passe par le même verrou d'activité. */
+export function createPokerTableWithConfig(
+  player: PlayerIdentity,
+  config: Parameters<typeof createPokerTable>[1],
+): Promise<string> {
+  return createPokerTable(player, config);
+}
+
 export async function joinTable(player: PlayerIdentity, tableId: string): Promise<string> {
   const table = tables.get(tableId);
   // Sur une table de blackjack, « rejoindre » veut dire **regarder** : la place
@@ -470,6 +495,7 @@ export async function joinTable(player: PlayerIdentity, tableId: string): Promis
   // est celui de son propriétaire.
   if (!table && hasPlinkoTable(tableId)) return watchPlinkoTable(player, tableId);
   if (!table && hasSlotsTable(tableId)) return watchSlotsTable(player, tableId);
+  if (!table && hasPokerTable(tableId)) return watchPokerTable(player, tableId);
 
   // --- Réservation synchrone. ---
   if (!table || !isLive(table)) fail("TABLE_GONE", "Cette table n'existe plus.", 404);
@@ -587,6 +613,7 @@ export async function leave(userId: string, tableId: string): Promise<void> {
   if (!table && hasRouletteTable(tableId)) return leaveRoulette(userId, tableId);
   if (!table && hasPlinkoTable(tableId)) return Promise.resolve(leavePlinkoTable(userId, tableId));
   if (!table && hasSlotsTable(tableId)) return Promise.resolve(leaveSlotsTable(userId, tableId));
+  if (!table && hasPokerTable(tableId)) return leavePoker(userId, tableId);
   if (!table || !isLive(table)) fail("TABLE_GONE", "Cette table n'existe plus.", 404);
 
   const occupant = occupantOf(table, userId);
@@ -692,7 +719,11 @@ export function attach(userId: string): string | null {
   const tableId = tableByUser.get(userId);
   if (!tableId) {
     return (
-      attachBlackjack(userId) ?? attachRoulette(userId) ?? attachPlinko(userId) ?? attachSlots(userId)
+      attachBlackjack(userId) ??
+      attachRoulette(userId) ??
+      attachPlinko(userId) ??
+      attachSlots(userId) ??
+      attachPoker(userId)
     );
   }
 
@@ -721,6 +752,7 @@ export function detach(userId: string): void {
     detachRoulette(userId);
     detachPlinko(userId);
     detachSlots(userId);
+    detachPoker(userId);
     return;
   }
 
@@ -749,7 +781,8 @@ export function tableOf(userId: string): string | null {
     blackjackTableOf(userId) ??
     rouletteTableOf(userId) ??
     plinkoTableOf(userId) ??
-    slotsTableOf(userId)
+    slotsTableOf(userId) ??
+    pokerTableOf(userId)
   );
 }
 
@@ -849,14 +882,24 @@ export function viewFor(tableId: string, userId: string | null): MatchView | nul
 }
 
 export function activeViewFor(tableId: string, userId: string | null): import("@maxoujeux/shared").ActiveMatchView | null {
-  return viewFor(tableId, userId) ?? viewBlackjack(tableId, userId) ?? viewRoulette(tableId, userId);
+  return (
+    viewFor(tableId, userId) ??
+    viewBlackjack(tableId, userId) ??
+    viewRoulette(tableId, userId) ??
+    viewPoker(tableId, userId)
+  );
 }
 
 export function salonSnapshot(game: TableGame): SalonSnapshot {
   // Le Blackjack et la Roulette tiennent leur propre table en mémoire : le
   // gestionnaire n'en connaît que l'instantané.
-  if (game === "blackjack" || game === "roulette") {
-    const table = game === "blackjack" ? blackjackSalonSnapshot() : rouletteSalonSnapshot();
+  if (game === "blackjack" || game === "roulette" || game === "poker") {
+    const table =
+      game === "blackjack"
+        ? blackjackSalonSnapshot()
+        : game === "roulette"
+          ? rouletteSalonSnapshot()
+          : pokerSalonSnapshot();
     return {
       game,
       tables: table ? [table] : [],
@@ -919,6 +962,7 @@ export function tableCounts(): Partial<Record<GameCode, TableCounts>> {
   counts.roulette = rouletteCounts();
   counts.plinko = plinkoCounts();
   counts.slots = slotsCounts();
+  counts.poker = pokerCounts();
 
   for (const table of tables.values()) {
     const entry = counts[table.game];
@@ -952,6 +996,7 @@ export function shutdown(): void {
   shutdownRoulette();
   shutdownPlinko();
   shutdownSlots();
+  shutdownPoker();
 }
 
 /** Remet le gestionnaire à zéro. Réservé aux tests. */
@@ -969,6 +1014,7 @@ export function resetForTests(): void {
   resetRouletteForTests();
   resetPlinkoForTests();
   resetSlotsForTests();
+  resetPokerForTests();
 }
 
 /** Nombre de minuteries encore armées. Réservé aux tests. */
