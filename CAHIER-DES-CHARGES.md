@@ -199,7 +199,7 @@ administrer en V1).
 | **Roue de la fortune** — salle publique, un lancer par 24 h | 1 + spectateurs | oui | 4 — *livré* |
 | **Plinko** — 10 tables, trois niveaux de risque | 1 + spectateurs | oui | 5 — *livré* |
 | **Machine à sous** — 10 machines, trois rouleaux | 1 + spectateurs | oui | 6 — *livré* |
-| **Texas Hold'em** | 2 à 9 | oui | 7 |
+| **Texas Hold'em** | 2 à 9 | oui | 7 — *livré* |
 
 L'ordre a été arrêté délibérément : trois jeux solo courts, à moteur simple et à
 forte valeur de retour quotidien, passent **avant** le poker. Le poker reste le plus
@@ -271,7 +271,7 @@ engager davantage en modifiant la requête.
 | **Roue de la fortune** | 10 MC | 1 000 MC | de ×0 à ×20 la mise |
 | **Plinko** | 10 MC | 500 MC | de ×0,2 à ×25 selon le risque choisi |
 | **Machine à sous** | 10 MC | 100 MC | jusqu'à ×150 la mise |
-| **Texas Hold'em** | cave de 500 MC | cave de 10 000 MC | part remportée du pot |
+| **Texas Hold'em** | cave configurable dès 500 MC | plafond configurable ou illimité | part remportée du pot |
 
 Pour le Puissance 4 et le Morpion, les deux joueurs engagent la même mise. Avec
 10 MC chacun, le gagnant reçoit 15 MC, le perdant 0 et les 5 MC restants sont retirés
@@ -293,8 +293,8 @@ Points connus qui font échouer les implémentations naïves, à traiter explici
 
 - **Poker** : pots secondaires en cas de tapis multiples, relance minimale et
   relance incomplète, timer par joueur avec couche automatique, sit-out et
-  reconnexion. Évaluation des mains par `pokersolver` (pur JS, aucune dépendance
-  native).
+  reconnexion. L’évaluateur maison vit dans `packages/engines`, sans dépendance
+  d’exécution supplémentaire.
 - **Motus** : lettres doublées dans le calcul jaune/vert, qui exige un algorithme en
   deux passes.
 - **Blackjack** : séparation, doublement, assurance, pénétration du sabot.
@@ -616,7 +616,7 @@ téléphone 360 px.
 | **4** | Roue de la fortune : **livré** | — |
 | **5** | Plinko : **livré** | — |
 | **6** | Machine à sous : **livré** | — |
-| **7** | Poker Hold'em : moteur + ~60 tests, UI de table, timers, sit-out | 8–10 j |
+| **7** | Poker Hold'em : moteur, évaluateur exhaustif, table de casino, timers, spectateurs, sit-out — **livré** | — |
 | **8** | Profils, classements Elo, chat, modération, sauvegardes | 3 j |
 
 Les lots 4 à 6 sont volontairement placés avant le poker : ce sont des jeux solo, sans

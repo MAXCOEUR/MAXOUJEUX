@@ -7,13 +7,16 @@ import { activityOf } from "../games/activity.js";
 import {
   actPoker,
   createPokerTable,
+  followPoker,
   leavePoker,
   pokerCounts,
   pokerTableOf,
   rebuyPoker,
   resetPokerForTests,
+  revealPoker,
   setPokerBlinds,
   setPokerDurationsForTests,
+  sitOutPoker,
   sitPoker,
   standPoker,
   viewPoker,
@@ -55,7 +58,7 @@ beforeAll(async () => {
 
 beforeEach(() => {
   // Phases raccourcies : inutile d'attendre trente secondes par décision.
-  setPokerDurationsForTests({ action: 10_000, streetPause: 5, handBreak: 10 });
+  setPokerDurationsForTests({ action: 10_000, startDelay: 0, streetPause: 5, handBreak: 10 });
 });
 
 afterEach(() => {
@@ -123,6 +126,23 @@ describe("sièges et spectateurs", () => {
     expect(vue?.watchers).toHaveLength(0);
     expect(await balanceOf(invite.userId)).toBe(10_000 - 600);
     expect(activityOf(invite.userId)).toEqual({ kind: "table", id: tableId });
+  });
+
+  it("annonce le départ de la main avant de distribuer", async () => {
+    setPokerDurationsForTests({ startDelay: 30 });
+    const hote = await joueur();
+    const tableId = await createPokerTable(hote, CONFIG);
+    const invite = await joueur();
+
+    await sitPoker(invite, tableId, 1, CONFIG.minBuyIn);
+
+    const attente = viewPoker(tableId, hote.userId);
+    expect(attente?.phase).toBe("waiting");
+    expect(attente?.timerKind).toBe("start");
+    expect(attente?.deadlineAt).not.toBeNull();
+
+    await attendre(45);
+    expect(viewPoker(tableId, hote.userId)?.phase).toBe("preflop");
   });
 
   it("refuse une place déjà prise", async () => {
@@ -230,6 +250,31 @@ describe("déroulé d'une main", () => {
     expect([...rues].sort()).toEqual(["flop", "preflop", "river", "turn"]);
   });
 
+  it("publie la respiration entre deux rues et ferme les actions pendant ce délai", async () => {
+    const hote = await joueur();
+    const tableId = await createPokerTable(hote, CONFIG);
+    const invite = await joueur();
+    await sitPoker(invite, tableId, 1, 600);
+
+    for (let coup = 0; coup < 4 && viewPoker(tableId, null)?.phase === "preflop"; coup += 1) {
+      const vueTable = viewPoker(tableId, null);
+      const auTrait = vueTable?.seats.find((seat) => seat.seat === vueTable.turn);
+      expect(auTrait).toBeDefined();
+      const vueJoueur = viewPoker(tableId, auTrait?.userId ?? "");
+      const actions = vueJoueur?.allowed?.actions ?? [];
+      await actPoker(auTrait?.userId ?? "", tableId, vueJoueur?.version ?? 0, {
+        kind: actions.includes("check") ? "check" : "call",
+      });
+    }
+
+    const pause = viewPoker(tableId, hote.userId);
+    expect(pause?.phase).toBe("flop");
+    expect(pause?.timerKind).toBe("street");
+    expect(pause?.timerMs).toBe(5);
+    expect(pause?.deadlineAt).not.toBeNull();
+    expect(pause?.allowed).toBeNull();
+  });
+
   it("mène une main jusqu'au bout et conserve les jetons", async () => {
     const hote = await joueur();
     const tableId = await createPokerTable(hote, CONFIG);
@@ -251,6 +296,11 @@ describe("déroulé d'une main", () => {
       if (!auTrait) break;
       const vueJoueur = viewPoker(tableId, auTrait.userId);
       const actions = vueJoueur?.allowed?.actions ?? [];
+      if (actions.length === 0) {
+        await attendre();
+        vue = viewPoker(tableId, null);
+        continue;
+      }
       await actPoker(
         auTrait.userId,
         tableId,
@@ -266,6 +316,7 @@ describe("déroulé d'une main", () => {
       0,
     );
     expect(arrivee).toBe(depart);
+    expect(viewPoker(tableId, null)?.timerKind).toBe("hand-break");
   });
 
   it("refuse une action hors tour et une action sur état périmé", async () => {
@@ -335,6 +386,73 @@ describe("anti-triche : les cartes ne sortent pas du serveur", () => {
     }
   });
 
+  it("ne révèle le jeu suivi au spectateur qu'une fois le coup terminé", async () => {
+    const hote = await joueur(10_000, "a");
+    const tableId = await createPokerTable(hote, CONFIG);
+    const invite = await joueur(10_000, "b");
+    await sitPoker(invite, tableId, 1, 600);
+    const curieux = await joueur(10_000, "c");
+    await watchPokerTable(curieux, tableId);
+
+    const avant = viewPoker(tableId, curieux.userId);
+    const auTrait = avant?.seats.find((siege) => siege.seat === avant.turn);
+    expect(auTrait).toBeDefined();
+    followPoker(curieux.userId, tableId, auTrait?.userId ?? null);
+
+    const pendant = viewPoker(tableId, curieux.userId);
+    expect(pendant?.followedUserId).toBe(auTrait?.userId);
+    expect(pendant?.seats.every((siege) => siege.cards.every((carte) => carte === null))).toBe(true);
+
+    // En heads-up, un couchage termine immédiatement le coup. Le spectateur
+    // peut alors lire uniquement la main suivie, jamais toutes les mains
+    // couchées du récapitulatif.
+    await actPoker(auTrait?.userId ?? "", tableId, pendant?.version ?? 0, { kind: "fold" });
+
+    const recapitulatif = viewPoker(tableId, curieux.userId);
+    expect(recapitulatif?.phase).toBe("payout");
+    expect(
+      recapitulatif?.seats.find((siege) => siege.userId === auTrait?.userId)?.cards.filter(Boolean),
+    ).toHaveLength(2);
+    expect(
+      recapitulatif?.seats
+        .filter((siege) => siege.userId !== auTrait?.userId)
+        .every((siege) => siege.cards.every((carte) => carte === null)),
+    ).toBe(true);
+  });
+
+  it("montre le jeu d'un joueur couché qui le demande, à toute la table", async () => {
+    const hote = await joueur(10_000, "a");
+    const tableId = await createPokerTable(hote, CONFIG);
+    const invite = await joueur(10_000, "b");
+    await sitPoker(invite, tableId, 1, 600);
+
+    // Celui qui parle se couche, puis choisit de montrer.
+    const vue = viewPoker(tableId, null);
+    const auTrait = vue?.seats.find((siege) => siege.seat === vue.turn);
+    const coucheur = auTrait?.userId === hote.userId ? hote : invite;
+    await actPoker(coucheur.userId, tableId, vue?.version ?? 0, { kind: "fold" });
+
+    expect(viewPoker(tableId, coucheur.userId)?.canReveal).toBe(true);
+    revealPoker(coucheur.userId, tableId);
+
+    const vues = viewPoker(tableId, null)?.seats.find((siege) => siege.userId === coucheur.userId);
+    expect(vues?.revealed).toBe(true);
+    expect(vues?.cards.filter(Boolean)).toHaveLength(2);
+  });
+
+  it("refuse de montrer un jeu qu'on défend encore", async () => {
+    const hote = await joueur(10_000, "a");
+    const tableId = await createPokerTable(hote, CONFIG);
+    const invite = await joueur(10_000, "b");
+    await sitPoker(invite, tableId, 1, 600);
+
+    // Personne n'est couché : montrer donnerait sa lecture à l'adversaire au
+    // milieu des enchères.
+    expect(viewPoker(tableId, hote.userId)?.canReveal).toBe(false);
+    const erreur = await appError(async () => revealPoker(hote.userId, tableId));
+    expect(erreur.code).toBe("POKER_REVEAL_CLOSED");
+  });
+
   it("ne donne aucun coup légal à un spectateur", async () => {
     const hote = await joueur();
     const tableId = await createPokerTable(hote, CONFIG);
@@ -352,10 +470,10 @@ describe("réglages du créateur", () => {
   it("applique les blindes tout de suite quand aucune main ne tourne", async () => {
     const hote = await joueur();
     const tableId = await createPokerTable(hote, CONFIG);
-    setPokerBlinds(hote.userId, tableId, 25, 50);
+    setPokerBlinds(hote.userId, tableId, 20, 40);
 
     const vue = viewPoker(tableId, hote.userId);
-    expect(vue?.config.smallBlind).toBe(25);
+    expect(vue?.config.smallBlind).toBe(20);
     expect(vue?.pendingConfig).toBeNull();
   });
 
@@ -365,12 +483,12 @@ describe("réglages du créateur", () => {
     const invite = await joueur();
     await sitPoker(invite, tableId, 1, 600);
 
-    setPokerBlinds(hote.userId, tableId, 25, 50);
+    setPokerBlinds(hote.userId, tableId, 20, 40);
     const vue = viewPoker(tableId, hote.userId);
     // La main en cours garde ses blindes : on ne change pas les règles au
     // milieu d'un coup.
     expect(vue?.config.smallBlind).toBe(10);
-    expect(vue?.pendingConfig?.smallBlind).toBe(25);
+    expect(vue?.pendingConfig?.smallBlind).toBe(20);
   });
 
   it("réserve le réglage au créateur", async () => {
@@ -381,6 +499,14 @@ describe("réglages du créateur", () => {
 
     const erreur = await appError(async () => setPokerBlinds(invite.userId, tableId, 25, 50));
     expect(erreur.code).toBe("POKER_NOT_HOST");
+  });
+
+  it("refuse des blindes incompatibles avec la cave minimale", async () => {
+    const hote = await joueur();
+    const tableId = await createPokerTable(hote, CONFIG);
+
+    const erreur = await appError(async () => setPokerBlinds(hote.userId, tableId, 25, 50));
+    expect(erreur.code).toBe("POKER_ACTION_INVALID");
   });
 });
 
@@ -399,6 +525,64 @@ describe("recave", () => {
     const tableId = await createPokerTable(hote, CONFIG);
     const erreur = await appError(() => rebuyPoker(hote.userId, tableId, 5_000));
     expect(erreur.code).toBe("POKER_BUYIN_INVALID");
+  });
+
+  it("ouvre la recave pendant le récapitulatif entre deux mains", async () => {
+    const hote = await joueur(10_000, "a");
+    const tableId = await createPokerTable(hote, CONFIG);
+    const invite = await joueur(10_000, "b");
+    await sitPoker(invite, tableId, 1, 600);
+
+    const vue = viewPoker(tableId, null);
+    const auTrait = vue?.seats.find((siege) => siege.seat === vue.turn);
+    expect(auTrait).toBeDefined();
+    await actPoker(auTrait?.userId ?? "", tableId, vue?.version ?? 0, { kind: "fold" });
+
+    const avant = viewPoker(tableId, hote.userId);
+    expect(avant?.phase).toBe("payout");
+    expect(avant?.buyInRange).not.toBeNull();
+    await rebuyPoker(hote.userId, tableId, 100);
+    expect(viewPoker(tableId, hote.userId)?.seats.find((siege) => siege.userId === hote.userId)?.stack)
+      .toBe((avant?.seats.find((siege) => siege.userId === hote.userId)?.stack ?? 0) + 100);
+  });
+
+  it("sérialise une recave et la restitution simultanées", async () => {
+    const hote = await joueur(10_000);
+    const tableId = await createPokerTable(hote, CONFIG);
+
+    await Promise.all([
+      rebuyPoker(hote.userId, tableId, 100),
+      standPoker(hote.userId, tableId),
+    ]);
+
+    expect(await balanceOf(hote.userId)).toBe(10_000);
+    expect(viewPoker(tableId, hote.userId)?.you).toBeNull();
+    expect(viewPoker(tableId, hote.userId)?.seats).toHaveLength(0);
+  });
+});
+
+describe("pause", () => {
+  it("rend la place après trois mains sans avoir payé de blinde", async () => {
+    const hote = await joueur(10_000, "a");
+    const tableId = await createPokerTable(hote, CONFIG);
+    sitOutPoker(hote.userId, tableId, true);
+    const invite = await joueur(10_000, "b");
+    const troisieme = await joueur(10_000, "c");
+    await sitPoker(invite, tableId, 1, 600);
+    await sitPoker(troisieme, tableId, 2, 600);
+
+    for (let main = 0; main < 3; main += 1) {
+      const vue = viewPoker(tableId, null);
+      const auTrait = vue?.seats.find((siege) => siege.seat === vue.turn);
+      expect(auTrait).toBeDefined();
+      await actPoker(auTrait?.userId ?? "", tableId, vue?.version ?? 0, { kind: "fold" });
+      await attendre(25);
+    }
+
+    expect(viewPoker(tableId, null)?.seats.some((siege) => siege.userId === hote.userId)).toBe(
+      false,
+    );
+    expect(activityOf(hote.userId)).toBeNull();
   });
 });
 

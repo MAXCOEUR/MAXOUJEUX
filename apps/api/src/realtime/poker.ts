@@ -1,7 +1,9 @@
 import {
   pokerActSchema,
   pokerBlindsSchema,
+  pokerFollowSchema,
   pokerRebuySchema,
+  pokerRevealSchema,
   pokerSitOutSchema,
   pokerSitSchema,
   pokerTableRefSchema,
@@ -9,8 +11,10 @@ import {
 import type { PokerNotifier } from "../modules/poker/service.js";
 import {
   actPoker,
+  followPoker,
   pokerAudienceOf,
   rebuyPoker,
+  revealPoker,
   setPokerBlinds,
   sitOutPoker,
   sitPoker,
@@ -91,6 +95,22 @@ export function registerPokerHandlers(socket: GameSocket): void {
     void withAck<null>(socket, "poker:blinds", ack, async () => {
       const input = pokerBlindsSchema.parse(payload);
       setPokerBlinds(userId, input.tableId, input.smallBlind, input.bigBlind);
+      return null;
+    });
+  });
+
+  socket.on("poker:reveal", (payload, ack) => {
+    void withAck<null>(socket, "poker:reveal", ack, async () => {
+      const input = pokerRevealSchema.parse(payload);
+      revealPoker(userId, input.tableId);
+      return null;
+    });
+  });
+
+  socket.on("poker:follow", (payload, ack) => {
+    void withAck<null>(socket, "poker:follow", ack, async () => {
+      const input = pokerFollowSchema.parse(payload);
+      followPoker(userId, input.tableId, input.userId);
       return null;
     });
   });

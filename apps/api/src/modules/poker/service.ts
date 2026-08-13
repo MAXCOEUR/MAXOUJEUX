@@ -1,18 +1,20 @@
 import { randomInt, randomUUID } from "node:crypto";
 import {
   POKER_ACTION_MS,
-  POKER_BROKE_HANDS_MAX,
+  POKER_MISSED_HANDS_MAX,
   POKER_DISCONNECT_GRACE_MS,
   POKER_ERROR_LABELS,
   POKER_HAND_BREAK_MS,
-  POKER_MAX_WATCHERS,
+  POKER_START_DELAY_MS,
   POKER_STREET_PAUSE_MS,
+  pokerTableConfigSchema,
   pokerHandLabel,
   type PokerActionKind,
   type PokerCard,
   type PokerPhase,
   type PokerSeatView,
   type PokerTableConfig,
+  type PokerTimerKind,
   type PokerView,
   type TableCounts,
   type TableSummary,
@@ -28,7 +30,7 @@ import {
   startPokerHand,
   type PokerHandState,
 } from "@maxoujeux/engines";
-import { eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { db } from "../../db/index.js";
 import { matchPlayers, matches, stats } from "../../db/schema.js";
 import { AppError } from "../../lib/errors.js";
@@ -78,14 +80,18 @@ interface Occupant extends PlayerIdentity {
   inHand: boolean;
   leaveAfterHand: boolean;
   standAfterHand: boolean;
-  brokeHands: number;
+  /** Mains consécutives manquées sans payer de blinde. */
+  missedHands: number;
   lastAction: { kind: PokerActionKind; amount: number } | null;
   wonThisHand: number | null;
+  /** A montré son jeu de lui-même après s'être couché. Remis à zéro chaque main. */
+  revealed: boolean;
 }
 
 interface Watcher extends PlayerIdentity {
   sockets: number;
   graceTimer: NodeJS.Timeout | null;
+  followedUserId: string | null;
 }
 
 interface PokerTable {
@@ -101,6 +107,8 @@ interface PokerTable {
   button: number;
   deadline: number | null;
   timer: NodeJS.Timeout | null;
+  timerKind: PokerTimerKind | null;
+  timerMs: number | null;
   timerGeneration: number;
   version: number;
   createdAt: number;
@@ -122,6 +130,7 @@ const tableByUser = new Map<string, string>();
 let randomIndex: (maximumExclusive: number) => number = (maximum) => randomInt(maximum);
 const durations = {
   action: POKER_ACTION_MS,
+  startDelay: POKER_START_DELAY_MS,
   streetPause: POKER_STREET_PAUSE_MS,
   handBreak: POKER_HAND_BREAK_MS,
 };
@@ -177,14 +186,23 @@ function clearTimer(table: PokerTable): void {
   if (table.timer) clearTimeout(table.timer);
   table.timer = null;
   table.deadline = null;
+  table.timerKind = null;
+  table.timerMs = null;
   // Toute annulation invalide les rappels déjà en file : un `clearTimeout`
   // n'empêche pas un `setTimeout` arrivé à échéance de s'exécuter.
   table.timerGeneration += 1;
 }
 
-function schedule(table: PokerTable, duration: number, work: () => Promise<void> | void): void {
+function schedule(
+  table: PokerTable,
+  kind: PokerTimerKind,
+  duration: number,
+  work: () => Promise<void> | void,
+): void {
   clearTimer(table);
   table.deadline = Date.now() + duration;
+  table.timerKind = kind;
+  table.timerMs = duration;
   const generation = table.timerGeneration;
   table.timer = setTimeout(() => {
     if (table.timerGeneration !== generation) return;
@@ -230,6 +248,8 @@ export async function createPokerTable(
     button: 0,
     deadline: null,
     timer: null,
+    timerKind: null,
+    timerMs: null,
     timerGeneration: 0,
     version: 1,
     createdAt: Date.now(),
@@ -285,9 +305,10 @@ function freshOccupant(player: PlayerIdentity, seat: number): Occupant {
     inHand: false,
     leaveAfterHand: false,
     standAfterHand: false,
-    brokeHands: 0,
+    missedHands: 0,
     lastAction: null,
     wonThisHand: null,
+    revealed: false,
   };
 }
 
@@ -303,12 +324,11 @@ export function watchPokerTable(player: PlayerIdentity, tableId: string): Promis
 
   if (tableByUser.get(player.userId) === tableId) return Promise.resolve(tableId);
   if (tableByUser.has(player.userId)) fail("ALREADY_IN_GAME", "Tu es déjà à une table.");
-  if (table.watchers.size >= POKER_MAX_WATCHERS) fail("POKER_WATCHERS_FULL");
-
   table.watchers.set(player.userId, {
     ...player,
     sockets: Math.max(1, connectionCount(player.userId)),
     graceTimer: null,
+    followedUserId: null,
   });
   tableByUser.set(player.userId, tableId);
   table.version += 1;
@@ -350,98 +370,108 @@ export async function sitPoker(
   table.seats[seat] = occupant;
   tableByUser.set(player.userId, tableId);
 
-  try {
-    const balance = await db.transaction(async (tx) => {
-      await tx
-        .insert(matchPlayers)
-        .values({ matchId: table.sessionMatchId, userId: player.userId, seat })
-        .onConflictDoNothing();
-      return debitInTx(tx, player.userId, buyIn, "poker_buyin", table.sessionMatchId);
-    });
-    occupant.stack = buyIn;
-    occupant.buyInTotal = buyIn;
-    notifyWallet(player.userId, balance);
-  } catch (error) {
-    table.seats[seat] = null;
-    releaseActivity(player.userId, { kind: "table", id: tableId });
-    if (watcher) {
-      table.watchers.set(player.userId, watcher);
-    } else {
-      tableByUser.delete(player.userId);
+  await enqueue(table, async () => {
+    try {
+      const balance = await db.transaction(async (tx) => {
+        await tx
+          .insert(matchPlayers)
+          .values({ matchId: table.sessionMatchId, userId: player.userId, seat })
+          .onConflictDoNothing();
+        return debitInTx(tx, player.userId, buyIn, "poker_buyin", table.sessionMatchId);
+      });
+      occupant.stack = buyIn;
+      occupant.buyInTotal = buyIn;
+      notifyWallet(player.userId, balance);
+    } catch (error) {
+      if (table.seats[seat] === occupant) table.seats[seat] = null;
+      releaseActivity(player.userId, { kind: "table", id: tableId });
+      if (watcher) {
+        table.watchers.set(player.userId, watcher);
+      } else {
+        tableByUser.delete(player.userId);
+      }
+      throw error;
     }
-    throw error;
-  }
 
-  table.version += 1;
-  publish(table);
-  void maybeStartHand(table);
+    table.version += 1;
+    publish(table);
+    void maybeStartHand(table);
+  });
 }
 
 /** Se recaver, entre deux mains seulement. */
 export async function rebuyPoker(userId: string, tableId: string, amount: number): Promise<void> {
   const table = tables.get(tableId);
   if (!table) fail("TABLE_GONE", "Cette table n'existe plus.", 404);
-  const occupant = occupants(table).find((seat) => seat.userId === userId);
-  if (!occupant) fail("POKER_NOT_SEATED", undefined, 403);
-  if (occupant.inHand && table.hand) fail("POKER_REBUY_CLOSED");
+  await enqueue(table, async () => {
+    const occupant = occupants(table).find((seat) => seat.userId === userId);
+    if (!occupant) fail("POKER_NOT_SEATED", undefined, 403);
+    const entreLesMains = !table.hand || table.phase === "payout";
+    if (!entreLesMains) fail("POKER_REBUY_CLOSED");
 
-  const { maxBuyIn, minBuyIn } = table.config;
-  if (amount <= 0) fail("POKER_BUYIN_INVALID", undefined, 400);
-  if (maxBuyIn !== null && occupant.stack + amount > maxBuyIn) fail("POKER_BUYIN_INVALID", undefined, 400);
-  if (occupant.stack + amount < minBuyIn) fail("POKER_BUYIN_INVALID", undefined, 400);
+    const { maxBuyIn, minBuyIn } = table.config;
+    if (amount <= 0) fail("POKER_BUYIN_INVALID", undefined, 400);
+    if (maxBuyIn !== null && occupant.stack + amount > maxBuyIn) {
+      fail("POKER_BUYIN_INVALID", undefined, 400);
+    }
+    if (occupant.stack + amount < minBuyIn) fail("POKER_BUYIN_INVALID", undefined, 400);
 
-  const balance = await db.transaction((tx) =>
-    debitInTx(tx, userId, amount, "poker_buyin", table.sessionMatchId),
-  );
-  occupant.stack += amount;
-  occupant.buyInTotal += amount;
-  occupant.brokeHands = 0;
-  occupant.sittingOut = false;
-  notifyWallet(userId, balance);
+    const balance = await db.transaction((tx) =>
+      debitInTx(tx, userId, amount, "poker_buyin", table.sessionMatchId),
+    );
+    occupant.stack += amount;
+    occupant.buyInTotal += amount;
+    occupant.missedHands = 0;
+    occupant.sittingOut = false;
+    notifyWallet(userId, balance);
 
-  table.version += 1;
-  publish(table);
-  void maybeStartHand(table);
+    table.version += 1;
+    publish(table);
+    maybeStartHand(table);
+  });
 }
 
 /** Rendre sa place et récupérer ses jetons. Reste spectateur. */
 export async function standPoker(userId: string, tableId: string): Promise<void> {
   const table = tables.get(tableId);
   if (!table) return;
-  const occupant = occupants(table).find((seat) => seat.userId === userId);
-  if (!occupant) return;
+  await enqueue(table, async () => {
+    const occupant = occupants(table).find((seat) => seat.userId === userId);
+    if (!occupant) return;
 
-  if (occupant.inHand && table.hand) {
-    occupant.standAfterHand = true;
-    table.version += 1;
-    publish(table);
-    return;
-  }
-  await cashOut(table, occupant, true);
+    if (occupant.inHand && table.hand) {
+      occupant.standAfterHand = true;
+      table.version += 1;
+      publish(table);
+      return;
+    }
+    await cashOut(table, occupant, true);
+  });
 }
 
 export async function leavePoker(userId: string, tableId: string): Promise<void> {
   const table = tables.get(tableId);
   if (!table) return;
-
-  const occupant = occupants(table).find((seat) => seat.userId === userId);
-  if (!occupant) {
-    if (table.watchers.delete(userId)) {
-      tableByUser.delete(userId);
-      table.version += 1;
-      disposeIfDeserted(table);
-      publish(table);
+  await enqueue(table, async () => {
+    const occupant = occupants(table).find((seat) => seat.userId === userId);
+    if (!occupant) {
+      if (table.watchers.delete(userId)) {
+        tableByUser.delete(userId);
+        table.version += 1;
+        disposeIfDeserted(table);
+        publish(table);
+      }
+      return;
     }
-    return;
-  }
 
-  if (occupant.inHand && table.hand) {
-    occupant.leaveAfterHand = true;
-    table.version += 1;
-    publish(table);
-    return;
-  }
-  await cashOut(table, occupant, false);
+    if (occupant.inHand && table.hand) {
+      occupant.leaveAfterHand = true;
+      table.version += 1;
+      publish(table);
+      return;
+    }
+    await cashOut(table, occupant, false);
+  });
 }
 
 /**
@@ -451,17 +481,24 @@ export async function leavePoker(userId: string, tableId: string): Promise<void>
  * mouvement le résultat de la session dans `match_players` et `stats`.
  */
 async function cashOut(table: PokerTable, occupant: Occupant, keepWatching: boolean): Promise<void> {
+  if (table.seats[occupant.seat] !== occupant) return;
   const montant = occupant.stack;
+  const cashOutPrecedent = occupant.cashOutTotal;
   occupant.stack = 0;
   occupant.cashOutTotal += montant;
   const delta = occupant.cashOutTotal - occupant.buyInTotal;
 
-  if (montant > 0) {
+  try {
     const balance = await db.transaction(async (tx) => {
       await tx
         .update(matchPlayers)
         .set({ result: delta > 0 ? "win" : delta < 0 ? "loss" : "draw", chipsDelta: delta })
-        .where(eq(matchPlayers.matchId, table.sessionMatchId));
+        .where(
+          and(
+            eq(matchPlayers.matchId, table.sessionMatchId),
+            eq(matchPlayers.userId, occupant.userId),
+          ),
+        );
       await tx
         .insert(stats)
         .values({
@@ -470,19 +507,39 @@ async function cashOut(table: PokerTable, occupant: Occupant, keepWatching: bool
           played: 1,
           won: delta > 0 ? 1 : 0,
           lost: delta < 0 ? 1 : 0,
+          drawn: delta === 0 ? 1 : 0,
         })
-        .onConflictDoNothing();
-      return creditInTx(tx, occupant.userId, montant, "poker_cashout", table.sessionMatchId);
+        .onConflictDoUpdate({
+          target: [stats.userId, stats.game],
+          set: {
+            played: sql`${stats.played} + 1`,
+            won: sql`${stats.won} + ${delta > 0 ? 1 : 0}`,
+            lost: sql`${stats.lost} + ${delta < 0 ? 1 : 0}`,
+            drawn: sql`${stats.drawn} + ${delta === 0 ? 1 : 0}`,
+            updatedAt: new Date(),
+          },
+        });
+      return montant > 0
+        ? creditInTx(tx, occupant.userId, montant, "poker_cashout", table.sessionMatchId)
+        : null;
     });
-    notifyWallet(occupant.userId, balance);
+    if (balance !== null) notifyWallet(occupant.userId, balance);
+  } catch (error) {
+    occupant.stack = montant;
+    occupant.cashOutTotal = cashOutPrecedent;
+    throw error;
   }
 
   vacateSeat(table, occupant, keepWatching);
 }
 
 function vacateSeat(table: PokerTable, occupant: Occupant, keepWatching: boolean): void {
+  if (table.seats[occupant.seat] !== occupant) return;
   if (occupant.graceTimer) clearTimeout(occupant.graceTimer);
   table.seats[occupant.seat] = null;
+  for (const watcher of table.watchers.values()) {
+    if (watcher.followedUserId === occupant.userId) watcher.followedUserId = null;
+  }
   releaseActivity(occupant.userId, { kind: "table", id: table.id });
 
   if (keepWatching) {
@@ -492,6 +549,7 @@ function vacateSeat(table: PokerTable, occupant: Occupant, keepWatching: boolean
       avatarSeed: occupant.avatarSeed,
       sockets: occupant.sockets,
       graceTimer: null,
+      followedUserId: null,
     });
   } else {
     tableByUser.delete(occupant.userId);
@@ -522,9 +580,12 @@ export function setPokerBlinds(userId: string, tableId: string, smallBlind: numb
   const table = tables.get(tableId);
   if (!table) fail("TABLE_GONE", "Cette table n'existe plus.", 404);
   if (table.hostId !== userId) fail("POKER_NOT_HOST", undefined, 403);
-  if (bigBlind !== smallBlind * 2) fail("POKER_ACTION_INVALID", "La grosse blinde vaut le double de la petite.", 400);
+  const validation = pokerTableConfigSchema.safeParse({ ...table.config, smallBlind, bigBlind });
+  if (!validation.success) {
+    fail("POKER_ACTION_INVALID", validation.error.issues[0]?.message, 400);
+  }
 
-  const suivant = { ...table.config, smallBlind, bigBlind };
+  const suivant = validation.data;
   if (table.hand) {
     // Jamais au milieu d'un coup : le changement attend la main suivante.
     table.pendingConfig = suivant;
@@ -536,6 +597,32 @@ export function setPokerBlinds(userId: string, tableId: string, smallBlind: numb
   publish(table);
 }
 
+/**
+ * Montrer son jeu après s'être couché.
+ *
+ * Uniquement une fois couché, et tant que la main court : montrer un jeu qu'on
+ * défend encore reviendrait à donner sa lecture à l'adversaire pendant les
+ * enchères. Le geste est sans retour — on ne remet pas des cartes face cachée.
+ */
+export function revealPoker(userId: string, tableId: string): void {
+  const table = tables.get(tableId);
+  if (!table) fail("TABLE_GONE", "Cette table n'existe plus.", 404);
+  const occupant = occupants(table).find((seat) => seat.userId === userId);
+  if (!occupant) fail("POKER_NOT_SEATED", undefined, 403);
+  if (!canRevealNow(table, occupant)) fail("POKER_REVEAL_CLOSED");
+
+  occupant.revealed = true;
+  table.version += 1;
+  publish(table);
+}
+
+/** Le joueur est-il couché sur une main qui court encore ? */
+function canRevealNow(table: PokerTable, occupant: Occupant): boolean {
+  if (occupant.revealed) return false;
+  const siege = table.hand?.seats[occupant.seat];
+  return Boolean(table.hand) && occupant.inHand && siege?.status === "folded";
+}
+
 export function sitOutPoker(userId: string, tableId: string, out: boolean): void {
   const table = tables.get(tableId);
   if (!table) return;
@@ -545,6 +632,23 @@ export function sitOutPoker(userId: string, tableId: string, out: boolean): void
   table.version += 1;
   publish(table);
   if (!out) void maybeStartHand(table);
+}
+
+/** Mémorise le suivi côté serveur sans jamais ouvrir la main pendant le coup. */
+export function followPoker(userId: string, tableId: string, followedUserId: string | null): void {
+  const table = tables.get(tableId);
+  if (!table) fail("TABLE_GONE", "Cette table n'existe plus.", 404);
+  const watcher = table.watchers.get(userId);
+  if (!watcher) fail("POKER_NOT_SEATED", "Seul un spectateur peut suivre un joueur.", 403);
+  if (
+    followedUserId !== null &&
+    !occupants(table).some((occupant) => occupant.userId === followedUserId)
+  ) {
+    fail("POKER_ACTION_INVALID", "Ce joueur n'est plus à la table.", 400);
+  }
+  watcher.followedUserId = followedUserId;
+  table.version += 1;
+  publish(table);
 }
 
 // ---------------------------------------------------------------------------
@@ -567,7 +671,23 @@ function maybeStartHand(table: PokerTable): void {
     publish(table);
     return;
   }
-  startHand(table);
+  // L'arrivée du deuxième joueur doit être lisible par toute la table. En
+  // production on annonce la donne ; les tests peuvent neutraliser ce délai.
+  if (durations.startDelay <= 0) {
+    startHand(table);
+    return;
+  }
+  if (table.timerKind === "start") return;
+  table.phase = "waiting";
+  schedule(table, "start", durations.startDelay, () => {
+    if (eligibles(table).length < 2) {
+      maybeStartHand(table);
+      return;
+    }
+    startHand(table);
+  });
+  table.version += 1;
+  publish(table);
 }
 
 function startHand(table: PokerTable): void {
@@ -582,6 +702,8 @@ function startHand(table: PokerTable): void {
     occupant.inHand = joueurs.includes(occupant);
     occupant.lastAction = null;
     occupant.wonThisHand = null;
+    // Un jeu montré au coup précédent ne doit pas suivre le joueur au suivant.
+    occupant.revealed = false;
   }
 
   table.button = nextButton(
@@ -640,7 +762,7 @@ function armTurn(table: PokerTable): void {
     return;
   }
   const siege = hand.turn;
-  schedule(table, durations.action, async () => {
+  schedule(table, "action", durations.action, async () => {
     const courant = table.hand;
     if (!courant || courant.turn !== siege) return;
     await applyAndAdvance(table, siege, null);
@@ -691,12 +813,12 @@ async function applyAndAdvance(
   // rebours : sans elle, le tableau apparaît et le tour repart dans la même
   // image, sans qu'on ait vu les cartes.
   if (suivant.street !== avant) {
-    publish(table);
-    schedule(table, durations.streetPause, () => {
+    schedule(table, "street", durations.streetPause, () => {
       armTurn(table);
       table.version += 1;
       publish(table);
     });
+    publish(table);
     return;
   }
 
@@ -717,16 +839,17 @@ async function finishHand(table: PokerTable): Promise<void> {
   table.phase = "payout";
   clearTimer(table);
   table.version += 1;
-  publish(table);
 
   // Fenêtre de fin de coup : c'est là qu'on lit le résultat, qu'on se recave et
   // qu'on quitte la table.
-  schedule(table, durations.handBreak, async () => {
+  schedule(table, "hand-break", durations.handBreak, async () => {
     table.hand = null;
     for (const occupant of occupants(table)) {
+      // Une main jouée implique qu'une blinde a pu lui revenir ; une main
+      // manquée compte vers l'éviction, qu'il soit en pause ou sans jeton.
+      occupant.missedHands = occupant.inHand ? 0 : occupant.missedHands + 1;
       occupant.inHand = false;
       if (occupant.stack === 0 && !occupant.sittingOut) {
-        occupant.brokeHands += 1;
         occupant.sittingOut = true;
       }
     }
@@ -734,12 +857,15 @@ async function finishHand(table: PokerTable): Promise<void> {
     for (const occupant of occupants(table)) {
       if (occupant.leaveAfterHand) await cashOut(table, occupant, false);
       else if (occupant.standAfterHand) await cashOut(table, occupant, true);
-      else if (occupant.brokeHands >= POKER_BROKE_HANDS_MAX) await cashOut(table, occupant, true);
+      else if (occupant.missedHands >= POKER_MISSED_HANDS_MAX) {
+        await cashOut(table, occupant, true);
+      }
     }
 
     if (!tables.has(table.id)) return;
     maybeStartHand(table);
   });
+  publish(table);
 }
 
 export async function actPoker(
@@ -754,6 +880,7 @@ export async function actPoker(
   await enqueue(table, async () => {
     const hand = table.hand;
     if (!hand) fail("POKER_ACTION_INVALID");
+    if (table.timerKind !== "action") fail("POKER_ACTION_INVALID", "Le tour n'a pas encore repris.");
     if (table.version !== version) fail("STALE_STATE", "La main a avancé entre-temps.");
 
     const occupant = occupants(table).find((seat) => seat.userId === userId);
@@ -797,6 +924,9 @@ export function viewPoker(tableId: string, userId: string | null): PokerView | n
       : null;
 
   const abattage = table.phase === "payout" || table.phase === "showdown";
+  // Le destinataire regarde-t-il sans jouer ? Un joueur assis n'a jamais accès
+  // au jeu partagé d'un autre : le partage s'adresse aux spectateurs seuls.
+  const watcher = userId === null ? null : table.watchers.get(userId) ?? null;
 
   const seats: PokerSeatView[] = occupants(table).map((occupant) => {
     const siege = hand?.seats[occupant.seat] ?? null;
@@ -804,11 +934,21 @@ export function viewPoker(tableId: string, userId: string | null): PokerView | n
 
     /**
      * Les cartes d'un adversaire ne sortent **jamais** du serveur pendant la
-     * main. Elles n'apparaissent qu'au destinataire, ou à l'abattage pour ceux
-     * qui sont allés au bout. Aucun masquage n'est laissé au client.
+     * main. Aucun masquage n'est laissé au client. Trois portes seulement :
+     *
+     * 1. c'est son propre jeu ;
+     * 2. le récapitulatif de fin de coup : les joueurs voient l'abattage, les
+     *    spectateurs peuvent alors lire la main de celui qu'ils suivent ;
+     * 3. il a montré son jeu de lui-même après s'être couché.
+     *
+     * Le suivi est mémorisé par spectateur, mais aucune intention ne peut
+     * ouvrir un jeu en direct, volontairement ou par mégarde.
      */
     const cartesVisibles =
-      occupant.userId === userId || (abattage && showdown !== null);
+      occupant.userId === userId ||
+      (abattage && showdown !== null) ||
+      (abattage && watcher?.followedUserId === occupant.userId) ||
+      occupant.revealed;
     const cartes: (PokerCard | null)[] = siege?.cards
       ? cartesVisibles
         ? [...siege.cards]
@@ -836,17 +976,20 @@ export function viewPoker(tableId: string, userId: string | null): PokerView | n
       lastAction: occupant.lastAction,
       won: occupant.wonThisHand,
       leavingAfterHand: occupant.leaveAfterHand || occupant.standAfterHand,
+      revealed: occupant.revealed,
+      sittingOut: occupant.sittingOut,
     };
   });
 
   const moi = occupants(table).find((seat) => seat.userId === userId) ?? null;
-  const aMoiDeParler = hand && moi && hand.turn === moi.seat;
+  const aMoiDeParler = hand && moi && hand.turn === moi.seat && table.timerKind === "action";
   const legal = aMoiDeParler ? legalPokerActions(hand, moi.seat) : null;
 
   // Se caver n'est possible qu'entre deux mains, et seulement si le tapis n'est
   // pas déjà au plafond.
+  const entreLesMains = !hand || table.phase === "payout";
   const peutSeCaver =
-    moi !== null && (!hand || !moi.inHand) && (table.config.maxBuyIn === null || moi.stack < table.config.maxBuyIn);
+    moi !== null && entreLesMains && (table.config.maxBuyIn === null || moi.stack < table.config.maxBuyIn);
 
   return {
     id: table.id,
@@ -861,6 +1004,7 @@ export function viewPoker(tableId: string, userId: string | null): PokerView | n
       pseudo: watcher.pseudo,
       avatarSeed: watcher.avatarSeed,
     })),
+    followedUserId: watcher?.followedUserId ?? null,
     you: moi?.seat ?? null,
     isHost: table.hostId === userId,
     board: hand ? hand.board.map((carte) => ({ ...carte })) : [],
@@ -881,7 +1025,10 @@ export function viewPoker(tableId: string, userId: string | null): PokerView | n
           max: table.config.maxBuyIn === null ? null : table.config.maxBuyIn - (moi?.stack ?? 0),
         }
       : null,
+    canReveal: moi !== null && canRevealNow(table, moi),
     deadlineAt: table.deadline ? new Date(table.deadline).toISOString() : null,
+    timerKind: table.timerKind,
+    timerMs: table.timerMs,
     actionMs: durations.action,
     version: table.version,
     now: new Date().toISOString(),
@@ -993,7 +1140,9 @@ export function detachPoker(userId: string, graceMs = POKER_DISCONNECT_GRACE_MS)
     if (occupant) {
       occupant.sittingOut = true;
       occupant.leaveAfterHand = true;
-      if (!occupant.inHand || !table.hand) void cashOut(table, occupant, false);
+      if (!occupant.inHand || !table.hand) {
+        void enqueue(table, () => cashOut(table, occupant, false));
+      }
     } else if (watcher) {
       table.watchers.delete(userId);
       tableByUser.delete(userId);

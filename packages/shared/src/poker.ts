@@ -117,14 +117,15 @@ export const POKER_MIN_SEATS = 2;
 export const POKER_MAX_SEATS = 9;
 /** Temps de décision. À l'expiration : check si c'est gratuit, sinon couche. */
 export const POKER_ACTION_MS = 30_000;
+/** Compte à rebours avant la première donne, une fois deux joueurs prêts. */
+export const POKER_START_DELAY_MS = 3_000;
 /** Respiration entre deux rues, pour que le tableau se lise. */
 export const POKER_STREET_PAUSE_MS = 1_400;
 /** Récapitulatif de fin de coup — et fenêtre de recave. */
 export const POKER_HAND_BREAK_MS = 6_000;
 export const POKER_DISCONNECT_GRACE_MS = 45_000;
-export const POKER_MAX_WATCHERS = 20;
-/** Mains à zéro jeton avant d'être levé de table. */
-export const POKER_BROKE_HANDS_MAX = 3;
+/** Mains consécutives sans payer de blinde avant d'être levé de table. */
+export const POKER_MISSED_HANDS_MAX = 3;
 export const POKER_BLIND_MIN = 5;
 
 export type PokerActionKind = "fold" | "check" | "call" | "bet" | "raise" | "allin";
@@ -147,6 +148,8 @@ export type PokerPhase =
   | "river"
   | "showdown"
   | "payout";
+
+export type PokerTimerKind = "start" | "action" | "street" | "hand-break";
 
 export const POKER_PHASE_LABELS: Record<PokerPhase, string> = {
   waiting: "En attente de joueurs",
@@ -243,6 +246,15 @@ export interface PokerSeatView {
   /** Gain du coup, une fois la main terminée. */
   won: number | null;
   leavingAfterHand: boolean;
+  /**
+   * Ce joueur a choisi de montrer ses cartes après s'être couché.
+   *
+   * Un abattage volontaire : il n'y était pas obligé, il l'a demandé. La table
+   * doit le distinguer d'un abattage de fin de coup.
+   */
+  revealed: boolean;
+  /** Le joueur passe son tour de main : il reste assis sans recevoir de cartes. */
+  sittingOut: boolean;
 }
 
 export interface PokerWatcherView {
@@ -266,6 +278,8 @@ export interface PokerView {
   seats: PokerSeatView[];
   maxSeats: number;
   watchers: PokerWatcherView[];
+  /** Joueur suivi par le spectateur destinataire ; jamais utilisé pour ouvrir une main en direct. */
+  followedUserId: string | null;
   /** Siège du destinataire. `null` : il regarde. */
   you: number | null;
   isHost: boolean;
@@ -282,7 +296,17 @@ export interface PokerView {
   } | null;
   /** Bornes de cave si le destinataire peut se caver maintenant. */
   buyInRange: { min: number; max: number | null } | null;
+  /**
+   * Le destinataire peut montrer ses cartes maintenant.
+   *
+   * Vrai seulement pour un joueur couché dont la main court encore : montrer
+   * un jeu qu'on défend toujours donnerait sa lecture à l'adversaire.
+   */
+  canReveal: boolean;
   deadlineAt: string | null;
+  /** Nature et durée de l'attente, pour placer le compte à rebours au bon endroit. */
+  timerKind: PokerTimerKind | null;
+  timerMs: number | null;
   actionMs: number;
   version: number;
   now: string;
@@ -324,6 +348,10 @@ export const pokerBlindsSchema = tableRef.extend({
 
 export const pokerTableRefSchema = tableRef;
 export const pokerSitOutSchema = tableRef.extend({ out: z.boolean() });
+export const pokerFollowSchema = tableRef.extend({ userId: z.string().uuid().nullable() });
+
+/** Montrer ses cartes après s'être couché. Sans retour en arrière. */
+export const pokerRevealSchema = tableRef;
 
 export type PokerSitInput = z.infer<typeof pokerSitSchema>;
 export type PokerRebuyInput = z.infer<typeof pokerRebuySchema>;
@@ -331,6 +359,8 @@ export type PokerActInput = z.infer<typeof pokerActSchema>;
 export type PokerBlindsInput = z.infer<typeof pokerBlindsSchema>;
 export type PokerTableRefInput = z.infer<typeof pokerTableRefSchema>;
 export type PokerSitOutInput = z.infer<typeof pokerSitOutSchema>;
+export type PokerFollowInput = z.infer<typeof pokerFollowSchema>;
+export type PokerRevealInput = z.infer<typeof pokerRevealSchema>;
 
 export const POKER_ERROR_LABELS = {
   POKER_SEAT_TAKEN: "Cette place vient d'être prise.",
@@ -341,5 +371,5 @@ export const POKER_ERROR_LABELS = {
   POKER_BUYIN_INVALID: "Cette cave n'est pas dans les bornes de la table.",
   POKER_REBUY_CLOSED: "On ne se recave qu'entre deux mains.",
   POKER_NOT_HOST: "Seul le créateur de la table règle les blindes.",
-  POKER_WATCHERS_FULL: "Il y a déjà trop de spectateurs à cette table.",
+  POKER_REVEAL_CLOSED: "On ne montre son jeu qu'une fois couché, la main en cours.",
 } as const;

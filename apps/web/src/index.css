@@ -135,6 +135,19 @@
   --animate-jeton: jeton 0.42s cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
   --animate-verdict: verdict 0.42s cubic-bezier(0.34, 1.56, 0.64, 1) both;
   --animate-encaisse: encaisse 1s cubic-bezier(0.32, 0, 0.67, 0) forwards;
+
+  /* --- Poker ---------------------------------------------------------------
+     Le poker n'a besoin que d'un geste que le blackjack n'a pas : le ramassage.
+     Fin de rue, le croupier tire à lui les mises posées devant chaque siège et
+     les réunit au centre. Sans ce trajet, les jetons disparaissent des sièges
+     et le pot grossit tout seul — deux faits sans lien apparent, alors que
+     c'est le même argent. La distribution et le retournement, eux, sont ceux du
+     blackjack : un seul vocabulaire pour toutes les tables. */
+  --animate-ramasse: ramasse 0.52s cubic-bezier(0.5, 0, 0.75, 0) forwards;
+  --animate-distribue: distribue 0.68s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  /* Le pot encaisse ce qu'on vient de lui pousser : une pulsation, pas un
+     rebond, sinon la table entière semble sauter à chaque rue. */
+  --animate-pot: pot 0.42s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 :root {
@@ -324,6 +337,51 @@
   to {
     opacity: 0;
     transform: translateY(-9rem) scale(0.55);
+  }
+}
+
+/* Fin de rue : les mises posées devant les sièges rejoignent le pot.
+   Le trajet part du siège et finit au centre — ce sont les distances qui
+   varient, jamais l'image-clé, d'où les deux variables. */
+@keyframes ramasse {
+  from {
+    opacity: 1;
+    transform: translate(0, 0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translate(var(--ramasse-x, 0), var(--ramasse-y, 0)) scale(0.55);
+  }
+}
+
+/* Règlement : le même tas repart du centre vers le siège gagnant. Le calque
+   animé couvre toute la table, donc les pourcentages décrivent réellement le
+   trajet sur le tapis et non quelques pixels autour d'un jeton. */
+@keyframes distribue {
+  0% {
+    opacity: 1;
+    transform: translate(0, 0) scale(1);
+  }
+  78% {
+    opacity: 1;
+    transform: translate(var(--distribue-x, 0), var(--distribue-y, 0)) scale(0.82);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--distribue-x, 0), var(--distribue-y, 0)) scale(0.72);
+  }
+}
+
+/* Le pot reçoit. */
+@keyframes pot {
+  from {
+    transform: scale(1);
+  }
+  55% {
+    transform: scale(1.12);
+  }
+  to {
+    transform: scale(1);
   }
 }
 

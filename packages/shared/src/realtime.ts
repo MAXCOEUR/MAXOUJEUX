@@ -45,8 +45,10 @@ import type { SlotsSpinInput, SlotsTableView } from "./slots.js";
 import type {
   PokerActInput,
   PokerBlindsInput,
+  PokerFollowInput,
   PokerRebuyInput,
   PokerSitInput,
+  PokerRevealInput,
   PokerSitOutInput,
   PokerTableRefInput,
   PokerView,
@@ -223,6 +225,10 @@ export interface ClientToServerEvents {
   "poker:blinds": (payload: PokerBlindsInput, ack: (reply: ActionReply) => void) => void;
   /** Se mettre en pause, ou revenir. */
   "poker:sitout": (payload: PokerSitOutInput, ack: (reply: ActionReply) => void) => void;
+  /** Choisir le joueur dont la main sera visible au récapitulatif, jamais en direct. */
+  "poker:follow": (payload: PokerFollowInput, ack: (reply: ActionReply) => void) => void;
+  /** Montrer son jeu après s'être couché. Sans retour en arrière. */
+  "poker:reveal": (payload: PokerRevealInput, ack: (reply: ActionReply) => void) => void;
 
   /** Tirer les rouleaux. Réservé au propriétaire de la machine. */
   "slots:spin": (payload: SlotsSpinInput, ack: (reply: ActionReply) => void) => void;

@@ -25,6 +25,19 @@ export function pokerSeatOrder(you: number | null, maxSeats: number): number[] {
   return places.map((place) => (place + you) % maxSeats);
 }
 
+/**
+ * Siège à placer en bas de l'écran.
+ *
+ * Le sien quand on joue. Quand on regarde, celui du joueur qu'on a choisi de
+ * suivre : c'est tout l'intérêt du suivi, voir la table de sa place plutôt que
+ * de la lire de biais.
+ */
+export function pokerAnchorSeat(view: PokerView, followed: string | null): number | null {
+  if (view.you !== null) return view.you;
+  if (!followed) return null;
+  return view.seats.find((siege) => siege.userId === followed)?.seat ?? null;
+}
+
 export interface OvalPose {
   /** Position en pourcentage de la largeur et de la hauteur du tapis. */
   x: number;
@@ -54,11 +67,41 @@ export function ovalPose(place: number, maxSeats: number): OvalPose {
   };
 }
 
-/** Abscisse de départ d'une carte distribuée, en pourcentage de sa largeur. */
-export function dealOriginX(place: number, maxSeats: number): number {
+/**
+ * D'où arrive une carte distribuée, en pourcentage de la taille de la carte.
+ *
+ * Toutes les cartes partent du sabot, au centre du tapis : celle du siège du
+ * bas descend vers son joueur, celle du siège du haut monte. Une direction
+ * unique, comme au blackjack, ferait venir la moitié des cartes de derrière les
+ * joueurs.
+ *
+ * Le trajet est volontairement plus court que la distance réelle : une carte
+ * qui traverse tout l'écran à chaque donne fatigue au bout de trois mains.
+ */
+export function dealOrigin(place: number, maxSeats: number): { x: number; y: number } {
   const pose = ovalPose(place, maxSeats);
-  // Les cartes partent du centre du tapis, où se tient le donneur.
-  return Math.round((50 - pose.x) * 6);
+  return {
+    x: Math.round((CENTRE.x - pose.x) * 6),
+    y: Math.round((CENTRE.y - pose.y) * 4.5),
+  };
+}
+
+/** Le centre du tapis, en pourcentage : sabot, tableau et pot y sont réunis. */
+const CENTRE = { x: 50, y: 50 } as const;
+
+/**
+ * Trajet d'une mise vers le pot, en pourcentage de la **taille du tapis**.
+ *
+ * Volontairement pas dans la même unité que `dealOrigin` : la carte se déplace
+ * en multiples d'elle-même, les jetons parcourent une fraction de la table. Un
+ * seul repère pour les deux obligerait à convertir dans le composant.
+ */
+export function potTravel(place: number, maxSeats: number): { x: number; y: number } {
+  const pose = ovalPose(place, maxSeats);
+  return {
+    x: Number((CENTRE.x - pose.x).toFixed(2)),
+    y: Number((CENTRE.y - pose.y).toFixed(2)),
+  };
 }
 
 /** Ce qu'un siège vient de faire, en une ligne. */
@@ -100,6 +143,9 @@ export function actionButtonLabel(
  * énoncerait chaque seconde et couvrirait tout le reste.
  */
 export function pokerAnnounce(view: PokerView): string {
+  if (view.timerKind === "start") return "La main va commencer.";
+  if (view.timerKind === "street") return "Lecture du tableau avant la reprise des mises.";
+  if (view.timerKind === "hand-break") return "Récapitulatif avant la prochaine main.";
   if (view.phase === "waiting") return "En attente d'un deuxième joueur.";
   if (view.phase === "payout") {
     const gagnants = view.seats.filter((seat) => (seat.won ?? 0) > 0);

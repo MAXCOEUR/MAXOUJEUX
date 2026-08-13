@@ -1,14 +1,23 @@
 import type { BlackjackCard } from "@maxoujeux/shared";
 import { cardLabel, isRedSuit, SUIT_GLYPHS } from "@/lib/blackjack-ui";
 import { cn } from "@/lib/cn";
+import type { HTMLAttributes } from "react";
 
-interface PlayingCardProps {
+interface PlayingCardProps extends Omit<HTMLAttributes<HTMLSpanElement>, "children"> {
   /** `null` : carte fermée. Aucune donnée de la carte n'a alors traversé le réseau. */
   card: BlackjackCard | null;
   /** Rang dans la donne : décale l'arrivée pour que les cartes sortent une à une. */
   dealIndex?: number;
   /** Abscisse du sabot, en pourcentage de la largeur de carte. */
   dealFromX?: number;
+  /**
+   * Ordonnée du sabot, en pourcentage de la hauteur de carte.
+   *
+   * Au blackjack le sabot est en haut à droite, une seule direction suffit. Au
+   * poker le croupier est au centre de l'ovale et les sièges tout autour : une
+   * carte pour le siège du bas doit descendre, celle du siège du haut monter.
+   */
+  dealFromY?: number;
   className?: string;
 }
 
@@ -28,9 +37,17 @@ interface PlayingCardProps {
  * redémarre pas sans remontage. C'est ce qui évite de tenir une liste des
  * cartes déjà animées.
  */
-export function PlayingCard({ card, dealIndex = 0, dealFromX = 260, className }: PlayingCardProps) {
+export function PlayingCard({
+  card,
+  dealIndex = 0,
+  dealFromX = 260,
+  dealFromY = -340,
+  className,
+  ...props
+}: PlayingCardProps) {
   return (
     <span
+      {...props}
       role="img"
       aria-label={cardLabel(card)}
       className={cn(
@@ -46,6 +63,7 @@ export function PlayingCard({ card, dealIndex = 0, dealFromX = 260, className }:
         animation: "var(--animate-donne)",
         animationDelay: `${dealIndex * 95}ms`,
         ["--donne-x" as string]: `${dealFromX}%`,
+        ["--donne-y" as string]: `${dealFromY}%`,
       }}
     >
       <span aria-hidden className="carte-3d relative block size-full" data-face={card ? "up" : "down"}>
