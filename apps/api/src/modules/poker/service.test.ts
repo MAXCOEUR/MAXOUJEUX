@@ -185,6 +185,51 @@ describe("déroulé d'une main", () => {
     }
   });
 
+  it("donne la parole aux deux joueurs, rue après rue", async () => {
+    /**
+     * Non-régression : deux joueurs sur une table de quatre places.
+     *
+     * La recherche du joueur suivant comptait ses pas en nombre de joueurs et
+     * non en nombre de chaises : elle s'arrêtait dans les places vides sans
+     * jamais revenir au siège 0. Le siège 1 parlait seul, la main se déroulait
+     * toute seule jusqu'à l'abattage, et le joueur assis en 0 n'avait jamais la
+     * main. C'est le cas de **toutes** les vraies tables, jamais pleines.
+     */
+    const hote = await joueur();
+    const tableId = await createPokerTable(hote, CONFIG);
+    const invite = await joueur();
+    await sitPoker(invite, tableId, 1, 600);
+
+    const paroles = new Map([
+      [hote.userId, 0],
+      [invite.userId, 0],
+    ]);
+    const rues = new Set<string>();
+
+    for (let coup = 0; coup < 8; coup += 1) {
+      const vueHote = viewPoker(tableId, hote.userId);
+      const vueInvite = viewPoker(tableId, invite.userId);
+      const actif = vueHote?.allowed ? hote : vueInvite?.allowed ? invite : null;
+      if (!actif) {
+        await attendre();
+        continue;
+      }
+      const vue = actif === hote ? vueHote : vueInvite;
+      if (!vue?.allowed) continue;
+      rues.add(vue.phase);
+      paroles.set(actif.userId, (paroles.get(actif.userId) ?? 0) + 1);
+      await actPoker(actif.userId, tableId, vue.version, {
+        kind: vue.allowed.actions.includes("check") ? "check" : "call",
+      });
+      await attendre();
+    }
+
+    expect(paroles.get(hote.userId)).toBeGreaterThan(0);
+    expect(paroles.get(invite.userId)).toBeGreaterThan(0);
+    // Personne ne relance : la main traverse donc bien les quatre rues.
+    expect([...rues].sort()).toEqual(["flop", "preflop", "river", "turn"]);
+  });
+
   it("mène une main jusqu'au bout et conserve les jetons", async () => {
     const hote = await joueur();
     const tableId = await createPokerTable(hote, CONFIG);

@@ -154,6 +154,64 @@ describe("tour d'enchères", () => {
   });
 });
 
+describe("sièges épars", () => {
+  /**
+   * Le cas de toutes les vraies tables : six chaises, deux joueurs.
+   *
+   * La recherche du joueur suivant doit balayer **toutes les places**, pas
+   * seulement autant de places qu'il y a de joueurs. Sinon elle s'arrête sur
+   * les chaises vides et ne revient jamais au début du tour de table : le
+   * siège 0 ne parlerait plus jamais et la main s'achèverait toute seule.
+   */
+  function eparse(places: number[], seatCount: number, button: number): PokerHandState {
+    return startPokerHand({
+      players: places.map((seat) => ({ seat, stack: 1_000 })),
+      seatCount,
+      button,
+      smallBlind: 10,
+      bigBlind: 20,
+      deck: paquetOrdonne(),
+    });
+  }
+
+  it("rend son option à la grosse blinde par-dessus les chaises vides", () => {
+    // Table de six, joueurs en 0 et 1, bouton en 1 : au heads-up le bouton est
+    // petite blinde et parle en premier. Après qu'il ait suivi, la parole doit
+    // revenir au siège 0 en franchissant les places 2 à 5, toutes vides.
+    let state = eparse([0, 1], 6, 1);
+    expect(state.turn).toBe(1);
+
+    state = applyPokerAction(state, 1, { kind: "call" });
+    expect(state.street).toBe("preflop");
+    expect(state.turn).toBe(0);
+    expect(legalPokerActions(state, 0).actions).toContain("check");
+
+    state = applyPokerAction(state, 0, { kind: "check" });
+    expect(state.street).toBe("flop");
+    // Après le flop, la grosse blinde parle en premier : le siège 0.
+    expect(state.turn).toBe(0);
+  });
+
+  it("fait le tour complet avec des places libres entre les joueurs", () => {
+    // Joueurs en 0, 3 et 7 sur neuf chaises : chaque intervalle est plus grand
+    // que le nombre de joueurs, le pire cas pour un balayage mal borné.
+    let state = eparse([0, 3, 7], 9, 0);
+    const parle: number[] = [];
+    for (let coup = 0; coup < 3; coup += 1) {
+      expect(state.turn).not.toBeNull();
+      const siege = state.turn as number;
+      parle.push(siege);
+      const legal = legalPokerActions(state, siege);
+      state = applyPokerAction(state, siege, {
+        kind: legal.actions.includes("check") ? "check" : "call",
+      });
+    }
+    // Bouton en 0 : petite blinde en 3, grosse en 7, premier à parler en 0.
+    expect(parle).toEqual([0, 3, 7]);
+    expect(state.street).toBe("flop");
+  });
+});
+
 describe("relance incomplète sur tapis", () => {
   it("monte la mise sans rendre le droit de relancer à qui avait déjà parlé", () => {
     // Le siège 3 relance à 300, le siège 0 suit, puis le siège 1 part à tapis
@@ -355,21 +413,37 @@ describe("cent mains automatiques", () => {
     };
 
     for (let partie = 0; partie < 100; partie += 1) {
-      const tapis = [400 + aleatoire(600), 400 + aleatoire(600), 400 + aleatoire(600)];
-      const depart = tapis.reduce((a, b) => a + b, 0);
+      // Géométrie tirée au sort, chaises vides comprises : une table pleine et
+      // contiguë est le seul cas où « nombre de joueurs » et « nombre de
+      // chaises » coïncident, donc le seul qui masquerait un balayage mal borné.
+      const seatCount = 2 + aleatoire(8);
+      const places: number[] = [];
+      for (let place = 0; place < seatCount; place += 1) {
+        if (aleatoire(2) === 0) places.push(place);
+      }
+      while (places.length < 2) {
+        const place = aleatoire(seatCount);
+        if (!places.includes(place)) places.push(place);
+      }
+      places.sort((a, b) => a - b);
+
+      const joueurs = places.map((seat) => ({ seat, stack: 400 + aleatoire(600) }));
+      const depart = joueurs.reduce((somme, joueur) => somme + joueur.stack, 0);
       let state = startPokerHand({
-        players: tapis.map((stack, seat) => ({ seat, stack })),
-        seatCount: 3,
-        button: partie % 3,
+        players: joueurs,
+        seatCount,
+        button: places[partie % places.length] as number,
         smallBlind: 10,
         bigBlind: 20,
         deck: createPokerHandDeck(aleatoire),
       });
 
+      const ruesJouees = new Set<string>();
       let garde = 0;
       while (state.street !== "ended" && garde < 200) {
         const tour = state.turn;
         if (tour === null) break;
+        ruesJouees.add(state.street);
         const legal = legalPokerActions(state, tour);
         // Un choix varié : suivre, relancer ou se coucher selon l'aléa.
         const tirage = aleatoire(10);
@@ -390,6 +464,25 @@ describe("cent mains automatiques", () => {
       expect(state.street).toBe("ended");
       const total = state.seats.reduce((somme, seat) => somme + (seat?.stack ?? 0), 0);
       expect(total).toBe(depart);
+
+      /**
+       * L'invariant qui compte : **on n'abat pas des cartes que personne n'a
+       * pu miser.**
+       *
+       * Le tableau se déroule d'un trait quand il ne reste plus rien à
+       * demander — un joueur à tapis, les autres couchés. Mais si deux joueurs
+       * arrivent au bout avec des jetons devant eux, c'est qu'ils ont eu la
+       * parole à chaque rue : les quatre doivent avoir été jouées.
+       *
+       * La conservation des jetons ne dit rien de cela — un tour d'enchères qui
+       * se referme trop tôt rend les mises et boucle proprement.
+       */
+      const debout = state.seats.filter(
+        (seat): seat is PokerSeatState => seat !== null && seat.status !== "folded",
+      );
+      if (debout.length > 1 && debout.filter((seat) => seat.stack > 0).length > 1) {
+        expect([...ruesJouees].sort()).toEqual(["flop", "preflop", "river", "turn"]);
+      }
     }
   });
 });

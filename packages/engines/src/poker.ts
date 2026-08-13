@@ -143,8 +143,10 @@ function actives(state: PokerHandState): PokerSeatState[] {
  * pour autant, les autres pouvant encore se disputer le pot secondaire.
  */
 function nextToAct(state: PokerHandState, from: number): number | null {
-  const places = occupiedSeats(state);
-  for (let pas = 1; pas <= places.length; pas += 1) {
+  // Le pas compte des **chaises**, pas des joueurs : sur une table de six où
+  // deux personnes jouent, s'arrêter au bout de deux pas laisserait le balayage
+  // dans les places vides sans jamais boucler jusqu'au premier siège.
+  for (let pas = 1; pas <= state.seats.length; pas += 1) {
     const candidat = (from + pas) % state.seats.length;
     const siege = state.seats[candidat];
     if (!siege || siege.status !== "active") continue;
