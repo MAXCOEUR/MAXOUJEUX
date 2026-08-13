@@ -287,14 +287,22 @@ describe("tirages", () => {
     expect(ligne?.payout).toBe(11);
   });
 
-  it("tient le compte de ce qui est misé et rendu", async () => {
+  it("ne compte un tour qu'une fois les rouleaux arrêtés", async () => {
+    // Le bilan est lu à l'écran pendant la rotation : le faire bouger au départ
+    // révélerait le gain avant la révélation, ce qui gâche tout.
     imposeLigne(["couronne"]);
     const joueur = await player(5_000);
     const tableId = await openSlotsTable(joueur);
 
     await spinReels(joueur.userId, tableId, 10, NOW);
+    const pendant = viewSlots(tableId, joueur.userId, NOW);
+    expect(pendant?.spinning).not.toBeNull();
+    expect(pendant?.wagered).toBe(0);
+    expect(pendant?.returned).toBe(0);
+
     await laisseTourner();
     await spinReels(joueur.userId, tableId, 10);
+    await laisseTourner();
 
     const vue = viewSlots(tableId, joueur.userId);
     expect(vue?.wagered).toBe(20);

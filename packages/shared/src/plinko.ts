@@ -7,11 +7,17 @@ import { z } from "zod";
  * change ni le plateau ni la fréquence des gains : uniquement ce que paie
  * chaque fente.
  *
- * Les trois barèmes rendent **95 à 96 %** — nettement plus qu'un vrai casino,
- * qui tourne autour de 90 %. Ce n'est pas seulement le taux qui compte : la
- * bille tombe au centre six fois sur dix, et ce sont ces fentes-là qui font le
- * ressenti du jeu. Elles rendent donc 0,8 à 1 fois la mise en risque faible, au
- * lieu de la moitié : on perd souvent un peu plutôt que rarement beaucoup.
+ * Les trois barèmes suivent la **même structure**, celle d'une planche de
+ * casino lisible d'un coup d'œil :
+ *
+ * - les trois fentes centrales font perdre — une bille sur deux y tombe ;
+ * - les deux fentes suivantes rendent exactement la mise — une sur quatre ;
+ * - tout le reste paie — une sur quatre.
+ *
+ * Le risque ne déplace pas ces frontières, seulement les montants : le centre
+ * fait peur (jusqu'à ×0,2 en risque élevé), les bords récompensent (jusqu'à
+ * ×19). Les trois rendent **95 à 96 %** sur la durée, bien plus qu'un vrai
+ * casino, mais la maison garde son avantage.
  */
 
 /** Rangées de picots traversées par la bille. */
@@ -41,9 +47,9 @@ export const PLINKO_RISK_LABELS: Record<PlinkoRisk, string> = {
  * une mise de 10 sur 10,5 MC.
  */
 const HALF_TABLES: Record<PlinkoRisk, readonly number[]> = {
-  low: [30, 19, 15, 12, 10, 9, 8],
-  medium: [80, 30, 20, 14, 10, 9, 6],
-  high: [250, 90, 40, 20, 11, 6, 2],
+  low: [20, 16, 14, 12, 10, 8, 7],
+  medium: [60, 30, 20, 14, 10, 6, 4],
+  high: [190, 58, 23, 14, 10, 3, 2],
 };
 
 /** Barème complet d'un risque : treize fentes, de la gauche vers la droite. */
@@ -61,21 +67,60 @@ export function plinkoMultiplier(risk: PlinkoRisk, slot: number): number {
 }
 
 /**
- * Probabilité d'atterrir dans une fente donnée.
+ * Poussée de la bille vers l'extérieur, à chaque rebond.
  *
- * Loi binomiale : la bille prend douze décisions indépendantes à pile ou face,
- * et le nombre de « droite » détermine la fente. La fente centrale sort 924 fois
- * sur 4 096, chaque fente de bord une seule fois.
+ * Une planche parfaitement équitable suit une loi binomiale, et six billes sur
+ * dix finissent alors dans les trois fentes centrales : mathématiquement juste,
+ * mais monotone à jouer — on regarde toujours la bille tomber au même endroit.
+ *
+ * Ce biais fait dépendre chaque rebond de l'écart déjà pris : plus la bille est
+ * décalée, plus elle a de chances de continuer dans le même sens. La planche
+ * reste **parfaitement symétrique** — aucun côté n'est favorisé — mais la
+ * dispersion s'élargit : le centre passe de 61 % à 50 %.
  */
+export const PLINKO_SPREAD = 0.1;
+
+/**
+ * Probabilité d'aller à droite, connaissant la rangée et l'écart déjà pris.
+ *
+ * Partagée entre le moteur, qui la joue, et le calcul de distribution, qui la
+ * somme : deux formules séparées finiraient par diverger, et les taux affichés
+ * ne décriraient plus le jeu réel.
+ */
+export function plinkoRightChance(row: number, right: number): number {
+  if (row === 0) return 0.5;
+  const ecart = (right - row / 2) / (row / 2);
+  return Math.min(0.95, Math.max(0.05, 0.5 + PLINKO_SPREAD * ecart));
+}
+
+/**
+ * Probabilité d'atterrir dans chaque fente.
+ *
+ * Calculée en propageant la masse rangée par rangée plutôt que par une formule
+ * fermée : le biais rend les rebonds dépendants du passé, ce qu'aucun
+ * coefficient binomial ne sait décrire.
+ */
+function distribution(): number[] {
+  let etat = new Map<number, number>([[0, 1]]);
+  for (let row = 0; row < PLINKO_ROWS; row += 1) {
+    const suivant = new Map<number, number>();
+    for (const [right, masse] of etat) {
+      const droite = plinkoRightChance(row, right);
+      suivant.set(right + 1, (suivant.get(right + 1) ?? 0) + masse * droite);
+      suivant.set(right, (suivant.get(right) ?? 0) + masse * (1 - droite));
+    }
+    etat = suivant;
+  }
+  return Array.from({ length: PLINKO_SLOTS }, (_, slot) => etat.get(slot) ?? 0);
+}
+
+/** La distribution ne dépend que des constantes : inutile de la refaire. */
+const DISTRIBUTION = distribution();
+
 export function plinkoProbability(slot: number): number {
-  if (!Number.isInteger(slot) || slot < 0 || slot >= PLINKO_SLOTS) {
-    throw new Error(`Fente de Plinko inconnue : ${slot}`);
-  }
-  let coefficient = 1;
-  for (let i = 0; i < slot; i += 1) {
-    coefficient = (coefficient * (PLINKO_ROWS - i)) / (i + 1);
-  }
-  return coefficient / 2 ** PLINKO_ROWS;
+  const chance = DISTRIBUTION[slot];
+  if (chance === undefined) throw new Error(`Fente de Plinko inconnue : ${slot}`);
+  return chance;
 }
 
 /** Versement d'une chute, mise comprise. Voir `wheelPayout` pour la convention. */

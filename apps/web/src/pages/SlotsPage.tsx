@@ -109,7 +109,7 @@ function SlotsTableScreen({ user, view }: { user: CurrentUser; view: SlotsTableV
         <button
           type="button"
           onClick={() => setConfirmLeave(true)}
-          className="inline-flex items-center gap-1.5 text-sm text-cream-dim transition-colors hover:text-cream"
+          className="-my-2 inline-flex min-h-11 items-center gap-1.5 py-2 text-sm text-cream-dim transition-colors hover:text-cream"
         >
           <ArrowLeft className="size-4" aria-hidden />
           Les machines
@@ -139,7 +139,7 @@ function SlotsTableScreen({ user, view }: { user: CurrentUser; view: SlotsTableV
             </span>
           </div>
 
-          <div className="relative mx-auto mt-5 max-w-md">
+          <div className="relative mx-auto mt-5 max-w-sm sm:max-w-md">
             {/* Lueur de plafonnier : la machine est l'objet éclairé de la pièce. */}
             <div
               aria-hidden
@@ -164,7 +164,6 @@ function SlotsTableScreen({ user, view }: { user: CurrentUser; view: SlotsTableV
           </p>
 
           <Bandeau view={view} />
-          <TableDesGains />
         </section>
 
         <aside className="space-y-4">
@@ -218,6 +217,7 @@ function SlotsTableScreen({ user, view }: { user: CurrentUser; view: SlotsTableV
             </section>
           )}
 
+          <TableDesGains />
           <Frise history={view.history} />
           <Spectateurs view={view} meId={user.id} />
         </aside>
@@ -310,7 +310,7 @@ function TableDesGains() {
   const frequence = slotsHitRate();
 
   return (
-    <section className="mt-6 border-t border-line pt-5" aria-labelledby="slots-paytable">
+    <section className="panel p-5" aria-labelledby="slots-paytable">
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
         <h2 id="slots-paytable" className="font-display text-sm font-bold text-cream">
           Table de gains
@@ -322,7 +322,7 @@ function TableDesGains() {
 
       {/* Une carte par symbole, du plus rare au plus commun : c'est le MAXOU
           qu'on cherche des yeux en premier, pas la cerise. */}
-      <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+      <ul className="grid grid-cols-2 gap-2">
         {[...SLOT_SYMBOLS]
           .map((symbol, index) => ({ symbol, index }))
           .reverse()

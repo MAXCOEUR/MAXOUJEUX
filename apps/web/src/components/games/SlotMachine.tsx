@@ -75,7 +75,7 @@ export function SlotMachine({
           {/* --- Fronton ------------------------------------------------- */}
           <div
             className={cn(
-              "relative mx-auto w-[92%] rounded-t-2xl border-2 border-b-0 px-4 py-2 text-center transition-colors duration-500",
+              "relative rounded-t-2xl border-2 border-b-0 px-4 py-2 text-center transition-colors duration-500",
               gagnant
                 ? "border-brass bg-linear-to-b from-brass/30 to-transparent"
                 : "border-brass-deep bg-linear-to-b from-brass-deep/25 to-transparent",
@@ -118,7 +118,12 @@ export function SlotMachine({
                 {Array.from({ length: SLOTS_REELS }, (_, reel) => {
                   const arret = slotsReelStopAt(reel);
                   const tourne = spinning !== null && !reduced && now - debut < arret;
-                  const symbole = tourne ? symboleDeDefilement(reel, now) : (affiche?.reels[reel] ?? 0);
+                  // Sans tirage encore joue, on montre trois symboles
+                  // **differents** : trois cerises alignees se liraient comme un
+                  // gain que personne n'a obtenu.
+                  const symbole = tourne
+                    ? symboleDeDefilement(reel, now)
+                    : (affiche?.reels[reel] ?? reel + 1);
                   // Seuls les rouleaux du symbole payant sont mis en avant :
                   // sur une paire, le troisième reste en retrait.
                   const paye =
@@ -184,7 +189,7 @@ export function SlotMachine({
                     ? "…"
                     : resting
                       ? "Rien cette fois"
-                      : "Prête"}
+                      : "Tire les rouleaux"}
               </p>
             </div>
           </div>

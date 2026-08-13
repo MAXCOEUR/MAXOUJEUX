@@ -45,7 +45,7 @@ export function ComptePage({ user }: { user: CurrentUser }) {
     <div className="space-y-5 pb-8">
       <Lien
         to={{ name: "lobby" }}
-        className="inline-flex items-center gap-1.5 text-sm text-cream-dim transition-colors hover:text-cream"
+        className="-my-2 inline-flex min-h-11 items-center gap-1.5 py-2 text-sm text-cream-dim transition-colors hover:text-cream"
       >
         <ArrowLeft className="size-4" aria-hidden />
         Le lobby

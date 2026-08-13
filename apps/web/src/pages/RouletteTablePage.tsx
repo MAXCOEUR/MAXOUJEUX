@@ -202,12 +202,17 @@ export function RouletteTablePage({ user, view }: { user: CurrentUser; view: Rou
   }, [view, moi]);
 
   return (
-    <div className="space-y-4 pb-44 sm:pb-4">
+    <div
+      // Le panneau de mise est fixe en bas sur telephone : sans cette reserve,
+      // il recouvre les cases exterieures — rouge, noir, pair, impair — qu'on
+      // ne peut alors plus atteindre.
+      className="space-y-4 pb-[19rem] sm:pb-4"
+    >
       <div className="flex items-center justify-between gap-3">
         <button
           type="button"
           onClick={() => setSortie(true)}
-          className="inline-flex items-center gap-1.5 text-sm text-cream-dim transition-colors hover:text-cream"
+          className="-my-2 inline-flex min-h-11 items-center gap-1.5 py-2 text-sm text-cream-dim transition-colors hover:text-cream"
         >
           <ArrowLeft className="size-4" aria-hidden /> Roulette
         </button>

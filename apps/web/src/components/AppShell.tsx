@@ -29,13 +29,19 @@ export function AppShell({ user, children }: AppShellProps) {
   return (
     <div className="flex min-h-dvh flex-col">
       <header className="sticky top-0 z-20 border-b border-line bg-felt-deep/85 pt-[env(safe-area-inset-top)] backdrop-blur-md">
-        <div className="mx-auto flex h-16 w-full max-w-6xl items-center gap-3 px-4 sm:px-6">
-          <Lien to={{ name: "lobby" }} aria-label="Retour au lobby">
-            <Logo className="text-xl" />
+        <div className="mx-auto flex h-16 w-full max-w-6xl items-center gap-2 px-3 sm:gap-3 sm:px-6">
+          {/* `min-w-0` sur le logo et `shrink-0` sur les actions : c'est le titre
+              qui doit céder de la place, pas le solde ni l'avatar. */}
+          <Lien
+            to={{ name: "lobby" }}
+            aria-label="Retour au lobby"
+            className="flex min-w-0 items-center py-2"
+          >
+            <Logo className="truncate text-lg sm:text-xl" />
           </Lien>
           <ConnectionBadge className="hidden sm:flex" />
 
-          <div className="ml-auto flex items-center gap-2 sm:gap-3">
+          <div className="ml-auto flex shrink-0 items-center gap-1 sm:gap-3">
             {user.isAdmin && (
               <Lien
                 to={{ name: "admin" }}
@@ -50,7 +56,7 @@ export function AppShell({ user, children }: AppShellProps) {
               type="button"
               onClick={openChat}
               aria-label={unread > 0 ? `Ouvrir le chat, ${Math.min(unread, 999)} message${unread > 1 ? "s" : ""} non lu${unread > 1 ? "s" : ""}` : "Ouvrir le chat"}
-              className="relative inline-flex items-center justify-center rounded-xl p-2.5 text-cream-dim transition-colors hover:bg-felt-raised hover:text-cream"
+              className="relative inline-flex shrink-0 items-center justify-center rounded-xl p-2 text-cream-dim transition-colors hover:bg-felt-raised hover:text-cream sm:p-2.5"
             >
               <MessageCircle className="size-4" aria-hidden />
               {unread > 0 && (
@@ -65,7 +71,7 @@ export function AppShell({ user, children }: AppShellProps) {
               type="button"
               onClick={() => setWalletOpen(true)}
               aria-label={`Ouvrir mon porte-monnaie ${COIN_NAME}`}
-              className="group flex items-center gap-2 rounded-full border border-brass/30 bg-brass/10 px-3 py-1.5 transition-colors hover:border-brass/70 hover:bg-brass/15"
+              className="group flex shrink-0 items-center gap-1.5 rounded-full border border-brass/30 bg-brass/10 px-2.5 py-2 transition-colors hover:border-brass/70 hover:bg-brass/15 sm:gap-2 sm:px-3"
             >
               {/* Jeton dessiné plutôt qu'icône générique : deux cercles suffisent. */}
               <span
@@ -75,7 +81,10 @@ export function AppShell({ user, children }: AppShellProps) {
                 <span className="size-1.5 rounded-full bg-brass-deep" />
               </span>
               <span className="tabular text-sm font-semibold text-brass-bright">
-                {formatCoins(user.balance)}
+                {/* Le symbole « MC » saute sur téléphone : le jeton doré à côté
+                    dit déjà de quelle monnaie il s'agit. */}
+                <span className="sm:hidden">{formatCoins(user.balance).replace(/\s*MC$/, "")}</span>
+                <span className="hidden sm:inline">{formatCoins(user.balance)}</span>
               </span>
             </button>
 
@@ -84,7 +93,7 @@ export function AppShell({ user, children }: AppShellProps) {
             <Lien
               to={{ name: "compte" }}
               aria-label="Mon compte"
-              className="inline-flex items-center gap-2 rounded-xl px-2 py-1.5 transition-colors hover:bg-felt-raised"
+              className="inline-flex shrink-0 items-center gap-2 rounded-xl px-1 py-2 transition-colors hover:bg-felt-raised sm:px-2"
             >
               <Avatar
                 userId={user.id}
@@ -100,7 +109,7 @@ export function AppShell({ user, children }: AppShellProps) {
               onClick={() => logout.mutate()}
               loading={logout.isPending}
               aria-label="Se déconnecter"
-              className="px-2.5"
+              className="shrink-0 px-2 sm:px-2.5"
             >
               <LogOut className="size-4" aria-hidden />
             </Button>

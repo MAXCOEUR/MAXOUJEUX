@@ -9,6 +9,7 @@
 import {
   PLINKO_ROWS,
   plinkoMultiplier,
+  plinkoRightChance,
   type PlinkoRisk,
   type PlinkoStep,
 } from "@maxoujeux/shared";
@@ -26,9 +27,8 @@ export interface PlinkoDrop {
  * L'aléa est fourni par l'appelant, comme pour la roue et le sabot.
  *
  * La fente est le **nombre de rebonds vers la droite** : douze pile à gauche
- * donnent la fente 0, douze face à droite la fente 12. C'est cette définition
- * qui rend la distribution binomiale — et non un tirage uniforme sur treize
- * fentes, qui rendrait les bords aussi fréquents que le centre et ferait
+ * donnent la fente 0, douze face à droite la fente 12. Un tirage uniforme sur
+ * treize fentes rendrait les bords aussi fréquents que le centre et ferait
  * exploser le barème du risque élevé.
  */
 export function dropPlinkoBall(randomIndex: RandomIndex, risk: PlinkoRisk): PlinkoDrop {
@@ -36,7 +36,13 @@ export function dropPlinkoBall(randomIndex: RandomIndex, risk: PlinkoRisk): Plin
   let slot = 0;
 
   for (let row = 0; row < PLINKO_ROWS; row += 1) {
-    const right = randomIndex(2) === 1;
+    // Le rebond n'est pas un pile ou face équilibré : la bille est poussée vers
+    // l'extérieur à proportion de l'écart déjà pris. C'est ce qui dégarnit le
+    // centre sans jamais favoriser un côté — voir `PLINKO_SPREAD`.
+    const chance = plinkoRightChance(row, slot);
+    // `randomIndex` rend un entier : on tire sur dix mille pour disposer d'une
+    // précision suffisante sur une probabilité fractionnaire.
+    const right = randomIndex(10_000) < Math.round(chance * 10_000);
     path.push(right ? "right" : "left");
     if (right) slot += 1;
   }

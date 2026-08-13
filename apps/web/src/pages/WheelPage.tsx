@@ -86,7 +86,7 @@ function WheelRoom({ user, view }: { user: CurrentUser; view: WheelView }) {
       <div className="flex items-center justify-between gap-3">
         <Lien
           to={{ name: "lobby" }}
-          className="inline-flex items-center gap-1.5 text-sm text-cream-dim transition-colors hover:text-cream"
+          className="-my-2 inline-flex min-h-11 items-center gap-1.5 py-2 text-sm text-cream-dim transition-colors hover:text-cream"
         >
           <ArrowLeft className="size-4" aria-hidden />
           Le lobby
@@ -101,10 +101,15 @@ function WheelRoom({ user, view }: { user: CurrentUser; view: WheelView }) {
           <span className="absolute inset-x-0 top-0 h-0.5 bg-game-wheel" aria-hidden />
 
           <div className="flex items-baseline justify-between gap-3">
-            <h1 id="wheel-title" className="font-display text-2xl font-black text-cream sm:text-3xl">
+            <h1
+              id="wheel-title"
+              className="font-display text-xl font-black text-balance text-cream sm:text-3xl"
+            >
               Roue de la fortune
             </h1>
-            <span className="text-xs text-cream-faint">Un lancer par 24 h</span>
+            <span className="shrink-0 whitespace-nowrap text-xs text-cream-faint">
+              1 lancer / 24 h
+            </span>
           </div>
 
           {/* La roue, dans sa lumière : c'est le seul objet de la pièce. */}

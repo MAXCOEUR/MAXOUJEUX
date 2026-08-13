@@ -145,7 +145,15 @@ export function ChipRack({
   onAdd: (value: ChipValue) => void;
 }) {
   return (
-    <div className="flex flex-wrap items-center justify-center gap-2" role="group" aria-label="Poser un jeton">
+    <div
+      // Une seule ligne qui defile sur telephone : sept jetons sur deux lignes
+      // faisaient du panneau de mise la moitie de l'ecran, et le tapis
+      // disparaissait dessous. `pan-x` laisse le geste vertical remonter a la
+      // page, sinon on se retrouve bloque des qu'on pose le doigt ici.
+      className="flex items-center gap-2 overflow-x-auto [scrollbar-width:none] [touch-action:pan-x_pan-y] sm:flex-wrap sm:justify-center sm:overflow-visible"
+      role="group"
+      aria-label="Poser un jeton"
+    >
       {[...CHIP_VALUES].reverse().map((value) => {
         const trop = current + value > max || current + value > balance;
         const choisi = selected === value;

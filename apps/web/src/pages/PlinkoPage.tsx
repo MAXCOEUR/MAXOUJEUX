@@ -117,7 +117,7 @@ function PlinkoTableScreen({ user, view }: { user: CurrentUser; view: PlinkoTabl
         <button
           type="button"
           onClick={() => setConfirmLeave(true)}
-          className="inline-flex items-center gap-1.5 text-sm text-cream-dim transition-colors hover:text-cream"
+          className="-my-2 inline-flex min-h-11 items-center gap-1.5 py-2 text-sm text-cream-dim transition-colors hover:text-cream"
         >
           <ArrowLeft className="size-4" aria-hidden />
           Les tables

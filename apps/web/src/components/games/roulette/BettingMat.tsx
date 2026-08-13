@@ -41,7 +41,12 @@ interface MatProps {
  */
 export function BettingMat({ bets, draft, open, onPlace }: MatProps) {
   return (
-    <div className="overflow-x-auto pb-1 [scrollbar-width:thin]">
+    <div
+      // `pan-x pan-y` est indispensable : sans lui, un doigt pose sur le tapis
+      // ne declenche que le defilement horizontal, et la page reste bloquee —
+      // impossible d'atteindre les cases du bas.
+      className="overflow-x-auto pb-1 [scrollbar-width:thin] [touch-action:pan-x_pan-y]"
+    >
       <div className="min-w-[34rem] select-none">
         {/* Les numéros : le zéro sur toute la hauteur, puis 3 × 12. */}
         <div className="flex gap-0.5">

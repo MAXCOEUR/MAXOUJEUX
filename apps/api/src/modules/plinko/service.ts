@@ -129,7 +129,21 @@ function toWatcher(player: PlayerIdentity): PlinkoWatcher {
  */
 function sweep(table: PlinkoTable, now: number): boolean {
   const before = table.balls.length;
-  table.balls = table.balls.filter((ball) => now - ball.at < PLINKO_FALL_MS);
+  const restantes: Ball[] = [];
+
+  for (const ball of table.balls) {
+    if (now - ball.at < PLINKO_FALL_MS) {
+      restantes.push(ball);
+      continue;
+    }
+    // La bille vient de toucher le fond : **c'est maintenant** qu'elle compte.
+    // Additionner au lâcher ferait bouger le bilan avant l'atterrissage, et le
+    // joueur lirait son gain dans le tableau de score au lieu de le voir tomber.
+    table.wagered += ball.stake;
+    table.returned += ball.payout;
+  }
+
+  table.balls = restantes;
   return table.balls.length !== before;
 }
 
@@ -372,8 +386,6 @@ export async function dropBall(
     });
 
     table.balls.push(ball);
-    table.wagered += ball.stake;
-    table.returned += ball.payout;
     table.version += 1;
     scheduleSweep(table);
     publish(table);
@@ -383,7 +395,22 @@ export async function dropBall(
     throw error;
   }
 
-  if (balance !== null) notifyWallet(userId, balance);
+  // Le porte-monnaie est déjà à jour en base ; seule l'**annonce** attend la fin
+  // de la chute. Sans ce délai, le solde affiché révélerait le gain pendant que
+  // la bille tombe encore.
+  if (balance !== null) annonceDifferee(userId, balance);
+}
+
+/** Annonces de solde en attente, à purger si le processus s'arrête. */
+const pending = new Set<NodeJS.Timeout>();
+
+function annonceDifferee(userId: string, balance: number): void {
+  const timer = setTimeout(() => {
+    pending.delete(timer);
+    notifyWallet(userId, balance);
+  }, PLINKO_FALL_MS);
+  timer.unref?.();
+  pending.add(timer);
 }
 
 function enqueue<T>(table: PlinkoTable, work: () => Promise<T>): Promise<T> {
@@ -529,6 +556,8 @@ export function plinkoCounts(): TableCounts {
 }
 
 export function shutdownPlinko(): void {
+  for (const timer of pending) clearTimeout(timer);
+  pending.clear();
   for (const timer of graceTimers.values()) clearTimeout(timer);
   graceTimers.clear();
   for (const table of tables.values()) {

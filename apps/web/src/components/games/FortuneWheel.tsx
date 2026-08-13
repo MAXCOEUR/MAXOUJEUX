@@ -114,6 +114,12 @@ function Segment({ index, label, tenths }: { index: number; label: string; tenth
           fontSize: "13px",
           fontWeight: 800,
           // Le texte suit le rayon : lu de biais, il donne la roue de foire.
+          //
+          // **Aucune correction pour la moitié basse** : la roue tourne. Une
+          // étiquette retournée pour être lisible en bas se retrouve tête en
+          // bas dès qu'elle arrive sous le repère — c'est-à-dire exactement là
+          // où le joueur la lit. L'orientation uniforme garantit qu'un secteur
+          // arrêté en haut est toujours à l'endroit.
           transform: `rotate(${(milieu * 180) / Math.PI + 90}deg)`,
           transformOrigin: `${CENTER + rayonTexte * Math.cos(milieu)}px ${CENTER + rayonTexte * Math.sin(milieu)}px`,
         }}

@@ -348,8 +348,6 @@ export async function spinReels(
     );
 
     table.spinning = spin;
-    table.wagered += spin.stake;
-    table.returned += spin.payout;
     table.version += 1;
 
     // La machine se libère seule à la fin de la rotation : personne n'a à
@@ -359,6 +357,11 @@ export async function spinReels(
     table.timer = setTimeout(() => {
       table.timer = null;
       if (!tables.has(table.id) || table.spinning?.id !== spin.id) return;
+      // Le tour ne compte qu'une fois les rouleaux arrêtés : additionner au
+      // départ ferait bouger le bilan avant la révélation, et le joueur lirait
+      // son gain dans le tableau de score au lieu de le voir tomber.
+      table.wagered += spin.stake;
+      table.returned += spin.payout;
       table.history.unshift(stripped(spin));
       if (table.history.length > HISTORY_MAX) table.history.length = HISTORY_MAX;
       table.spinning = null;
@@ -379,8 +382,21 @@ export async function spinReels(
     throw error;
   }
 
-  if (balance !== null) notifyWallet(userId, balance);
+  // Le porte-monnaie est déjà à jour en base ; seule l'**annonce** attend l'arrêt
+  // des rouleaux. Sans ce délai, le solde affiché révélerait le gain pendant
+  // qu'ils tournent encore.
+  if (balance !== null) {
+    const attente = setTimeout(() => {
+      pending.delete(attente);
+      notifyWallet(userId, balance as number);
+    }, spinMs);
+    attente.unref?.();
+    pending.add(attente);
+  }
 }
+
+/** Annonces de solde en attente, à purger si le processus s'arrête. */
+const pending = new Set<NodeJS.Timeout>();
 
 /** L'instant local du tirage ne sort pas du serveur : le client suit `spunAt`. */
 function stripped({ at: _at, ...spin }: Spin): SlotsSpinResult {
@@ -531,6 +547,8 @@ export function detachSlots(userId: string, graceMs = GRACE_MS): void {
 }
 
 export function shutdownSlots(): void {
+  for (const timer of pending) clearTimeout(timer);
+  pending.clear();
   for (const timer of graceTimers.values()) clearTimeout(timer);
   graceTimers.clear();
   for (const table of tables.values()) {
