@@ -1,7 +1,7 @@
 # MaxouJeux — Cahier des charges
 
 Document de référence du projet : ce qui est demandé, ce qui est décidé, ce qui est livré.
-Dernière mise à jour : 11/08/2026.
+Dernière mise à jour : 13/08/2026.
 
 ---
 
@@ -15,7 +15,8 @@ Parcours attendu :
 1. Le visiteur crée un compte avec **email, mot de passe et pseudo**.
 2. Il arrive sur une **interface de lobby** présentant plusieurs mini-jeux.
 3. Il joue à des **jeux multijoueur contre de vraies personnes** (Puissance 4,
-   Morpion, poker) ou à des jeux solo (Motus, blackjack).
+   Morpion, poker), à des jeux de casino partagés (blackjack, roulette) ou à des
+   jeux solo (Motus, roue de la fortune, Plinko, machine à sous).
 
 Exigences techniques formulées :
 
@@ -192,9 +193,19 @@ administrer en V1).
 |---|---|---|---|
 | **Puissance 4** | 2 | oui | 1 — *livré* |
 | **Morpion** | 2 | oui | 1 — *livré* |
-| **Motus** — mot du créneau en solo | 1 | oui | 2 |
-| **Blackjack** — croupier automatique | 1 à 5 | oui | 3 |
-| **Texas Hold'em** | 2 à 9 | oui | 4 |
+| **Motus** — mot du créneau en solo | 1 | oui | 2 — *livré* |
+| **Blackjack** — croupier automatique | 1 à 5 | oui | 3 — *livré* |
+| **Roulette** — mises agrégées, phases temporisées | 1 à 8 | oui | 3 — *livré* |
+| **Roue de la fortune** — salle publique, un lancer par 24 h | 1 + spectateurs | oui | 4 — *livré* |
+| **Plinko** — 10 tables, trois niveaux de risque | 1 + spectateurs | oui | 5 — *livré* |
+| **Machine à sous** — trois rouleaux, table de gains | 1 | oui | 6 |
+| **Texas Hold'em** | 2 à 9 | oui | 7 |
+
+L'ordre a été arrêté délibérément : trois jeux solo courts, à moteur simple et à
+forte valeur de retour quotidien, passent **avant** le poker. Le poker reste le plus
+gros morceau du programme — tables multi-joueurs, tours de mise, blindes,
+fold/call/raise/tapis, pots secondaires, évaluation des mains, reprise après
+déconnexion — et rien n'oblige à l'affronter avant d'avoir étoffé le catalogue.
 
 ### 7.1 Capacité initiale des jeux
 
@@ -207,6 +218,10 @@ joueurs ne puisse pas saturer le petit serveur. Au lancement, les limites sont :
 | **Morpion** | 10 parties de 2 joueurs |
 | **Motus** | 10 sessions solo |
 | **Blackjack** | 1 table de 5 joueurs |
+| **Roulette** | 1 table de 8 joueurs |
+| **Roue de la fortune** | 1 salle, 1 lancer à la fois, spectateurs illimités |
+| **Plinko** | 10 tables, spectateurs illimités |
+| **Machine à sous** | 10 machines solo |
 | **Texas Hold'em** | 1 table de 9 joueurs |
 
 Il n'existe donc qu'une seule table de poker et une seule table de blackjack au
@@ -238,6 +253,10 @@ engager davantage en modifiant la requête.
 | **Morpion** | 10 MC | 100 MC | 1,5 × la mise du joueur |
 | **Motus** | 100 MC | 100 MC | de 600 à 100 MC selon l'essai |
 | **Blackjack** | 10 MC | 2 500 MC | selon la main et les options jouées |
+| **Roulette** | 10 MC | — | selon le barème de la case jouée |
+| **Roue de la fortune** | 10 MC | 1 000 MC | de ×0 à ×20 la mise |
+| **Plinko** | 10 MC | 500 MC | de ×0,2 à ×25 selon le risque choisi |
+| **Machine à sous** | 10 MC | 100 MC | jusqu'à ×150 la mise |
 | **Texas Hold'em** | cave de 500 MC | cave de 10 000 MC | part remportée du pot |
 
 Pour le Puissance 4 et le Morpion, les deux joueurs engagent la même mise. Avec
@@ -265,6 +284,123 @@ Points connus qui font échouer les implémentations naïves, à traiter explici
 - **Motus** : lettres doublées dans le calcul jaune/vert, qui exige un algorithme en
   deux passes.
 - **Blackjack** : séparation, doublement, assurance, pénétration du sabot.
+- **Roue de la fortune** : le délai de 24 h doit être une donnée en base, pas un
+  minuteur en mémoire — un redémarrage de l'API ne doit pas offrir un second lancer.
+- **Plinko** : la fente est tirée par le serveur ; l'animation de chute n'est qu'un
+  rendu a posteriori d'un résultat déjà écrit.
+- **Machine à sous** : les rouleaux sont pondérés, donc un tirage uniforme sur les
+  six symboles casserait le taux de redistribution sans que rien ne le signale.
+
+### 7.3 Jeux à barème : roue, Plinko, machine à sous
+
+Ces trois jeux partagent la même mécanique : le joueur mise, le serveur tire un
+résultat pondéré, le client se contente de l'animer. Rien n'est tiré côté navigateur.
+
+Les barèmes vivent dans `packages/shared` avec le reste des constantes d'économie, et
+chacun est accompagné d'un test qui **recalcule le taux de redistribution** à partir
+des poids : une case qu'on retouche sans y penser doit faire échouer la suite, pas
+apparaître six mois plus tard dans les soldes.
+
+Le taux visé est de **90 à 95 %** sur le long terme. Les trois jeux retirent donc
+lentement des MaxouCoin de l'économie : ce sont des puits, pas des sources. La seule
+source gratuite reste le bonus quotidien du lobby, et la roue **ne le remplace pas**.
+
+#### Roue de la fortune
+
+Un lancer toutes les 24 h, mise choisie avant de lancer, de 10 à 1 000 MC. Neuf cases,
+volontairement inégales — une roue équiprobable rendrait le ×20 banal :
+
+| Case | ×0 | ×0,5 | ×1 | ×1,5 | ×2 | ×3 | ×5 | ×10 | ×20 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| Poids /1000 | 245 | 230 | 250 | 145 | 90 | 30 | 8 | 1 | 1 |
+| Probabilité | 24,5 % | 23 % | 25 % | 14,5 % | 9 % | 3 % | 0,8 % | 0,1 % | 0,1 % |
+
+Redistribution : **92,25 %**. Le joueur perd tout ou partie de sa mise dans 47,5 % des
+lancers et décroche au moins le double dans 13 % d'entre eux. Le ×20 tombe une fois sur
+mille : à la mise maximale, il verse 20 000 MC, soit quatre fois le solde de départ —
+c'est précisément ce qui justifie le plafond de mise, alors que les autres jeux n'en ont pas.
+
+Après usage, l'écran affiche le temps restant : « Prochain lancer dans 14 h 32 min ». Le
+délai court à partir de l'instant du lancer, pas à partir de minuit : un joueur ne doit
+pas apprendre en jouant à 23 h qu'il pouvait attendre une heure.
+
+**Une seule roue existe sur tout le site**, et elle est publique. On n'y crée pas de
+table : on entre dans la salle, on voit qui est là, et on regarde tourner. Le résultat
+est tiré **au départ** du lancer et voyage avec l'animation — deux spectateurs arrivés à
+une seconde d'écart voient donc la même roue s'arrêter sur la même case. La roue est
+occupée pendant les six secondes du lancer ; un second joueur doit attendre qu'elle
+s'immobilise.
+
+La salle ne consomme **pas** le verrou d'activité, contrairement aux planches de Plinko :
+regarder une roue tourner en attendant son tour ailleurs n'a rien d'incompatible, et il
+serait absurde d'interdire un lancer quotidien de six secondes à qui est assis au
+blackjack.
+
+Dernier point, de loyauté : la roue est dessinée en **neuf secteurs égaux** alors que les
+cases ne sortent pas à parts égales — le ×20 occupe un neuvième de la surface pour un
+millième des chances. Dessiner un secteur proportionnel à 0,1 % donnerait un trait de
+0,36°, invisible. La contrepartie est que l'écran affiche la **probabilité réelle de
+chaque case** à côté de la roue : le joueur doit pouvoir lire ce que la roue ne peut pas
+montrer.
+
+#### Plinko
+
+Une bille, **12 rangées de picots**, 13 fentes. La distribution est binomiale : la fente
+centrale sort 924 fois sur 4 096, chaque fente de bord 1 fois sur 4 096. Trois niveaux de
+risque, choisis avant le lancer, se partagent la même planche et ne changent que le barème :
+
+| Risque | Barème des 13 fentes, du bord vers le centre | Redistribution |
+|---|---|---:|
+| Faible | 3 – 1,9 – 1,5 – 1,2 – 1,1 – 0,9 – **0,5** | 91,65 % |
+| Moyen | 8 – 3 – 2 – 1,5 – 1,1 – 0,8 – **0,4** | 91,25 % |
+| Élevé | 25 – 9 – 4 – 2 – 1,1 – 0,5 – **0,2** | 91,3 % |
+
+Tous les multiplicateurs sont des **dixièmes** : avec un pas de mise de 10 MaxouCoin,
+c'est ce qui garantit un versement entier. Un barème en centièmes ferait tomber une
+mise de 10 sur 10,5 MC, que le code refuserait plutôt que d'arrondir.
+
+Les trois tables sont symétriques et rendent au moins la mise dans 38,8 % des cas. Le
+risque ne change donc pas la fréquence des gains, seulement leur amplitude : en risque
+élevé, la fente centrale ne rend que 20 % de la mise, mais les bords paient ×25.
+
+Une table de Plinko n'a **qu'un seul siège** : elle appartient à son joueur, et
+n'importe qui peut la regarder. Dix tables au maximum vivent en même temps, et un
+spectateur consomme le verrou d'activité comme au Blackjack — on ne regarde pas une
+table en jouant ailleurs.
+
+La mise ne se choisit pas à l'ouverture mais **bille par bille**, une fois à la table :
+c'est la même logique qu'au Blackjack, où l'on s'assoit avant de miser.
+
+Rien à l'écran n'annonce où la bille va tomber. La case ne s'allume qu'à l'impact, et
+son multiplicateur grossit sous le choc : surligner la destination à l'avance viderait
+la chute de tout intérêt.
+
+Les billes s'enchaînent : jusqu'à **douze en vol simultanément**, à **120 ms
+d'intervalle** au minimum. Ces deux bornes vont ensemble — à cette cadence, une
+quinzaine de billes peuvent coexister pendant les 1,8 s de chute, ce qui rend le plafond
+de douze atteignable au lieu d'être décoratif. Chaque bille est réglée **à son lâcher**,
+en une transaction : la chute à l'écran n'est qu'un rejeu du trajet déjà tiré, jamais ce
+qui décide du gain.
+
+#### Machine à sous
+
+Trois rouleaux identiques, six symboles pondérés, une ligne de gain. Un triple paie
+plein tarif, une paire paie un lot de consolation — sans elle, le joueur ne gagnerait
+qu'un tour sur cinq et la machine serait injouable.
+
+| Symbole | Poids /100 | Triple | Paire |
+|---|---:|---:|---:|
+| 🍒 Cerise | 34 | ×3 | ×1 |
+| 🔔 Cloche | 28 | ×4 | ×1 |
+| 💰 Sac | 20 | ×6 | ×1,5 |
+| 👑 Couronne | 12 | ×12 | ×2 |
+| 💎 Diamant | 5 | ×30 | ×4 |
+| **MAXOU** | 1 | **×150** | ×10 |
+
+Redistribution : **92,8 %**, dont 65 points viennent des paires et 27,8 des triples. Un
+tour sur 1,6 paie quelque chose. Le MAXOU triple sort une fois sur un million : à la mise
+maximale de 100 MC il verse 15 000 MC, et il n'est pas censé être vu — c'est ce qui en
+fait une histoire à raconter le jour où il tombe.
 
 ---
 
@@ -380,7 +516,7 @@ Décisions arrêtées à cette occasion :
 | Temps écoulé sur un coup | Forfait au bout de 30 s ; l'adversaire encaisse |
 | Déconnexion en pleine partie | 45 s de sursis, puis abandon |
 | Accès aux tables | Une page « salon » par jeu, depuis la carte du lobby |
-| Statistiques | Écrites en base, avec un récapitulatif discret ; Elo au lot 5 |
+| Statistiques | Écrites en base, avec un récapitulatif discret ; Elo au lot 8 |
 
 ### Lot 2 — Motus : **livré**
 
@@ -413,7 +549,7 @@ s'applique en environ 3,9 s sur une base PGlite vierge. Les images locales mesur
 5 et 8 lettres, téléphone 360 px sans débordement, deux onglets, coupure réseau,
 abandon et réduction des mouvements.
 
-### Lot 3 — Blackjack : **livré**
+### Lot 3 — Blackjack et Roulette : **livré**
 
 - **Table publique persistante** : une table de cinq sièges maximum, visible comme une
   vraie table de casino. Tous les joueurs assis voient les pseudos, mises, cartes, mains
@@ -430,6 +566,12 @@ abandon et réduction des mouvements.
 - **Front** : salon générique conservé, cinq places permanentes autour du croupier,
   commandes contextuelles et disposition responsive sans débordement à 360 px.
 
+La **roulette** est livrée dans le même lot : une table unique de huit joueurs, des
+phases de mises temporisées, des mises agrégées envoyées en une seule transaction, et
+un zéro qui ne gagne sur aucune catégorie à laquelle il n'appartient pas. Elle sert de
+référence pour tout ce qui est mises simultanées et cycle temporisé, là où le blackjack
+sert de référence pour les sièges, les spectateurs et la reprise après reconnexion.
+
 Vérifications passées : typage strict, **190 tests suivis par Git** (58 partagés,
 46 moteurs, 72 API, 14 web), suite API rejouée sur PostgreSQL 16 réel et build de
 production (API 112,67 Ko, front 116,57 Ko gzip). Le parcours Chromium couvre deux
@@ -440,8 +582,17 @@ téléphone 360 px.
 
 | Lot | Contenu | Charge |
 |---|---|---|
-| **4** | Poker Hold'em : moteur + ~60 tests, UI de table, timers, sit-out | 8–10 j |
-| **5** | Profils, classements Elo, chat, modération, sauvegardes | 3 j |
+| **4** | Roue de la fortune : **livré** | — |
+| **5** | Plinko : **livré** | — |
+| **6** | Machine à sous : rouleaux pondérés, table de gains, rendu des rouleaux | 2–3 j |
+| **7** | Poker Hold'em : moteur + ~60 tests, UI de table, timers, sit-out | 8–10 j |
+| **8** | Profils, classements Elo, chat, modération, sauvegardes | 3 j |
+
+Les lots 4 à 6 sont volontairement placés avant le poker : ce sont des jeux solo, sans
+table ni tour de parole, dont le moteur tient en une fonction pure et se teste
+intégralement hors serveur. Ils étoffent le catalogue pour une fraction du coût du
+poker, et le travail de rendu qu'ils demandent — animations de roue, de chute et de
+rouleaux — sert directement l'identité visuelle du site.
 
 Chaque lot se termine sur une version déployée et jouable sur le NAS.
 

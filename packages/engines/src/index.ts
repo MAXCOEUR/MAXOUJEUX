@@ -11,8 +11,10 @@ export * from "./grid.js";
 export * from "./connect4.js";
 export * from "./blackjack.js";
 export * from "./motus.js";
+export * from "./plinko.js";
 export * from "./roulette.js";
 export * from "./tictactoe.js";
+export * from "./wheel.js";
 
 import type { DuelGame } from "@maxoujeux/shared";
 import { connect4 } from "./connect4.js";

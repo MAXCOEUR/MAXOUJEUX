@@ -126,6 +126,111 @@ export function GameArtefact({ code, className }: GameArtefactProps) {
         </svg>
       );
 
+    case "wheel":
+      return (
+        <svg {...shared}>
+          {/* Roue verticale, vue de face — l'inverse du cylindre de roulette,
+              qui est posé à plat : deux roues vues pareil se confondraient. */}
+          {Array.from({ length: 9 }, (_, index) => {
+            // Neuf cases, comme les neuf multiplicateurs du barème.
+            const debut = (-90 + index * 40) * (Math.PI / 180);
+            const fin = debut + (40 * Math.PI) / 180;
+            const point = (angle: number) =>
+              `${(56 + 32 * Math.cos(angle)).toFixed(1)} ${(48 + 32 * Math.sin(angle)).toFixed(1)}`;
+            return (
+              <path
+                key={index}
+                d={`M 56 48 L ${point(debut)} A 32 32 0 0 1 ${point(fin)} Z`}
+                // La case du haut est celle que le repère désigne : elle porte
+                // le laiton, les autres alternent cuivre et feutre.
+                fill={index === 0 ? "#e8cd8a" : index % 2 === 0 ? "#e08a2e" : "#1a2e23"}
+                stroke="#8a6a28"
+                strokeWidth="0.8"
+              />
+            );
+          })}
+          <circle cx="56" cy="48" r="32" stroke="#c8a250" strokeWidth="2" />
+          <circle cx="56" cy="48" r="7" fill="#122019" stroke="#c8a250" strokeWidth="2" />
+          {/* Repère fixe en haut : il **pointe vers la roue**, sinon il ne
+              désigne rien. Il mord légèrement sur la jante, comme une vraie
+              languette qui vient claquer entre les secteurs. */}
+          <path d="M48 6h16l-8 14z" fill={CREAM} stroke="#8a6a28" strokeWidth="1" strokeLinejoin="round" />
+          {/* Deux jetons posés à côté : la roue se lance avec une mise. */}
+          <ellipse cx="103" cy="76" rx="12" ry="4.5" fill="#8a6a28" />
+          <ellipse cx="103" cy="72" rx="12" ry="4.5" fill="#c8a250" />
+        </svg>
+      );
+
+    case "plinko":
+      return (
+        <svg {...shared}>
+          {/* Le triangle de picots, resserré vers le haut comme la vraie planche. */}
+          {[0, 1, 2, 3].map((rangee) =>
+            Array.from({ length: rangee + 3 }, (_, colonne) => (
+              <circle
+                key={`${rangee}-${colonne}`}
+                cx={60 - (rangee + 2) * 8 + colonne * 16}
+                cy={22 + rangee * 13}
+                r="2.6"
+                fill="#4aa3a8"
+                opacity={0.55 + rangee * 0.15}
+              />
+            )),
+          )}
+          {/* La bille entre dans la planche, légèrement hors de l'axe : posée
+              sur l'axe central, elle donnerait une chute symétrique et perdrait
+              l'idée du rebond. Elle est tenue au-dessus de la première rangée
+              plutôt qu'entre les picots, où elle en masquerait un. */}
+          <circle cx="52" cy="11" r="5.5" fill={CREAM} />
+          <circle cx="50" cy="9" r="1.8" fill="#fff" opacity="0.6" />
+          {/* Les fentes d'arrivée : la case du bord est la plus payante. */}
+          {[0, 1, 2, 3, 4, 5, 6].map((fente) => (
+            <rect
+              key={fente}
+              x={12 + fente * 14}
+              y="76"
+              width="11"
+              height="10"
+              rx="2"
+              fill={fente === 0 || fente === 6 ? "#c8a250" : "#1a2e23"}
+              stroke="#3a5b47"
+              strokeWidth="0.8"
+            />
+          ))}
+        </svg>
+      );
+
+    case "slots":
+      return (
+        <svg {...shared}>
+          {/* Caisse de la machine, avec son levier sur le flanc droit. */}
+          <rect x="10" y="18" width="84" height="54" rx="7" fill="#1a2e23" stroke="#8a6a28" strokeWidth="2" />
+          <path d="M100 62V36" stroke="#8a6a28" strokeWidth="3" strokeLinecap="round" />
+          <circle cx="100" cy="31" r="6" fill="#b8453a" stroke="#8a6a28" strokeWidth="1.5" />
+          {/* Trois rouleaux. La ligne de gain traverse les trois fenêtres. */}
+          {[0, 1, 2].map((rouleau) => (
+            <rect
+              key={rouleau}
+              x={18 + rouleau * 26}
+              y="26"
+              width="22"
+              height="38"
+              rx="3"
+              fill="#0b1410"
+              stroke="#3a5b47"
+            />
+          ))}
+          {/* Une cerise, une couronne, un diamant : trois symboles distincts du
+              barème, pas trois fois le même — la machine est en train de tourner. */}
+          <circle cx="26" cy="47" r="5" fill="#b8453a" />
+          <circle cx="33" cy="50" r="4" fill="#b8453a" />
+          <path d="M26 42q4-8 9-9" stroke="#3a5b47" strokeWidth="1.6" fill="none" />
+          <path d="M44 54l3-14 5 6 4-6 5 6 3-6 2 14z" fill="#c8a250" />
+          <path d="M81 36l8 10-8 10-8-10z" fill="#a06bd6" />
+          <path d="M12 45h80" stroke="#e8cd8a" strokeWidth="1" opacity="0.35" />
+        </svg>
+      );
+
     case "motus":
       return (
         <svg {...shared}>

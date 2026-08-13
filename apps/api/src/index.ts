@@ -12,6 +12,7 @@ import { bootstrapAdmin } from "./modules/auth/bootstrap-admin.js";
 import { lobbyRoutes } from "./modules/lobby/routes.js";
 import { shutdown as shutdownTables } from "./modules/tables/manager.js";
 import { shutdown as shutdownMotus } from "./modules/motus/service.js";
+import { shutdownWheel } from "./modules/wheel/service.js";
 import { purgeExpiredSessions } from "./modules/auth/session.js";
 import { walletRoutes } from "./modules/wallet/routes.js";
 import { attachRealtime } from "./realtime/index.js";
@@ -118,6 +119,7 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
         // l'arrêt écrirait en base alors qu'on la referme.
         shutdownTables();
         shutdownMotus();
+        shutdownWheel();
         await io.close();
         await app.close();
         await closeDatabase();

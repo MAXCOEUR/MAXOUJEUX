@@ -314,7 +314,71 @@ export const motusAttempts = pgTable(
 );
 
 // ---------------------------------------------------------------------------
-// Chat (lot 5)
+// Roue de la fortune (lot 4)
+// ---------------------------------------------------------------------------
+
+/**
+ * Historique des lancers de roue.
+ *
+ * C'est cette table, et non un minuteur en mémoire, qui porte le délai de 24 h :
+ * un redémarrage de l'API ne doit pas offrir un second lancer. Le dernier
+ * `spun_at` du compte suffit à trancher.
+ *
+ * Chaque ligne conserve aussi de quoi rejouer l'économie : mise, secteur atteint
+ * et versement. Un multiplicateur mal réglé se retrouve alors dans l'historique
+ * plutôt que seulement dans les soldes.
+ */
+export const wheelSpins = pgTable(
+  "wheel_spins",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    stake: bigint("stake", { mode: "number" }).notNull(),
+    /** Index du secteur atteint : il commande l'angle d'arrêt à l'écran. */
+    segment: integer("segment").notNull(),
+    /** Multiplicateur en dixièmes, recopié pour survivre à un changement de barème. */
+    multiplierTenths: integer("multiplier_tenths").notNull(),
+    payout: bigint("payout", { mode: "number" }).notNull(),
+    spunAt: timestamp("spun_at", { withTimezone: true }).notNull().default(now),
+  },
+  (table) => [index("wheel_spins_user_spun_idx").on(table.userId, table.spunAt)],
+);
+
+// ---------------------------------------------------------------------------
+// Plinko (lot 5)
+// ---------------------------------------------------------------------------
+
+/**
+ * Historique des chutes de Plinko.
+ *
+ * Le trajet est conservé tel qu'il a été tiré : c'est la seule façon de
+ * reconstituer une partie contestée, l'animation du front n'étant qu'un rejeu
+ * de ces douze rebonds.
+ */
+export const plinkoDrops = pgTable(
+  "plinko_drops",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    stake: bigint("stake", { mode: "number" }).notNull(),
+    risk: text("risk").notNull(),
+    /** Fente d'arrivée, de 0 à 12. */
+    slot: integer("slot").notNull(),
+    /** Les douze rebonds, dans l'ordre. */
+    path: jsonb("path").notNull(),
+    multiplierTenths: integer("multiplier_tenths").notNull(),
+    payout: bigint("payout", { mode: "number" }).notNull(),
+    droppedAt: timestamp("dropped_at", { withTimezone: true }).notNull().default(now),
+  },
+  (table) => [index("plinko_drops_user_dropped_idx").on(table.userId, table.droppedAt)],
+);
+
+// ---------------------------------------------------------------------------
+// Chat (lot 8)
 // ---------------------------------------------------------------------------
 
 export const chatMessages = pgTable(

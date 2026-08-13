@@ -36,6 +36,13 @@
       "when": 1786541525495,
       "tag": "0004_mise_motus",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1786604376639,
+      "tag": "0005_tough_raider",
+      "breakpoints": true
     }
   ]
 }

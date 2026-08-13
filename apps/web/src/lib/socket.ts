@@ -12,6 +12,14 @@ import { bindGameEvents, useGame } from "./game.js";
 import { useChat } from "./chat.js";
 import { bindBlackjackEvents, useBlackjack } from "./blackjack.js";
 import { bindRouletteEvents, useRoulette } from "./roulette.js";
+import { bindPlinkoEvents, usePlinko } from "./plinko.js";
+import {
+  bindWheelEvents,
+  isInWheelRoom,
+  releaseWheelWatcher,
+  retainWheelWatcher,
+  useWheel,
+} from "./wheel.js";
 import {
   bindMotusEvents,
   isWatchingMotus,
@@ -76,6 +84,10 @@ export const useRealtime = create<RealtimeState>((set, get) => ({
           useGame.getState().clear();
           useBlackjack.getState().clear();
           useRoulette.getState().clear();
+          // Pas de `usePlinko.clear()` ici : une planche n'est pas une partie au
+          // sens de `match:sync`, qui répond donc toujours « aucune » pour elle.
+          // L'effacer ferait disparaître la planche que le serveur vient tout
+          // juste de renvoyer à la reconnexion.
         }
       });
 
@@ -89,6 +101,14 @@ export const useRealtime = create<RealtimeState>((set, get) => ({
         socket.emit("motus:watch", (reply) => {
           if (reply.ok) useMotus.getState().apply(reply.data);
           else pushToast("erreur", reply.message);
+        });
+      }
+
+      // La salle de la roue est indexée par socket : une reconnexion en change
+      // l'identifiant, il faut donc y rentrer de nouveau.
+      if (isInWheelRoom()) {
+        socket.emit("wheel:enter", (reply) => {
+          if (reply.ok) useWheel.getState().apply(reply.data);
         });
       }
     });
@@ -119,6 +139,8 @@ export const useRealtime = create<RealtimeState>((set, get) => ({
     bindGameEvents(socket);
     bindBlackjackEvents(socket);
     bindRouletteEvents(socket);
+    bindPlinkoEvents(socket);
+    bindWheelEvents(socket);
     bindMotusEvents(socket);
 
     set({ socket });
@@ -134,6 +156,7 @@ export const useRealtime = create<RealtimeState>((set, get) => ({
     // précédent.
     useGame.getState().clear();
     useBlackjack.getState().clear();
+    usePlinko.getState().clear();
     useMotus.getState().clear();
     useTables.getState().clear();
     useChat.getState().clear();
@@ -210,6 +233,20 @@ export function watchSalon(game: GameCode): () => void {
 
   return () => {
     if (releaseWatcher(game)) emit("tables:unwatch", { game });
+  };
+}
+
+/** Entre dans la salle de la roue, avec le même garde StrictMode que les salons. */
+export function enterWheelRoom(): () => void {
+  if (retainWheelWatcher()) {
+    emit("wheel:enter", (reply) => {
+      if (reply.ok) useWheel.getState().apply(reply.data);
+      else pushToast("erreur", reply.message);
+    });
+  }
+
+  return () => {
+    if (releaseWheelWatcher()) emit("wheel:leave");
   };
 }
 

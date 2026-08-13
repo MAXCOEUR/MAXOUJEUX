@@ -68,6 +68,25 @@ async function connectPglite(): Promise<Connection> {
   const client = new PGlite(dataDir);
   const db = drizzle(client, { schema });
 
+  // PGlite est **mono-processus** : deux `pnpm dev`, ou un `pnpm dev` et une
+  // suite de tests pointant sur le même répertoire, corrompent le dossier de
+  // données et échouent ensuite sur un « RuntimeError: Aborted() » venu du
+  // WebAssembly, qui ne dit rien à personne. On traduit une bonne fois.
+  if (!isTest) {
+    try {
+      await client.query("select 1");
+    } catch (error) {
+      throw new Error(
+        "Base de développement PGlite illisible.\n" +
+          "Cause la plus fréquente : une autre instance de l'API tourne déjà sur le même " +
+          `répertoire (${dataDir}).\n` +
+          "Arrête l'autre `pnpm dev`, puis relance. Si le problème persiste, supprime ce " +
+          "répertoire : il sera recréé, au prix des comptes de test qu'il contient.",
+        { cause: error },
+      );
+    }
+  }
+
   return {
     db: db as unknown as Database,
     driver: "pglite",

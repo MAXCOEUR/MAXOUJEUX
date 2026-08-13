@@ -7,9 +7,11 @@ export * from "./chat.js";
 export * from "./economy.js";
 export * from "./games.js";
 export * from "./motus.js";
+export * from "./plinko.js";
 export * from "./realtime.js";
 export * from "./roulette.js";
 export * from "./tables.js";
+export * from "./wheel.js";
 
 /** Enveloppe d'erreur uniforme renvoyée par l'API sur tout statut >= 400. */
 export interface ApiError {

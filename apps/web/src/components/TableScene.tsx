@@ -4,6 +4,10 @@ import { GameArtefact } from "./GameArtefact";
 /**
  * La table de jeu — signature de l'écran d'accueil.
  *
+ * La table ne porte que les six premiers jeux du catalogue — la vedette et les
+ * jeux ouverts. La grille fait trois colonnes sur deux rangées : y verser tout
+ * le catalogue ajouterait une troisième rangée hors de l'écran d'accueil.
+ *
  * Les six artefacts sont posés comme si quelqu'un avait quitté la table au
  * milieu d'une soirée : légèrement de biais, à des hauteurs différentes, sans
  * grille visible. C'est cette irrégularité qui donne l'impression d'objets
@@ -36,7 +40,7 @@ export function TableScene() {
         }}
       />
 
-      {GAMES.map((game, index) => {
+      {GAMES.slice(0, LAYOUT.length).map((game, index) => {
         const pose = LAYOUT[index] ?? LAYOUT[0];
         return (
           <div

@@ -41,8 +41,13 @@ export function NewTableDialog({
    * Jeux de casino : on s'assoit gratuitement, on mise ensuite sur le tapis,
    * manche après manche. Réclamer une mise pour ouvrir la table serait une
    * invention — dans une vraie salle, personne ne paie pour approcher.
+   *
+   * Le Plinko suit la même règle : la mise se choisit bille par bille, une fois
+   * à la table. Demander un montant à l'ouverture laisserait croire qu'il vaut
+   * pour toute la session.
    */
-  const sansMise = game.code === "blackjack" || game.code === "roulette";
+  const sansMise =
+    game.code === "blackjack" || game.code === "roulette" || game.code === "plinko";
 
   return (
     <Modal
@@ -87,11 +92,17 @@ export function NewTableDialog({
               Chacun choisit sa mise au début de chaque manche, à partir de{" "}
               {formatCoins(game.wager.min)} et sans plafond.
             </p>
-          </> : <>
+          </> : game.code === "roulette" ? <>
             <p className="text-cream">La table accueille jusqu’à huit joueurs autour du cylindre.</p>
             <p className="text-cream-dim">
               Tu poses les jetons que tu veux sur le tapis, tour après tour, à partir de{" "}
               {formatCoins(game.wager.min)} par case et sans plafond.
+            </p>
+          </> : <>
+            <p className="text-cream">La table est à toi, et n’importe qui peut venir la regarder.</p>
+            <p className="text-cream-dim">
+              Tu choisis ta mise à chaque bille, de {formatCoins(game.wager.min)} à{" "}
+              {formatCoins(game.wager.max ?? 500)}, et tu peux les enchaîner.
             </p>
           </>}
           <p className="text-xs text-cream-faint">Ouvrir ou rejoindre la table ne débite aucun jeton.</p>

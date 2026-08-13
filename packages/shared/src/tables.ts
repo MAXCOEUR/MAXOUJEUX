@@ -232,17 +232,19 @@ export type ActionReply<T = null> =
 /** Jeux ouverts au lot 1. Les autres codes sont refusés par le serveur. */
 export const DUEL_GAMES = ["connect4", "tictactoe"] as const;
 export type DuelGame = (typeof DUEL_GAMES)[number];
-export const TABLE_GAMES = ["connect4", "tictactoe", "blackjack", "roulette"] as const;
+export const TABLE_GAMES = ["connect4", "tictactoe", "blackjack", "roulette", "plinko"] as const;
 export type TableGame = (typeof TABLE_GAMES)[number];
 
 /**
- * Le Blackjack et la Roulette n'ont pas de mise à l'ouverture : elle se pose
- * manche par manche, sur la table. Les jeux de duel engagent la leur d'emblée.
+ * Le Blackjack, la Roulette et le Plinko n'ont pas de mise à l'ouverture : elle
+ * se pose manche par manche — ou bille par bille — sur la table. Les jeux de
+ * duel engagent la leur d'emblée.
  */
 export const createTableSchema = z.discriminatedUnion("game", [
   z.object({ game: z.enum(DUEL_GAMES), stake: z.number().int() }),
   z.object({ game: z.literal("blackjack") }),
   z.object({ game: z.literal("roulette") }),
+  z.object({ game: z.literal("plinko") }),
 ]);
 
 export const tableRefSchema = z.object({
@@ -286,8 +288,10 @@ export function stakeSuggestions(game: GameCode): number[] {
  * forgée. Les deux appellent la même fonction : un contrôle client seul ne
  * protège de rien.
  *
- * **Aucun plafond n'est vérifié ici** — le seul maximum est le solde du joueur,
- * et il n'est connu que du porte-monnaie, dont le débit atomique tranche.
+ * Le plafond n'est vérifié que si le jeu en déclare un — c'est le cas de la
+ * roue, du Plinko et de la machine à sous, dont les gros multiplicateurs
+ * dérégleraient l'économie sur une mise libre. Partout ailleurs, le seul
+ * maximum est le solde du joueur, que le débit atomique fait respecter.
  */
 export function isValidStake(game: GameCode, stake: number): boolean {
   const definition = getGame(game);

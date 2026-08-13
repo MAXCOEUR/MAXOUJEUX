@@ -6,6 +6,7 @@ import { AdminPage } from "@/pages/AdminPage";
 import { ComptePage } from "@/pages/ComptePage";
 import { LobbyPage } from "@/pages/LobbyPage";
 import { MotusPage } from "@/pages/MotusPage";
+import { WheelPage } from "@/pages/WheelPage";
 import { SalonPage } from "@/pages/SalonPage";
 import { TablePage } from "@/pages/TablePage";
 import { navigate, useRoute, type Route } from "@/lib/route";
@@ -75,9 +76,11 @@ function Screen({ route, user }: { route: Route; user: CurrentUser }) {
     case "compte":
       return <ComptePage user={user} />;
     case "salon":
-      return route.game === "motus"
-        ? <MotusPage user={user} />
-        : <SalonPage user={user} game={route.game} />;
+      // Motus et la roue n'ont pas de salon : l'un est solo, l'autre est une
+      // salle unique où l'on entre directement.
+      if (route.game === "motus") return <MotusPage user={user} />;
+      if (route.game === "wheel") return <WheelPage user={user} />;
+      return <SalonPage user={user} game={route.game} />;
     case "table":
       return <TablePage user={user} tableId={route.tableId} />;
     case "lobby":

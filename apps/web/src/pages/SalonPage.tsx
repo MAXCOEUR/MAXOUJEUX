@@ -98,7 +98,9 @@ function SalonContent({
         ? socket.emit("tables:create", { game: "blackjack" }, ack)
         : game === "roulette"
           ? socket.emit("tables:create", { game: "roulette" }, ack)
-          : socket.emit("tables:create", { game: game as DuelGame, stake }, ack),
+          : game === "plinko"
+            ? socket.emit("tables:create", { game: "plinko" }, ack)
+            : socket.emit("tables:create", { game: game as DuelGame, stake }, ack),
     );
 
     setCreating(false);

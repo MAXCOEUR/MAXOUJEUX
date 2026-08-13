@@ -575,6 +575,9 @@ describe("lecture et arrêt", () => {
       tictactoe: { waiting: 1, playing: 0, max: 10 },
       blackjack: { waiting: 0, playing: 0, max: 1 },
       roulette: { waiting: 0, playing: 0, max: 1 },
+      // Une planche de Plinko est toujours « en cours » : il n'y a personne à
+      // y attendre.
+      plinko: { waiting: 0, playing: 0, max: 10 },
     });
   });
 

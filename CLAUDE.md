@@ -439,3 +439,22 @@ Ne pas imposer :
 sauf si la complexité réelle de la tâche le justifie ou si cela est explicitement demandé.
 
 Éviter les longues explications avant de commencer une modification.
+
+### Skill UI/UX obligatoire
+
+Pour toute tâche concernant le frontend (`apps/web`), utiliser systématiquement le skill `ui-ux-pro-max` avant de concevoir ou modifier l'interface.
+
+Cela concerne notamment :
+- création ou modification de pages ;
+- composants React ;
+- mise en page ;
+- responsive ;
+- couleurs et typographie ;
+- navigation et ergonomie ;
+- formulaires ;
+- animations et interactions ;
+- amélioration visuelle d'une interface existante.
+
+Le skill doit servir à guider les choix UI/UX tout en respectant les contraintes et la direction artistique définies dans ce fichier.
+
+Pour une modification purement technique sans impact visuel ou UX (correction de type, appel API, logique Zustand, Socket.IO, etc.), il n'est pas nécessaire de l'utiliser.

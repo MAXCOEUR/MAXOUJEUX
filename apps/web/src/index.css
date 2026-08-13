@@ -46,6 +46,13 @@
   --color-game-connect4: #e05a45;
   --color-game-tictactoe: #d8d2c4;
   --color-game-roulette: #9d2f24;
+  /* Trois teintes franchement distinctes des rouges déjà posés : le cuivre
+     chaud de la roue, le bleu froid des billes de Plinko, l'améthyste des
+     rouleaux. Sans cet écart, quatre filets rouges se suivraient dans la
+     grille du lobby et le repère de couleur ne servirait plus à rien. */
+  --color-game-wheel: #e08a2e;
+  --color-game-plinko: #4aa3a8;
+  --color-game-slots: #a06bd6;
 
   /* Cylindre de roulette. Le rouge est plus profond que celui des cartes : il
      est laqué sur du bois, pas imprimé sur du carton, et il doit tenir à côté

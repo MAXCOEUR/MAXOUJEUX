@@ -6,7 +6,17 @@
  * les autres apparaissent grisés dans le lobby avec leur lot de livraison.
  */
 
-export const GAME_CODES = ["connect4", "tictactoe", "motus", "blackjack", "roulette", "poker"] as const;
+export const GAME_CODES = [
+  "connect4",
+  "tictactoe",
+  "motus",
+  "blackjack",
+  "roulette",
+  "wheel",
+  "plinko",
+  "slots",
+  "poker",
+] as const;
 
 export type GameCode = (typeof GAME_CODES)[number];
 
@@ -20,9 +30,10 @@ export interface GameWager {
   /**
    * Mise maximale, en MaxouCoin.
    *
-   * **Absente partout aujourd'hui** : le seul plafond est ce que le joueur
-   * possède. Le champ reste dans le contrat pour un jeu qui aurait un jour une
-   * vraie limite de règle, pas de prudence économique.
+   * Absente sur les jeux dont le gain reste proche de la mise : le seul plafond
+   * y est ce que le joueur possède. Elle devient en revanche indispensable dès
+   * qu'un barème comporte un gros multiplicateur — un ×20 sur une mise libre
+   * suffirait à dérégler l'économie en un lancer.
    */
   max?: number;
   /**
@@ -76,25 +87,30 @@ export interface GameDefinition {
   accent: string;
   /**
    * Jeu mis en vedette dans le lobby : occupe une vignette large.
-   * Un seul jeu doit porter ce drapeau, sinon la grille perd son point d'entrée.
+   *
+   * **Plus personne ne le porte** depuis que le catalogue compte neuf jeux : la
+   * vedette n'existait que pour combler la grille à trois colonnes, qui tombe
+   * désormais juste. La remettre laisserait deux cellules vides en fin de
+   * grille. Un seul jeu à la fois peut la porter.
    */
   featured?: boolean;
 }
 
 export const GAMES: readonly GameDefinition[] = [
   {
-    code: "poker",
-    name: "Texas Hold'em",
-    tagline: "Deux cartes en main, cinq sur la table. Le reste est du bluff.",
-    minPlayers: 2,
-    maxPlayers: 9,
+    code: "wheel",
+    name: "Roue de la fortune",
+    tagline: "Un lancer par jour, neuf cases, et l'envie de revenir demain.",
+    minPlayers: 1,
+    maxPlayers: 1,
     usesChips: true,
-    wager: { label: "Cave", min: 500 },
-    maxTables: 1,
-    status: "soon",
+    // Plafond volontaire : le ×20 est rare, mais sur une mise libre il suffirait
+    // d'un lancer heureux pour multiplier la masse de MaxouCoin en circulation.
+    wager: { label: "Mise", min: 10, max: 1_000, step: 10, payout: "×0 à ×20" },
+    maxTables: 10,
+    status: "live",
     milestone: 4,
-    accent: "var(--color-game-poker)",
-    featured: true,
+    accent: "var(--color-game-wheel)",
   },
   {
     code: "blackjack",
@@ -160,6 +176,45 @@ export const GAMES: readonly GameDefinition[] = [
     status: "live",
     milestone: 1,
     accent: "var(--color-game-tictactoe)",
+  },
+  {
+    code: "plinko",
+    name: "Plinko",
+    tagline: "Une bille, douze rangées de picots, et treize façons d'atterrir.",
+    minPlayers: 1,
+    maxPlayers: 1,
+    usesChips: true,
+    wager: { label: "Mise", min: 10, max: 500, step: 10, payout: "×0,2 à ×25 selon le risque" },
+    maxTables: 10,
+    status: "live",
+    milestone: 5,
+    accent: "var(--color-game-plinko)",
+  },
+  {
+    code: "slots",
+    name: "Machine à sous",
+    tagline: "Trois rouleaux, six symboles. Le MAXOU triple ne se voit qu'une fois.",
+    minPlayers: 1,
+    maxPlayers: 1,
+    usesChips: true,
+    wager: { label: "Mise", min: 10, max: 100, step: 10, payout: "jusqu'à ×150" },
+    maxTables: 10,
+    status: "soon",
+    milestone: 6,
+    accent: "var(--color-game-slots)",
+  },
+  {
+    code: "poker",
+    name: "Texas Hold'em",
+    tagline: "Deux cartes en main, cinq sur la table. Le reste est du bluff.",
+    minPlayers: 2,
+    maxPlayers: 9,
+    usesChips: true,
+    wager: { label: "Cave", min: 500 },
+    maxTables: 1,
+    status: "soon",
+    milestone: 7,
+    accent: "var(--color-game-poker)",
   },
 ] as const;
 

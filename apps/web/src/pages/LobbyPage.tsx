@@ -43,8 +43,9 @@ export function LobbyPage({ user }: { user: CurrentUser }) {
           </p>
         </div>
 
-        {/* Le jeu en vedette occupe deux colonnes : cinq vignettes égales
-            laisseraient un trou en fin de grille et aucun point d'entrée. */}
+        {/* Neuf jeux, trois colonnes : la grille tombe juste sans vignette
+            large. Le code de la vedette reste en place pour un catalogue dont
+            le compte ne serait plus un multiple de trois. */}
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {GAMES.map((game, index) => (
             <GameCard

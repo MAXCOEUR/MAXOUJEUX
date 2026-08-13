@@ -172,6 +172,10 @@ export const WALLET_REASONS = [
   "roulette_bet",
   "roulette_payout",
   "roulette_refund",
+  "wheel_stake",
+  "wheel_reward",
+  "plinko_stake",
+  "plinko_reward",
   "admin_adjustment",
 ] as const;
 
@@ -194,6 +198,10 @@ export const WALLET_REASON_LABELS: Record<WalletReason, string> = {
   roulette_bet: "Mise roulette",
   roulette_payout: "Gain roulette",
   roulette_refund: "Remboursement roulette",
+  wheel_stake: "Mise à la roue",
+  wheel_reward: "Gain à la roue",
+  plinko_stake: "Mise au Plinko",
+  plinko_reward: "Gain au Plinko",
   admin_adjustment: "Ajustement administrateur",
 };
 

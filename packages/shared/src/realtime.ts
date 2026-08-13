@@ -34,6 +34,8 @@ import type {
   BlackjackView,
 } from "./blackjack.js";
 import type { RouletteBetInput, RouletteTableRefInput, RouletteView } from "./roulette.js";
+import type { PlinkoDropInput, PlinkoRiskInput, PlinkoTableView } from "./plinko.js";
+import type { WheelSpinInput, WheelView } from "./wheel.js";
 import type { ChatMessage, ChatSendInput } from "./chat.js";
 
 export interface PresencePlayer {
@@ -80,6 +82,24 @@ export interface ServerToClientEvents {
   /** État Blackjack : cartes des joueurs publiques, carte fermée du croupier masquée. */
   "blackjack:state": (view: BlackjackView) => void;
   "roulette:state": (view: RouletteView) => void;
+  /**
+   * État d'une planche de Plinko, diffusé au propriétaire et à ses spectateurs.
+   *
+   * Les billes voyagent dans cet état plutôt que dans un événement séparé : un
+   * spectateur qui arrive en cours de route reçoit les billes déjà en vol et
+   * peut les placer, là où un événement « une bille est partie » lui aurait
+   * échappé.
+   */
+  "plinko:state": (view: PlinkoTableView) => void;
+  /** La planche a fermé — son propriétaire est parti. */
+  "plinko:closed": (payload: { tableId: string }) => void;
+  /**
+   * État de la salle de la roue.
+   *
+   * Personnalisé par destinataire : la roue et les spectateurs sont les mêmes
+   * pour tous, mais le délai de 24 h ne l'est pas.
+   */
+  "wheel:state": (view: WheelView) => void;
   "chat:message": (message: ChatMessage) => void;
 }
 
@@ -143,6 +163,18 @@ export interface ClientToServerEvents {
   "roulette:bet": (payload: RouletteBetInput, ack: (reply: ActionReply) => void) => void;
   /** Reprendre l'intégralité de ses jetons, tant que la bille n'est pas partie. */
   "roulette:clear": (payload: RouletteTableRefInput, ack: (reply: ActionReply) => void) => void;
+
+  /** Entrer dans la salle de la roue : l'accusé porte l'état initial. */
+  "wheel:enter": (ack: (reply: ActionReply<WheelView>) => void) => void;
+  /** Sortir de la salle. Le compte n'en sort qu'à son dernier onglet. */
+  "wheel:leave": () => void;
+  /** Miser et lancer. Une fois par 24 h, et seulement si la roue est libre. */
+  "wheel:spin": (payload: WheelSpinInput, ack: (reply: ActionReply) => void) => void;
+
+  /** Lâcher une bille. Réservé au propriétaire de la planche. */
+  "plinko:drop": (payload: PlinkoDropInput, ack: (reply: ActionReply) => void) => void;
+  /** Changer de niveau de risque entre deux billes. */
+  "plinko:risk": (payload: PlinkoRiskInput, ack: (reply: ActionReply) => void) => void;
   "chat:send": (payload: ChatSendInput, ack: (reply: ActionReply) => void) => void;
 }
 
