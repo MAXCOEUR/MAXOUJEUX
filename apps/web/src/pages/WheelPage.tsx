@@ -18,6 +18,7 @@ import { Lien } from "@/components/Lien";
 import { Plaque } from "@/components/Plaque";
 import { StakePicker } from "@/components/StakePicker";
 import { FortuneWheel } from "@/components/games/FortuneWheel";
+import { ClassementDuJour } from "@/components/stats/ClassementDuJour";
 import { cn } from "@/lib/cn";
 import { enterWheelRoom, request, useRealtime } from "@/lib/socket";
 import { useWheel } from "@/lib/wheel";
@@ -26,7 +27,7 @@ import { useWheel } from "@/lib/wheel";
  * La salle de la roue.
  *
  * Il n'y a qu'une roue sur le site : on n'y crée pas de table, on entre et on
- * regarde. Miser est un geste distinct, ouvert une fois par 24 h.
+ * regarde. Miser est un geste distinct, ouvert une fois par jour.
  *
  * L'écran est construit autour de ce partage : la roue au centre, ceux qui la
  * regardent juste en dessous, et la frise des derniers lancers sur le côté.
@@ -108,7 +109,7 @@ function WheelRoom({ user, view }: { user: CurrentUser; view: WheelView }) {
               Roue de la fortune
             </h1>
             <span className="shrink-0 whitespace-nowrap text-xs text-cream-faint">
-              1 lancer / 24 h
+              1 lancer / jour
             </span>
           </div>
 
@@ -155,7 +156,8 @@ function WheelRoom({ user, view }: { user: CurrentUser; view: WheelView }) {
                 Ta mise
               </h2>
               <p className="mt-1 text-xs text-cream-faint">
-                De {formatCoins(min)} à {formatCoins(max)}. Un seul lancer par 24 h.
+                De {formatCoins(min)} à {formatCoins(max)}. Un seul lancer par jour, remis à
+                zéro à minuit.
               </p>
 
               <StakePicker
@@ -203,6 +205,7 @@ function WheelRoom({ user, view }: { user: CurrentUser; view: WheelView }) {
           )}
 
           <Barème />
+          <ClassementDuJour game="wheel" meId={user.id} />
           <Historique view={view} />
         </aside>
       </div>

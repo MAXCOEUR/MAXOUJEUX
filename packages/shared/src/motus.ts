@@ -28,6 +28,15 @@ export interface MotusView {
   payout: number;
   net: number;
   version: number;
+  /**
+   * Départ du chrono, en ISO, ou `null` tant que rien n'est engagé.
+   *
+   * Le front en déduit un compteur qui avance : c'est **le serveur** qui donne
+   * l'origine, l'horloge du navigateur ne fait qu'afficher l'écart avec `now`.
+   */
+  startedAt: string | null;
+  /** Durée de la manche une fois terminée, en millisecondes. */
+  durationMs: number | null;
   now: string;
 }
 

@@ -20,6 +20,9 @@ export type Route =
   | { name: "lobby" }
   | { name: "admin" }
   | { name: "compte" }
+  | { name: "classement" }
+  | { name: "succes" }
+  | { name: "profil"; pseudo: string }
   | { name: "salon"; game: GameCode }
   | { name: "table"; tableId: string };
 
@@ -30,6 +33,13 @@ export function routePath(route: Route): string {
       return "/admin";
     case "compte":
       return "/mon-compte";
+    case "classement":
+      return "/classement";
+    case "succes":
+      return "/succes";
+    // Le pseudo voyage dans l'adresse : elle doit rester recopiable et partageable.
+    case "profil":
+      return `/joueur/${encodeURIComponent(route.pseudo)}`;
     case "salon":
       return `/jeu/${route.game}`;
     case "table":
@@ -48,6 +58,15 @@ export function parseRoute(pathname: string): Route {
   }
   if (segments[0] === "mon-compte" && segments.length === 1) {
     return { name: "compte" };
+  }
+  if (segments[0] === "classement" && segments.length === 1) {
+    return { name: "classement" };
+  }
+  if (segments[0] === "succes" && segments.length === 1) {
+    return { name: "succes" };
+  }
+  if (segments[0] === "joueur" && segments[1]) {
+    return { name: "profil", pseudo: decodeURIComponent(segments[1]) };
   }
   if (segments[0] === "jeu" && segments[1]) {
     return { name: "salon", game: segments[1] as GameCode };

@@ -20,6 +20,8 @@ function playingView(): MotusView {
     payout: 0,
     net: -100,
     version: 0,
+    startedAt: "2026-08-11T12:00:30.000Z",
+    durationMs: null,
     now: "2026-08-11T12:05:00.000Z",
   };
 }

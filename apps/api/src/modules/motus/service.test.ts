@@ -4,15 +4,23 @@ import { currentMotusSlot } from "@maxoujeux/shared";
 import { db, runMigrations } from "../../db/index.js";
 import { motusAttempts, motusSlots, walletTx } from "../../db/schema.js";
 import { AppError } from "../../lib/errors.js";
-import { balanceOf, ledgerSum, trackCreated } from "../../test/fixtures.js";
+import { balanceOf, ledgerSum, primes, trackCreated } from "../../test/fixtures.js";
 import { releaseActivity, reserveActivity } from "../games/activity.js";
 import { abandon, activeCount, guess, shutdown, start, unwatch, watch } from "./service.js";
 
 const created = trackCreated();
 /** Mise des tests. Reprend l'ancien prix fixe, pour garder les montants lisibles. */
 const MISE = 100;
+/** 14 h 30 à Paris le 11 août : le créneau de midi. */
 const NOW = new Date("2026-08-11T12:30:00.000Z");
-const LATER = new Date("2026-08-11T18:30:00.000Z");
+/**
+ * 01 h à Paris le 12 août, soit le créneau **suivant**.
+ *
+ * Les créneaux courant de minuit à midi puis de midi à minuit, il faut franchir
+ * minuit pour changer de mot — une simple soirée ne suffit plus depuis que la
+ * journée est coupée en deux au lieu de quatre.
+ */
+const LATER = new Date("2026-08-11T23:00:00.000Z");
 const touchedSlots = new Set<number>();
 
 async function player(balance = 1_000): Promise<string> {
@@ -149,8 +157,11 @@ describe("propositions Motus", () => {
       "correct",
       "correct",
     ]);
-    expect(await balanceOf(userId)).toBe(1_500);
-    expect(await ledgerSum(userId)).toBe(500);
+    // Trouver du premier coup fait tomber quatre succès : la première victoire
+    // du compte, le premier mot, la grille éclair et le coup du premier essai.
+    const bonus = primes("premier_gain", "motus_premier", "motus_eclair", "motus_un_essai");
+    expect(await balanceOf(userId)).toBe(1_500 + bonus);
+    expect(await ledgerSum(userId)).toBe(500 + bonus);
   });
 
   it("refuse un mot inconnu ou trop long sans consommer d'essai", async () => {

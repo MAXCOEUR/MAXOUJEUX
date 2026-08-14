@@ -76,6 +76,14 @@ export interface ServerToClientEvents {
    * dans un autre ne doit pas laisser un solde périmé à l'écran.
    */
   "wallet:update": (payload: { balance: number }) => void;
+  /**
+   * Succès débloqués par la dernière manche, diffusés aux sockets du joueur.
+   *
+   * Envoyé **après** la validation de la transaction : un succès annoncé puis
+   * annulé serait pire que pas d'annonce du tout. Le code suffit, le front
+   * retrouve le libellé et la prime dans le catalogue partagé.
+   */
+  "achievements:unlocked": (payload: { codes: string[] }) => void;
   /** Erreur applicative rattachée à une intention refusée. */
   "error:app": (payload: { code: string; message: string }) => void;
 
@@ -114,7 +122,7 @@ export interface ServerToClientEvents {
    * État de la salle de la roue.
    *
    * Personnalisé par destinataire : la roue et les spectateurs sont les mêmes
-   * pour tous, mais le délai de 24 h ne l'est pas.
+   * pour tous, mais le lancer du jour ne l'est pas.
    */
   "wheel:state": (view: WheelView) => void;
   /**
@@ -210,7 +218,7 @@ export interface ClientToServerEvents {
   "wheel:enter": (ack: (reply: ActionReply<WheelView>) => void) => void;
   /** Sortir de la salle. Le compte n'en sort qu'à son dernier onglet. */
   "wheel:leave": () => void;
-  /** Miser et lancer. Une fois par 24 h, et seulement si la roue est libre. */
+  /** Miser et lancer. Une fois par jour, et seulement si la roue est libre. */
   "wheel:spin": (payload: WheelSpinInput, ack: (reply: ActionReply) => void) => void;
 
   /** Prendre une place au tapis et se caver. */

@@ -10,6 +10,7 @@ import { accountRoutes, avatarReadRoutes } from "./modules/account/routes.js";
 import { adminRoutes } from "./modules/admin/routes.js";
 import { bootstrapAdmin } from "./modules/auth/bootstrap-admin.js";
 import { lobbyRoutes } from "./modules/lobby/routes.js";
+import { statsRoutes } from "./modules/stats/routes.js";
 import { shutdown as shutdownTables } from "./modules/tables/manager.js";
 import { shutdown as shutdownMotus } from "./modules/motus/service.js";
 import { shutdownWheel } from "./modules/wheel/service.js";
@@ -75,6 +76,7 @@ await app.register(accountRoutes, { prefix: "/api/account" });
 await app.register(avatarReadRoutes, { prefix: "/api/users" });
 await app.register(adminRoutes, { prefix: "/api/admin" });
 await app.register(lobbyRoutes, { prefix: "/api/lobby" });
+await app.register(statsRoutes, { prefix: "/api/stats" });
 await app.register(walletRoutes, { prefix: "/api/wallet" });
 
 // --- Temps réel -------------------------------------------------------------

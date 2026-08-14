@@ -5,6 +5,7 @@ import {
   SLOTS_SPIN_MS,
   getGame,
   isValidStake,
+  slotSymbol,
   slotsPayout,
   type SlotsPlayer,
   type SlotsSpinResult,
@@ -20,6 +21,12 @@ import { AppError } from "../../lib/errors.js";
 import { notifyWallet } from "../../realtime/notify.js";
 import { connectionCount } from "../../realtime/presence.js";
 import { releaseActivity, reserveActivity } from "../games/activity.js";
+import {
+  casinoOutcome,
+  publishRoundReceipt,
+  recordRoundInTx,
+  type RoundReceipt,
+} from "../stats/service.js";
 import { creditInTx, debitInTx } from "../wallet/service.js";
 
 /**
@@ -301,6 +308,7 @@ export async function spinReels(
   table.spinning = reservation;
 
   let balance: number | null = null;
+  let receipt: RoundReceipt | null = null;
   try {
     const spin = await enqueue(table, async () =>
       db.transaction(async (tx) => {
@@ -331,6 +339,21 @@ export async function spinReels(
         if (!inserted) throw new Error("Tirage de machine non enregistré");
 
         if (payout > 0) balance = await creditInTx(tx, userId, payout, "slots_reward");
+
+        receipt = await recordRoundInTx(tx, {
+          userId,
+          game: "slots",
+          wagered: stake,
+          returned: payout,
+          outcome: casinoOutcome(stake, payout),
+          flags:
+            result.outcome.kind === "triple" &&
+            result.outcome.symbol !== null &&
+            slotSymbol(result.outcome.symbol).code === "maxou"
+              ? ["slots_jackpot"]
+              : [],
+          at: spunAt,
+        });
 
         const view: Spin = {
           id: inserted.id,
@@ -384,11 +407,14 @@ export async function spinReels(
 
   // Le porte-monnaie est déjà à jour en base ; seule l'**annonce** attend l'arrêt
   // des rouleaux. Sans ce délai, le solde affiché révélerait le gain pendant
-  // qu'ils tournent encore.
-  if (balance !== null) {
+  // qu'ils tournent encore — et une bannière de succès ferait de même.
+  if (balance !== null || receipt !== null) {
     const attente = setTimeout(() => {
       pending.delete(attente);
-      notifyWallet(userId, balance as number);
+      if (balance !== null) notifyWallet(userId, balance);
+      // En dernier : si une prime de succès a été versée, c'est ce solde-là qui
+      // fait foi.
+      publishRoundReceipt(receipt);
     }, spinMs);
     attente.unref?.();
     pending.add(attente);

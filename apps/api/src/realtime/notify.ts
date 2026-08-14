@@ -19,10 +19,12 @@ export interface IdentityPatch {
 type WalletNotifier = (userId: string, balance: number) => void;
 type DisconnectNotifier = (userId: string) => void;
 type IdentityNotifier = (userId: string, patch: IdentityPatch) => void;
+type AchievementNotifier = (userId: string, codes: string[]) => void;
 
 let walletNotifier: WalletNotifier | null = null;
 let disconnectNotifier: DisconnectNotifier | null = null;
 let identityNotifier: IdentityNotifier | null = null;
+let achievementNotifier: AchievementNotifier | null = null;
 
 export function setWalletNotifier(notifier: WalletNotifier): void {
   walletNotifier = notifier;
@@ -54,4 +56,19 @@ export function setIdentityNotifier(notifier: IdentityNotifier): void {
  */
 export function notifyIdentity(userId: string, patch: IdentityPatch): void {
   identityNotifier?.(userId, patch);
+}
+
+export function setAchievementNotifier(notifier: AchievementNotifier): void {
+  achievementNotifier = notifier;
+}
+
+/**
+ * Annonce des succès fraîchement débloqués.
+ *
+ * Diffusé à toutes les sockets du joueur : le succès peut tomber sur une table
+ * de poker ouverte dans un autre onglet que celui qu'il regarde.
+ */
+export function notifyAchievements(userId: string, codes: string[]): void {
+  if (codes.length === 0) return;
+  achievementNotifier?.(userId, codes);
 }

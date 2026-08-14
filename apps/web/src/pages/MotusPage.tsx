@@ -19,8 +19,10 @@ import { Lien } from "@/components/Lien";
 import { Modal } from "@/components/Modal";
 import { Plaque } from "@/components/Plaque";
 import { StakePicker } from "@/components/StakePicker";
+import { ChronoMotus } from "@/components/games/ChronoMotus";
 import { MotusBoard } from "@/components/games/MotusBoard";
 import { MotusKeyboard } from "@/components/games/MotusKeyboard";
+import { ExploitsMotusDuJour } from "@/components/stats/ClassementDuJour";
 import { cn } from "@/lib/cn";
 import { useMotus } from "@/lib/motus";
 import {
@@ -235,11 +237,16 @@ function MotusContent({ user, view }: { user: CurrentUser; view: MotusView }) {
           </section>
 
           <aside className="space-y-4">
+            <ChronoMotus view={view} />
             <Legend />
             <RewardScale stake={view.stake} compact used={view.guesses.length} />
           </aside>
         </div>
       )}
+
+      {/* Après la grille et dans les deux états : celui qui n'a pas encore
+          commencé doit voir ce qu'il y a à battre aujourd'hui. */}
+      <ExploitsMotusDuJour meId={user.id} />
 
       <p aria-live="polite" aria-atomic="true" className="sr-only">
         {view.status === "won"

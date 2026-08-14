@@ -28,15 +28,16 @@ import {
   type BlackjackEngineCard,
   type BlackjackEngineHand,
 } from "@maxoujeux/engines";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "../../db/index.js";
-import { matchPlayers, matches, stats } from "../../db/schema.js";
+import { matchPlayers, matches } from "../../db/schema.js";
 import { AppError } from "../../lib/errors.js";
 import { notifyWallet } from "../../realtime/notify.js";
 import { connectionCount } from "../../realtime/presence.js";
 import { releaseActivity, reserveActivity } from "../games/activity.js";
 import type { PlayerIdentity } from "../tables/manager.js";
 import { recoverOpenRounds } from "../tables/recovery.js";
+import { publishRoundReceipt, recordRoundInTx, type RoundReceipt } from "../stats/service.js";
 import { creditInTx, debitInTx } from "../wallet/service.js";
 
 interface Hand {
@@ -682,12 +683,17 @@ async function settle(table: BlackjackTable): Promise<void> {
     const wager = player.hands.reduce((sum, hand) => sum + hand.wager, 0) + player.insurance;
     const net = payout - wager;
     player.roundNet = net;
-    return { player, payout, net };
+    // Le blackjack servi se constate ici et nulle part ailleurs : après la remise
+    // à zéro de la manche, plus rien n'en garde la trace.
+    const natural = player.hands.some((hand) => hand.outcome === "blackjack");
+    return { player, payout, net, wager, natural };
   });
 
-  const balances = await db.transaction(async (tx) => {
+  const settled = await db.transaction(async (tx) => {
     const result = new Map<string, number>();
-    await tx.update(matches).set({ status: "finished", endedAt: new Date() }).where(eq(matches.id, roundId));
+    const receipts: RoundReceipt[] = [];
+    const endedAt = new Date();
+    await tx.update(matches).set({ status: "finished", endedAt }).where(eq(matches.id, roundId));
     for (const settlement of settlements) {
       const label = settlement.net > 0 ? "win" : settlement.net < 0 ? "loss" : "draw";
       if (settlement.payout > 0) {
@@ -696,27 +702,25 @@ async function settle(table: BlackjackTable): Promise<void> {
       await tx.update(matchPlayers).set({ result: label, chipsDelta: settlement.net }).where(
         and(eq(matchPlayers.matchId, roundId), eq(matchPlayers.userId, settlement.player.userId)),
       );
-      await tx.insert(stats).values({
-        userId: settlement.player.userId,
-        game: "blackjack",
-        played: 1,
-        won: label === "win" ? 1 : 0,
-        lost: label === "loss" ? 1 : 0,
-        drawn: label === "draw" ? 1 : 0,
-      }).onConflictDoUpdate({
-        target: [stats.userId, stats.game],
-        set: {
-          played: sql`${stats.played} + 1`,
-          won: sql`${stats.won} + ${label === "win" ? 1 : 0}`,
-          lost: sql`${stats.lost} + ${label === "loss" ? 1 : 0}`,
-          drawn: sql`${stats.drawn} + ${label === "draw" ? 1 : 0}`,
-          updatedAt: new Date(),
-        },
-      });
+      // Une manche de blackjack peut porter plusieurs mains après un split, et
+      // une assurance par-dessus : c'est le total engagé sur le tapis qui compte
+      // comme mise, pas chaque écriture de porte-monnaie prise séparément.
+      receipts.push(
+        await recordRoundInTx(tx, {
+          userId: settlement.player.userId,
+          game: "blackjack",
+          wagered: settlement.wager,
+          returned: settlement.payout,
+          outcome: label,
+          flags: settlement.natural ? ["blackjack_natural"] : [],
+          at: endedAt,
+        }),
+      );
     }
-    return result;
+    return { balances: result, receipts };
   });
-  for (const [userId, balance] of balances) notifyWallet(userId, balance);
+  for (const [userId, balance] of settled.balances) notifyWallet(userId, balance);
+  for (const receipt of settled.receipts) publishRoundReceipt(receipt);
   table.phase = "result";
   table.turn = null;
   table.version += 1;

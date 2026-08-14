@@ -7,7 +7,7 @@
  *
  * Tout ce fichier est constitué de **fonctions pures** : aucune I/O, aucun accès
  * à la base. C'est ce qui permet de tester les règles d'équilibrage — série du
- * bonus, créneaux de 6 h, passage à l'heure d'été — sans lancer de serveur.
+ * bonus, créneaux Motus, passage à l'heure d'été — sans lancer de serveur.
  */
 
 export const COIN_NAME = "MaxouCoin";
@@ -73,8 +73,14 @@ export function nextStreak(
 // Motus
 // ---------------------------------------------------------------------------
 
-/** Un mot toutes les 6 h : créneaux de 00 h, 06 h, 12 h et 18 h, heure de Paris. */
-export const MOTUS_SLOT_HOURS = 6;
+/**
+ * Deux mots par jour : créneaux de 00 h et de 12 h, **heure civile de Paris**.
+ *
+ * Les bornes sont des heures civiles et non un décalage UTC : elles tombent donc
+ * sur minuit et midi toute l'année, que Paris soit à UTC+1 ou à UTC+2. Un `+1`
+ * codé en dur décalerait le créneau d'une heure la moitié de l'année.
+ */
+export const MOTUS_SLOT_HOURS = 12;
 
 export const MOTUS_MAX_ATTEMPTS = 6;
 
@@ -178,6 +184,7 @@ export const WALLET_REASONS = [
   "plinko_reward",
   "slots_stake",
   "slots_reward",
+  "achievement_reward",
   "admin_adjustment",
 ] as const;
 
@@ -206,6 +213,7 @@ export const WALLET_REASON_LABELS: Record<WalletReason, string> = {
   plinko_reward: "Gain au Plinko",
   slots_stake: "Mise à la machine",
   slots_reward: "Gain à la machine",
+  achievement_reward: "Succès débloqué",
   admin_adjustment: "Ajustement administrateur",
 };
 
@@ -368,6 +376,16 @@ function parisCivilToInstant(year: number, month: number, day: number, hour: num
   }
 
   return instant;
+}
+
+/**
+ * Heure civile parisienne, de 0 à 23.
+ *
+ * Sert aux succès liés au moment de la journée : « jouer entre 2 h et 5 h » se
+ * juge à l'heure du joueur, pas à celle du serveur ni à UTC.
+ */
+export function parisHour(at: Date): number {
+  return parisParts(at).hour;
 }
 
 /** Jour civil parisien au format `AAAA-MM-JJ`. C'est la clé du bonus quotidien. */

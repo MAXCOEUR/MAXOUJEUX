@@ -12,9 +12,23 @@
  */
 
 import { randomBytes } from "node:crypto";
+import { achievementReward } from "@maxoujeux/shared";
 import { eq, inArray, sql } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { matches, users, walletTx, wallets } from "../db/schema.js";
+
+/**
+ * Somme des primes des succès nommés.
+ *
+ * Un compte neuf débloque forcément des succès dès sa première manche gagnée, et
+ * la prime tombe sur le même solde que le gain de la partie. Plutôt que d'ajuster
+ * les montants attendus à la main — ce qui les rendrait faux au premier
+ * réglage du barème — les tests écrivent explicitement quels succès ils
+ * s'attendent à voir tomber.
+ */
+export function primes(...codes: string[]): number {
+  return codes.reduce((total, code) => total + achievementReward(code), 0);
+}
 
 /** Crée un compte de test avec un solde initial, sans passer par l'inscription. */
 export async function makeUser(balance: number): Promise<string> {

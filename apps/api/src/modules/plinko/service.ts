@@ -5,6 +5,7 @@ import {
   PLINKO_MAX_BALLS,
   GRACE_MS,
   PLINKO_MIN_INTERVAL_MS,
+  PLINKO_SLOTS,
   getGame,
   isValidStake,
   plinkoPayout,
@@ -23,6 +24,12 @@ import { AppError } from "../../lib/errors.js";
 import { notifyWallet } from "../../realtime/notify.js";
 import { connectionCount } from "../../realtime/presence.js";
 import { releaseActivity, reserveActivity } from "../games/activity.js";
+import {
+  casinoOutcome,
+  publishRoundReceipt,
+  recordRoundInTx,
+  type RoundReceipt,
+} from "../stats/service.js";
 import { creditInTx, debitInTx } from "../wallet/service.js";
 
 /**
@@ -337,6 +344,7 @@ export async function dropBall(
 
   const risk = table.risk;
   let balance: number | null = null;
+  let receipt: RoundReceipt | null = null;
 
   try {
     const ball = await enqueue(table, async () => {
@@ -370,6 +378,18 @@ export async function dropBall(
 
         if (payout > 0) balance = await creditInTx(tx, userId, payout, "plinko_reward");
 
+        receipt = await recordRoundInTx(tx, {
+          userId,
+          game: "plinko",
+          wagered: stake,
+          returned: payout,
+          outcome: casinoOutcome(stake, payout),
+          // Les deux fentes du bord sont les plus payantes et les plus rares :
+          // douze rebonds du même côté, une chance sur 4 096.
+          flags: drop.slot === 0 || drop.slot === PLINKO_SLOTS - 1 ? ["plinko_max"] : [],
+          at: droppedAt,
+        });
+
         const view: Ball = {
           id: inserted.id,
           risk,
@@ -397,17 +417,23 @@ export async function dropBall(
 
   // Le porte-monnaie est déjà à jour en base ; seule l'**annonce** attend la fin
   // de la chute. Sans ce délai, le solde affiché révélerait le gain pendant que
-  // la bille tombe encore.
-  if (balance !== null) annonceDifferee(userId, balance);
+  // la bille tombe encore — et une bannière de succès ferait de même.
+  if (balance !== null || receipt !== null) annonceDifferee(userId, balance, receipt);
 }
 
 /** Annonces de solde en attente, à purger si le processus s'arrête. */
 const pending = new Set<NodeJS.Timeout>();
 
-function annonceDifferee(userId: string, balance: number): void {
+function annonceDifferee(
+  userId: string,
+  balance: number | null,
+  receipt: RoundReceipt | null,
+): void {
   const timer = setTimeout(() => {
     pending.delete(timer);
-    notifyWallet(userId, balance);
+    if (balance !== null) notifyWallet(userId, balance);
+    // En dernier : si une prime de succès a été versée, c'est ce solde qui fait foi.
+    publishRoundReceipt(receipt);
   }, PLINKO_FALL_MS);
   timer.unref?.();
   pending.add(timer);

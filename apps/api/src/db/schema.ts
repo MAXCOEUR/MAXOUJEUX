@@ -230,6 +230,18 @@ export const matchPlayers = pgTable(
   ],
 );
 
+/**
+ * Cumuls **depuis toujours**, un poste par joueur et par jeu.
+ *
+ * Sert les classements « depuis toujours » et les profils sans avoir à sommer
+ * `game_stats_daily` sur des années de lignes. Les deux tables sont écrites dans
+ * la même transaction par `modules/stats/service.ts` : aucune ne peut avancer
+ * sans l'autre.
+ *
+ * Il n'y a **pas** de colonne d'Elo. Elle a existé, n'a jamais été écrite, et le
+ * classement ne repose plus sur un score de compétence : sur neuf jeux dont sept
+ * relèvent du hasard, un Elo mesurerait surtout la chance.
+ */
 export const stats = pgTable(
   "stats",
   {
@@ -241,12 +253,99 @@ export const stats = pgTable(
     won: integer("won").notNull().default(0),
     lost: integer("lost").notNull().default(0),
     drawn: integer("drawn").notNull().default(0),
-    elo: integer("elo").notNull().default(1000),
+    /** Total engagé et total encaissé, mises comprises. */
+    wagered: bigint("wagered", { mode: "number" }).notNull().default(0),
+    returned: bigint("returned", { mode: "number" }).notNull().default(0),
+    /**
+     * `returned - wagered`, entretenu en même temps que les deux.
+     *
+     * Redondant par construction, mais c'est la colonne sur laquelle porte le
+     * tri de tous les classements : la calculer à la volée interdirait l'index.
+     */
+    net: bigint("net", { mode: "number" }).notNull().default(0),
+    /** Meilleur gain **net** sur une seule manche. */
+    bestWin: bigint("best_win", { mode: "number" }).notNull().default(0),
+    /** Victoires consécutives en cours, remises à zéro à la première défaite. */
+    winStreak: integer("win_streak").notNull().default(0),
+    bestWinStreak: integer("best_win_streak").notNull().default(0),
+    /** Motus : meilleur chrono et meilleur nombre d'essais. Nuls ailleurs. */
+    bestTimeMs: bigint("best_time_ms", { mode: "number" }),
+    bestAttempts: integer("best_attempts"),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().default(now),
   },
   (table) => [
     primaryKey({ columns: [table.userId, table.game] }),
-    index("stats_game_elo_idx").on(table.game, table.elo),
+    index("stats_game_net_idx").on(table.game, table.net),
+  ],
+);
+
+/**
+ * Les mêmes cumuls, découpés par **jour civil parisien**.
+ *
+ * C'est la table qui rend les classements par période possibles : jour, semaine,
+ * mois et année sont tous une somme sur une plage de `day`. Les bornes viennent
+ * de `periodRange()` du paquet partagé, jamais d'un `date_trunc` SQL — celui-ci
+ * travaillerait dans le fuseau du serveur PostgreSQL.
+ *
+ * Sommer `wallet_tx` aurait évité cette table, mais ne dit rien du nombre de
+ * manches : le blackjack débite plusieurs fois par manche, et le poker joue ses
+ * mains en jetons sans toucher au porte-monnaie.
+ */
+export const gameStatsDaily = pgTable(
+  "game_stats_daily",
+  {
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    game: text("game").notNull(),
+    /** Jour civil Europe/Paris, au format `AAAA-MM-JJ`, comme `daily_claims`. */
+    day: date("day").notNull(),
+    rounds: integer("rounds").notNull().default(0),
+    wins: integer("wins").notNull().default(0),
+    losses: integer("losses").notNull().default(0),
+    draws: integer("draws").notNull().default(0),
+    wagered: bigint("wagered", { mode: "number" }).notNull().default(0),
+    returned: bigint("returned", { mode: "number" }).notNull().default(0),
+    net: bigint("net", { mode: "number" }).notNull().default(0),
+    bestWin: bigint("best_win", { mode: "number" }).notNull().default(0),
+    /** Temps de jeu cumulé, en millisecondes. Renseigné par le Motus. */
+    durationMs: bigint("duration_ms", { mode: "number" }).notNull().default(0),
+    bestTimeMs: bigint("best_time_ms", { mode: "number" }),
+    bestAttempts: integer("best_attempts"),
+  },
+  (table) => [
+    primaryKey({ columns: [table.userId, table.game, table.day] }),
+    // Classement d'un jeu sur une période : on filtre par jeu et plage de jours.
+    index("game_stats_daily_game_day_idx").on(table.game, table.day),
+    // Classement global sur une période : la plage de jours seule.
+    index("game_stats_daily_day_idx").on(table.day),
+  ],
+);
+
+/**
+ * Progression et déblocage des succès.
+ *
+ * `progress` ne conserve que le **maximum jamais atteint** : une évaluation
+ * rejouée après une reprise ne fait donc jamais reculer une barre. `unlocked_at`
+ * non nul vaut « prime déjà versée » — c'est la clause `unlocked_at is null` de
+ * l'UPDATE de déblocage qui garantit qu'elle ne l'est qu'une fois.
+ */
+export const userAchievements = pgTable(
+  "user_achievements",
+  {
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** Code du catalogue de `packages/shared/src/achievements.ts`. */
+    code: text("code").notNull(),
+    progress: integer("progress").notNull().default(0),
+    unlockedAt: timestamp("unlocked_at", { withTimezone: true }),
+  },
+  (table) => [
+    primaryKey({ columns: [table.userId, table.code] }),
+    index("user_achievements_unlocked_idx")
+      .on(table.userId, table.unlockedAt)
+      .where(sql`${table.unlockedAt} is not null`),
   ],
 );
 
@@ -267,7 +366,7 @@ export const motusWords = pgTable(
 );
 
 /**
- * Le mot d'un créneau de 6 h — 00 h, 06 h, 12 h et 18 h, heure de Paris.
+ * Le mot d'un créneau de 12 h — 00 h et 12 h, heure civile de Paris.
  *
  * `slot_start` est l'instant d'ouverture calculé par `currentMotusSlot()` du
  * paquet partagé : c'est la même borne des deux côtés, jamais recalculée en SQL.
@@ -294,6 +393,13 @@ export const motusAttempts = pgTable(
      * migration gardent un versement cohérent.
      */
     stake: bigint("stake", { mode: "number" }).notNull().default(100),
+    /**
+     * Départ du chrono, pour le classement à l'essai puis au temps.
+     *
+     * Distinct de `updated_at`, qui bouge à chaque proposition : seul l'instant
+     * du premier engagement mesure la réflexion du joueur.
+     */
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull().default(now),
     guesses: jsonb("guesses").notNull().default([]),
     solved: boolean("solved").notNull().default(false),
     /** Récompense effectivement versée. Empêche un second versement au même créneau. */
@@ -320,9 +426,10 @@ export const motusAttempts = pgTable(
 /**
  * Historique des lancers de roue.
  *
- * C'est cette table, et non un minuteur en mémoire, qui porte le délai de 24 h :
- * un redémarrage de l'API ne doit pas offrir un second lancer. Le dernier
- * `spun_at` du compte suffit à trancher.
+ * C'est cette table, et non un minuteur en mémoire, qui porte la règle du lancer
+ * quotidien : un redémarrage de l'API ne doit pas offrir un second lancer. Le
+ * dernier `spun_at` du compte suffit à trancher — il est comparé au jour civil
+ * parisien courant, pas à un délai écoulé.
  *
  * Chaque ligne conserve aussi de quoi rejouer l'économie : mise, secteur atteint
  * et versement. Un multiplicateur mal réglé se retrouve alors dans l'historique

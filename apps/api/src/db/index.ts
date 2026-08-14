@@ -109,3 +109,21 @@ export const db = connection.db;
 export const dbDriver = connection.driver;
 export const runMigrations = connection.migrate;
 export const closeDatabase = connection.close;
+
+/**
+ * Lignes d'un `db.execute` de SQL brut, quel que soit le pilote.
+ *
+ * Les deux pilotes ne rendent **pas** la même chose : postgres-js renvoie
+ * directement un tableau de lignes, PGlite un objet `{ rows }`. Sans cette
+ * normalisation, une requête écrite en développement marcherait sur PGlite et
+ * rendrait un tableau vide en production — précisément l'écart qui ne se
+ * découvre qu'après déploiement.
+ *
+ * Ne concerne que le SQL brut : le constructeur de requêtes de Drizzle rend déjà
+ * un tableau des deux côtés.
+ */
+export function rowsOf<T = Record<string, unknown>>(result: unknown): T[] {
+  if (Array.isArray(result)) return result as T[];
+  const rows = (result as { rows?: unknown } | null)?.rows;
+  return Array.isArray(rows) ? (rows as T[]) : [];
+}

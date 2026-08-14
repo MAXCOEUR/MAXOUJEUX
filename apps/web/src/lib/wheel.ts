@@ -35,7 +35,7 @@ export const useWheel = create<WheelStore>((set) => ({
   pending: false,
 
   apply: (view) => {
-    // L'horloge serveur fait foi : le compte à rebours des 24 h et la fin de
+    // L'horloge serveur fait foi : le compte à rebours jusqu'à minuit et la fin de
     // l'animation se calculent dessus, jamais sur l'horloge du poste.
     syncServerClock(view.now);
     set({ view, pending: false });

@@ -10,7 +10,7 @@ import {
   updatePseudoSchema,
   type CurrentUser,
 } from "@maxoujeux/shared";
-import { ArrowLeft, ImageUp, Trash2 } from "lucide-react";
+import { ArrowLeft, BarChart3, ImageUp, Trash2 } from "lucide-react";
 import { useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Avatar } from "@/components/Avatar";
 import { Button } from "@/components/Button";
@@ -60,6 +60,16 @@ export function ComptePage({ user }: { user: CurrentUser }) {
           <p className="truncate text-sm text-cream-dim">{user.email}</p>
           <p className="tabular mt-1 text-xs text-brass">{formatCoins(user.balance)}</p>
         </div>
+
+        {/* Le profil public est **la même page** que celle des autres joueurs :
+            c'est la seule façon de savoir exactement ce qui est montré de soi. */}
+        <Lien
+          to={{ name: "profil", pseudo: user.pseudo }}
+          className="ml-auto inline-flex min-h-11 shrink-0 items-center gap-1.5 self-center rounded-xl px-3 py-2 text-sm text-cream-dim transition-colors hover:bg-felt-raised hover:text-cream"
+        >
+          <BarChart3 className="size-4" aria-hidden />
+          <span className="hidden sm:inline">Mes statistiques</span>
+        </Lien>
       </header>
 
       <AvatarCard user={user} />

@@ -1,15 +1,13 @@
 import { z } from "zod";
+import { nextParisMidnight, parisDay } from "./economy.js";
 
 /**
  * Roue de la fortune — barème et contrat partagés.
  *
- * Un lancer toutes les 24 h, mise choisie avant de lancer. La roue est un puits
- * de MaxouCoin, pas une source : elle rend 92 % de ce qu'elle encaisse. La seule
- * entrée gratuite du site reste le bonus quotidien du lobby.
+ * Un lancer par **jour civil parisien**, mise choisie avant de lancer. La roue
+ * est un puits de MaxouCoin, pas une source : elle rend 92 % de ce qu'elle
+ * encaisse. La seule entrée gratuite du site reste le bonus quotidien du lobby.
  */
-
-/** Délai entre deux lancers d'un même compte. */
-export const WHEEL_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 
 export interface WheelSegment {
   /**
@@ -54,6 +52,17 @@ export const WHEEL_SEGMENTS: readonly WheelSegment[] = [
 
 export const WHEEL_TOTAL_WEIGHT = WHEEL_SEGMENTS.reduce((total, segment) => total + segment.weight, 0);
 
+/**
+ * Le meilleur secteur de la roue, en dixièmes.
+ *
+ * Dérivé du barème plutôt que recopié : le succès « Le gros lot » suivra
+ * automatiquement un jour où le ×20 changerait de valeur.
+ */
+export const WHEEL_MAX_TENTHS = WHEEL_SEGMENTS.reduce(
+  (best, segment) => Math.max(best, segment.multiplierTenths),
+  0,
+);
+
 /** Probabilité d'un secteur, entre 0 et 1. Affichée telle quelle à l'écran. */
 export function wheelProbability(index: number): number {
   const segment = WHEEL_SEGMENTS[index];
@@ -90,11 +99,22 @@ export function wheelReturnToPlayer(): number {
   return total / (10 * WHEEL_TOTAL_WEIGHT);
 }
 
-/** Instant du prochain lancer autorisé, ou `null` si la roue est disponible. */
+/**
+ * Instant du prochain lancer autorisé, ou `null` si la roue est disponible.
+ *
+ * Un lancer par jour civil parisien, remis à zéro à minuit — le même mécanisme
+ * que le bonus quotidien, et non un délai de 24 h glissant. Une fenêtre
+ * glissante ferait dériver le créneau d'un peu chaque jour : qui lance à 19 h le
+ * lundi ne pourrait relancer qu'après 19 h le mardi, puis après 20 h le
+ * mercredi. « Une fois par jour » se comprend, « 24 h après ton dernier lancer »
+ * se calcule.
+ *
+ * La contrepartie est assumée : lancer à 23 h 50 autorise un second lancer dix
+ * minutes plus tard. C'est exactement le compromis déjà accepté pour le bonus.
+ */
 export function nextWheelSpinAt(lastSpunAt: Date | null, now: Date): Date | null {
   if (!lastSpunAt) return null;
-  const next = new Date(lastSpunAt.getTime() + WHEEL_COOLDOWN_MS);
-  return next.getTime() > now.getTime() ? next : null;
+  return parisDay(lastSpunAt) === parisDay(now) ? nextParisMidnight(now) : null;
 }
 
 /**
@@ -148,7 +168,7 @@ export interface WheelSpinning {
  *
  * Il n'y a **qu'une roue sur tout le site** : personne ne crée de table, on
  * entre dans la salle et on regarde. Miser est un geste distinct, ouvert une
- * fois par 24 h à chacun.
+ * fois par jour à chacun.
  */
 export interface WheelView {
   /** Tous ceux qui sont dans la salle, joueur du moment compris. */
@@ -157,7 +177,7 @@ export interface WheelView {
   spinning: WheelSpinning | null;
   /** Le destinataire peut-il lancer maintenant ? */
   canSpin: boolean;
-  /** Fin de son délai de 24 h, en ISO. `null` s'il peut lancer. */
+  /** Prochain minuit parisien, en ISO. `null` s'il peut lancer maintenant. */
   nextSpinAt: string | null;
   /** Son dernier lancer, pour lui rappeler ce qu'il a fait. */
   lastSpin: WheelSpinResult | null;

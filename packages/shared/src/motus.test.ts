@@ -27,6 +27,8 @@ function terminalView(overrides: Partial<MotusView> = {}): MotusView {
     payout: 600,
     net: 500,
     version: 1,
+    startedAt: "2026-08-11T12:00:30.000Z",
+    durationMs: 42_000,
     now: "2026-08-11T12:05:00.000Z",
     ...overrides,
   };

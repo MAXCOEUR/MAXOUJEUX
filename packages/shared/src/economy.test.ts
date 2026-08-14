@@ -185,25 +185,47 @@ describe("minuit parisien", () => {
 });
 
 describe("créneaux Motus", () => {
-  it("découpe la journée en quatre créneaux de six heures", () => {
-    // 14 h à Paris (12 h UTC en été) tombe dans le créneau de 12 h.
+  it("coupe la journée d'été en deux, à minuit et à midi de Paris", () => {
+    // 14 h à Paris (12 h UTC en été) tombe dans le créneau de midi.
     const slot = currentMotusSlot(new Date("2026-08-11T12:00:00Z"));
     expect(slot.start.toISOString()).toBe("2026-08-11T10:00:00.000Z"); // 12 h Paris
-    expect(slot.end.toISOString()).toBe("2026-08-11T16:00:00.000Z"); // 18 h Paris
+    expect(slot.end.toISOString()).toBe("2026-08-11T22:00:00.000Z"); // 00 h Paris le 12
   });
 
   it("place le créneau de minuit sur le bon jour", () => {
     // 00 h 30 le 11 août à Paris = 22 h 30 UTC le 10.
     const slot = currentMotusSlot(new Date("2026-08-10T22:30:00Z"));
-    expect(slot.start.toISOString()).toBe("2026-08-10T22:00:00.000Z");
-    expect(slot.end.toISOString()).toBe("2026-08-11T04:00:00.000Z"); // 06 h Paris
+    expect(slot.start.toISOString()).toBe("2026-08-10T22:00:00.000Z"); // 00 h Paris
+    expect(slot.end.toISOString()).toBe("2026-08-11T10:00:00.000Z"); // 12 h Paris
   });
 
-  it("fait basculer le créneau de 18 h sur le minuit du lendemain", () => {
-    // 20 h à Paris le 11 août = 18 h UTC. Le créneau se termine au minuit du 12.
-    const slot = currentMotusSlot(new Date("2026-08-11T18:00:00Z"));
-    expect(slot.start.toISOString()).toBe("2026-08-11T16:00:00.000Z"); // 18 h Paris
-    expect(slot.end.toISOString()).toBe("2026-08-11T22:00:00.000Z"); // 00 h Paris le 12
+  /**
+   * Le cœur de la règle : les bornes sont des **heures civiles parisiennes**.
+   * En hiver, Paris est à UTC+1 — minuit tombe donc à 23 h UTC la veille et midi
+   * à 11 h UTC, et non aux mêmes instants UTC qu'en été. Un décalage codé en dur
+   * ferait tourner le mot à 01 h et 13 h la moitié de l'année.
+   */
+  it("tombe toujours sur minuit et midi, y compris en heure d'hiver", () => {
+    // 14 h à Paris le 15 janvier = 13 h UTC (UTC+1).
+    const apresMidi = currentMotusSlot(new Date("2027-01-15T13:00:00Z"));
+    expect(apresMidi.start.toISOString()).toBe("2027-01-15T11:00:00.000Z"); // 12 h Paris
+    expect(apresMidi.end.toISOString()).toBe("2027-01-15T23:00:00.000Z"); // 00 h Paris le 16
+
+    // 08 h à Paris le 15 janvier = 07 h UTC : créneau de minuit.
+    const matin = currentMotusSlot(new Date("2027-01-15T07:00:00Z"));
+    expect(matin.start.toISOString()).toBe("2027-01-14T23:00:00.000Z"); // 00 h Paris
+    expect(matin.end.toISOString()).toBe("2027-01-15T11:00:00.000Z"); // 12 h Paris
+  });
+
+  it("n'ouvre que deux créneaux par jour", () => {
+    // Vingt-quatre heures parisiennes ne doivent produire que deux ouvertures.
+    const ouvertures = new Set<string>();
+    let cursor = new Date("2026-08-10T22:00:00Z"); // 00 h Paris le 11
+    while (cursor.getTime() < new Date("2026-08-11T22:00:00Z").getTime()) {
+      ouvertures.add(currentMotusSlot(cursor).start.toISOString());
+      cursor = new Date(cursor.getTime() + 60 * 60 * 1000);
+    }
+    expect(ouvertures.size).toBe(2);
   });
 
   it("enchaîne les créneaux sans trou ni recouvrement", () => {
@@ -222,13 +244,21 @@ describe("créneaux Motus", () => {
     expect(nextMotusSlot(now).toISOString()).toBe(currentMotusSlot(now).end.toISOString());
   });
 
-  it("ne produit qu'un créneau de cinq heures réelles au passage à l'heure d'été", () => {
+  it("ne produit qu'un créneau de onze heures réelles au passage à l'heure d'été", () => {
     // Le changement d'heure a lieu à 02 h locales : le créneau parisien de
-    // 00 h à 06 h ne dure que cinq heures réelles ce jour-là. Les bornes
-    // civiles restent 00 h et 06 h, ce qui est le comportement attendu.
+    // 00 h à 12 h ne dure que onze heures réelles ce jour-là. Les bornes civiles
+    // restent 00 h et 12 h, ce qui est le comportement attendu.
     const slot = currentMotusSlot(new Date("2026-03-29T00:30:00Z"));
     const hours = (slot.end.getTime() - slot.start.getTime()) / 3_600_000;
-    expect(hours).toBe(5);
+    expect(hours).toBe(11);
+  });
+
+  it("produit un créneau de treize heures au retour à l'heure d'hiver", () => {
+    // Le 25 octobre 2026, 03 h locales redeviennent 02 h : la matinée dure une
+    // heure de plus. Les bornes civiles, elles, ne bougent pas.
+    const slot = currentMotusSlot(new Date("2026-10-25T00:30:00Z"));
+    const hours = (slot.end.getTime() - slot.start.getTime()) / 3_600_000;
+    expect(hours).toBe(13);
   });
 });
 

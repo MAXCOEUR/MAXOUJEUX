@@ -1,9 +1,12 @@
-import type {
-  ActionReply,
-  ClientToServerEvents,
-  CurrentUser,
-  GameCode,
-  PresenceSnapshot,
+import {
+  achievementReward,
+  formatCoins,
+  getAchievement,
+  type ActionReply,
+  type ClientToServerEvents,
+  type CurrentUser,
+  type GameCode,
+  type PresenceSnapshot,
 } from "@maxoujeux/shared";
 import { useEffect } from "react";
 import { io } from "socket.io-client";
@@ -130,6 +133,30 @@ export const useRealtime = create<RealtimeState>((set, get) => ({
         previous ? { ...previous, balance } : previous,
       );
       void queryClient.invalidateQueries({ queryKey: walletQueryKey });
+    });
+
+    /**
+     * Succès débloqués.
+     *
+     * Un toast par succès, en tonalité « gain » : ils tombent rarement, et les
+     * fusionner en « 3 succès débloqués » priverait le joueur de la seule chose
+     * qui l'intéresse — lesquels. Le libellé et la prime viennent du catalogue
+     * partagé, le serveur n'envoie que des codes.
+     */
+    socket.on("achievements:unlocked", ({ codes }) => {
+      for (const code of codes) {
+        const succes = getAchievement(code);
+        if (!succes) continue;
+        pushToast(
+          "gain",
+          `Succès débloqué — ${succes.name} · ${formatCoins(achievementReward(code))}`,
+          8_000,
+        );
+      }
+      // Les pages de succès et de profil affichent une progression désormais
+      // périmée : la prochaine visite doit la recharger.
+      void queryClient.invalidateQueries({ queryKey: ["succes"] });
+      void queryClient.invalidateQueries({ queryKey: ["profil"] });
     });
 
     // Erreurs arrivant hors de tout geste du joueur : forfait déclaré par le

@@ -1,3 +1,4 @@
+export * from "./achievements.js";
 export * from "./auth.js";
 export * from "./account.js";
 export * from "./admin.js";
@@ -12,6 +13,7 @@ export * from "./poker.js";
 export * from "./realtime.js";
 export * from "./roulette.js";
 export * from "./slots.js";
+export * from "./stats.js";
 export * from "./tables.js";
 export * from "./wheel.js";
 

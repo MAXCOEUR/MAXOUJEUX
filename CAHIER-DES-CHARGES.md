@@ -196,7 +196,7 @@ administrer en V1).
 | **Motus** — mot du créneau en solo | 1 | oui | 2 — *livré* |
 | **Blackjack** — croupier automatique | 1 à 5 | oui | 3 — *livré* |
 | **Roulette** — mises agrégées, phases temporisées | 1 à 8 | oui | 3 — *livré* |
-| **Roue de la fortune** — salle publique, un lancer par 24 h | 1 + spectateurs | oui | 4 — *livré* |
+| **Roue de la fortune** — salle publique, un lancer par jour | 1 + spectateurs | oui | 4 — *livré* |
 | **Plinko** — 10 tables, trois niveaux de risque | 1 + spectateurs | oui | 5 — *livré* |
 | **Machine à sous** — 10 machines, trois rouleaux | 1 + spectateurs | oui | 6 — *livré* |
 | **Texas Hold'em** | 2 à 9 | oui | 7 — *livré* |
@@ -281,8 +281,8 @@ de l'économie. Une égalité rembourse les deux mises. Les mises progressent pa
 Motus est **exclusivement solo** et coûte 100 MC par mot. Le versement brut dépend de
 la ligne à laquelle le mot est trouvé : 600, 450, 350, 250, 175 puis 100 MC de la
 première à la sixième ligne. Un échec verse 0 MC ; une réussite à la sixième ligne
-rend donc seulement la mise, sans gain net. Un nouveau mot est proposé toutes les six
-heures.
+rend donc seulement la mise, sans gain net. Un nouveau mot est proposé **deux fois par
+jour**, à minuit et à midi, heure civile de Paris.
 
 Puissance 4 et Morpion sont livrés en premier délibérément : leurs règles sont
 triviales, ils servent donc à valider toute la chaîne temps réel (matchmaking,
@@ -298,8 +298,9 @@ Points connus qui font échouer les implémentations naïves, à traiter explici
 - **Motus** : lettres doublées dans le calcul jaune/vert, qui exige un algorithme en
   deux passes.
 - **Blackjack** : séparation, doublement, assurance, pénétration du sabot.
-- **Roue de la fortune** : le délai de 24 h doit être une donnée en base, pas un
-  minuteur en mémoire — un redémarrage de l'API ne doit pas offrir un second lancer.
+- **Roue de la fortune** : le lancer quotidien doit se déduire d'une donnée en base, pas
+  d'un minuteur en mémoire — un redémarrage de l'API ne doit pas offrir un second
+  lancer. La borne est le jour civil parisien, pas un délai de 24 h glissant.
 - **Plinko** : la fente est tirée par le serveur ; l'animation de chute n'est qu'un
   rendu a posteriori d'un résultat déjà écrit.
 - **Machine à sous** : les rouleaux sont pondérés, donc un tirage uniforme sur les
@@ -322,7 +323,8 @@ source gratuite reste le bonus quotidien du lobby, et la roue **ne le remplace p
 
 #### Roue de la fortune
 
-Un lancer toutes les 24 h, mise choisie avant de lancer, de 10 à 1 000 MC. Neuf cases,
+Un lancer par jour civil parisien, remis à zéro à minuit comme le bonus quotidien, mise
+choisie avant de lancer, de 10 à 1 000 MC. Neuf cases,
 volontairement inégales — une roue équiprobable rendrait le ×20 banal :
 
 | Case | ×0 | ×0,5 | ×1 | ×1,5 | ×2 | ×3 | ×5 | ×10 | ×20 |
@@ -547,7 +549,7 @@ Décisions arrêtées à cette occasion :
 | Temps écoulé sur un coup | Forfait au bout de 30 s ; l'adversaire encaisse |
 | Déconnexion en pleine partie | 45 s de sursis, puis abandon |
 | Accès aux tables | Une page « salon » par jeu, depuis la carte du lobby |
-| Statistiques | Écrites en base, avec un récapitulatif discret ; Elo au lot 8 |
+| Statistiques | Écrites en base, avec un récapitulatif discret ; classements au lot 8 |
 
 ### Lot 2 — Motus : **livré**
 
@@ -559,7 +561,9 @@ Décisions arrêtées à cette occasion :
   filtrage des solutions par `french-badwords-list@1.0.7`. Le script reproductible et
   les notices CC BY-SA 4.0 / MIT sont conservés dans `apps/api/scripts/` et
   `apps/api/src/modules/motus/data/` ; aucune API externe n'est appelée en production.
-- **Quatre créneaux par jour** : tous les joueurs reçoivent le même mot du créneau.
+- **Deux créneaux par jour**, à minuit et à midi : tous les joueurs reçoivent le même
+  mot du créneau. Les bornes sont des heures **civiles** parisiennes, elles ne
+  dérivent donc pas d'une heure entre l'été et l'hiver.
   La sélection concurrente est protégée par `INSERT … ON CONFLICT`, et une partie
   commencée reste reprenable après le changement de créneau.
 - **Économie transactionnelle** : mise fixe de 100 MC, débit unique même sur double
@@ -617,7 +621,13 @@ téléphone 360 px.
 | **5** | Plinko : **livré** | — |
 | **6** | Machine à sous : **livré** | — |
 | **7** | Poker Hold'em : moteur, évaluateur exhaustif, table de casino, timers, spectateurs, sit-out — **livré** | — |
-| **8** | Profils, classements Elo, chat, modération, sauvegardes | 3 j |
+| **8** | Statistiques, classements, profils publics, succès — **livré** | — |
+| **9** | Modération, sauvegardes | 2 j |
+
+L'Elo annoncé au lot 8 a été **abandonné** : sur neuf jeux dont sept relèvent du
+hasard, un score de compétence mesurerait surtout la chance. Les classements
+reposent sur l'argent — « Fortune » au net brut, « Rendement » au net rapporté à
+la mise — complétés par des records et par une quarantaine de succès à débloquer.
 
 Les lots 4 à 6 sont volontairement placés avant le poker : ce sont des jeux solo, sans
 table ni tour de parole, dont le moteur tient en une fonction pure et se teste

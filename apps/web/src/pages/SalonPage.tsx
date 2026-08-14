@@ -17,6 +17,7 @@ import { GameArtefact } from "@/components/GameArtefact";
 import { Lien } from "@/components/Lien";
 import { NewTableDialog } from "@/components/NewTableDialog";
 import { Plaque } from "@/components/Plaque";
+import { ClassementDuJour } from "@/components/stats/ClassementDuJour";
 import { TableCard } from "@/components/TableCard";
 import { cn } from "@/lib/cn";
 import { useGame } from "@/lib/game";
@@ -190,6 +191,10 @@ function SalonContent({
           instant.
         </p>
       )}
+
+      {/* Entre l'en-tête du jeu et la liste des tables : le joueur voit d'abord
+          où il en est aujourd'hui, puis choisit où s'asseoir. */}
+      <ClassementDuJour game={game} meId={user.id} />
 
       <section aria-labelledby="tables-heading">
         <div className="mb-3 flex items-baseline justify-between gap-4">

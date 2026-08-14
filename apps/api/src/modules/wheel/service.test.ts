@@ -1,10 +1,10 @@
-import { WHEEL_COOLDOWN_MS, WHEEL_SEGMENTS } from "@maxoujeux/shared";
+import { WHEEL_SEGMENTS } from "@maxoujeux/shared";
 import { eq } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { db, runMigrations } from "../../db/index.js";
 import { wheelSpins } from "../../db/schema.js";
 import { AppError } from "../../lib/errors.js";
-import { balanceOf, ledgerSum, trackCreated } from "../../test/fixtures.js";
+import { balanceOf, ledgerSum, primes, trackCreated } from "../../test/fixtures.js";
 import {
   enterWheelRoom,
   leaveWheelRoom,
@@ -112,10 +112,11 @@ describe("lancer", () => {
 
     const view = await wheelState(a.userId, NOW);
     expect(view.lastSpin?.payout).toBe(300);
-    expect(await balanceOf(a.userId)).toBe(1_200);
+    const bonus = primes("premier_gain");
+    expect(await balanceOf(a.userId)).toBe(1_200 + bonus);
     // Le journal ne porte que les mouvements : le solde initial de la fixture
     // est posé directement, sans écriture.
-    expect(await ledgerSum(a.userId)).toBe(200);
+    expect(await ledgerSum(a.userId)).toBe(200 + bonus);
   });
 
   it("fait tourner la roue pour toute la salle", async () => {
@@ -162,7 +163,7 @@ describe("lancer", () => {
     expect(view.history[0]?.payout).toBe(100);
   });
 
-  it("ferme la roue pour 24 h et annonce l'heure de réouverture", async () => {
+  it("ferme la roue jusqu'à minuit et annonce l'heure de réouverture", async () => {
     const a = await player(1_000);
     enterWheelRoom(a, "s");
     setWheelRandomForTests(ticket(0));
@@ -170,7 +171,9 @@ describe("lancer", () => {
     await spin(a.userId, 10, NOW);
     const view = await wheelState(a.userId, NOW);
     expect(view.canSpin).toBe(false);
-    expect(view.nextSpinAt).toBe(new Date(NOW.getTime() + WHEEL_COOLDOWN_MS).toISOString());
+    // NOW vaut 14 h à Paris le 13 août : la roue rouvre à 00 h le 14, soit
+    // 22 h UTC le 13. Ce n'est pas « 24 h plus tard », c'est le jour d'après.
+    expect(view.nextSpinAt).toBe("2026-08-13T22:00:00.000Z");
 
     const solde = await balanceOf(a.userId);
     await laisseTourner();
@@ -196,7 +199,7 @@ describe("lancer", () => {
     await expect(spin(b.userId, 10, NOW)).resolves.toBeUndefined();
   });
 
-  it("rouvre la roue une fois les 24 h écoulées", async () => {
+  it("rouvre la roue au passage de minuit, pas 24 h après le lancer", async () => {
     const a = await player(1_000);
     enterWheelRoom(a, "s");
     setWheelRandomForTests(ticket(0));
@@ -204,9 +207,11 @@ describe("lancer", () => {
     await spin(a.userId, 10, NOW);
     await laisseTourner();
 
-    const plusTard = new Date(NOW.getTime() + WHEEL_COOLDOWN_MS);
-    expect((await wheelState(a.userId, plusTard)).canSpin).toBe(true);
-    await expect(spin(a.userId, 10, plusTard)).resolves.toBeUndefined();
+    // 00 h 05 à Paris le 14 août : dix heures seulement après le lancer, mais
+    // le jour civil a changé.
+    const lendemain = new Date("2026-08-13T22:05:00.000Z");
+    expect((await wheelState(a.userId, lendemain)).canSpin).toBe(true);
+    await expect(spin(a.userId, 10, lendemain)).resolves.toBeUndefined();
   });
 
   it("refuse une mise hors barème sans rien débiter", async () => {

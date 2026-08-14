@@ -4,7 +4,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { db, runMigrations } from "../../db/index.js";
 import { matchPlayers, matches, stats } from "../../db/schema.js";
 import { AppError } from "../../lib/errors.js";
-import { balanceOf, ledgerSum, trackCreated } from "../../test/fixtures.js";
+import { balanceOf, ledgerSum, primes, trackCreated } from "../../test/fixtures.js";
 import { releaseActivity, reserveActivity } from "../games/activity.js";
 import {
   armedTimerCount,
@@ -293,7 +293,8 @@ describe("déroulement d'une partie", () => {
     expect(view?.deadlineAt).toBeNull();
 
     // 20 MC engagés de chaque côté, 30 MC versés : 10 MC quittent l'économie.
-    expect(await balanceOf(host.userId)).toBe(1_010);
+    // Le vainqueur touche en plus la prime de sa toute première victoire.
+    expect(await balanceOf(host.userId)).toBe(1_010 + primes("premier_gain"));
     expect(await balanceOf(guest.userId)).toBe(980);
     expect(view?.outcome?.deltas).toEqual([
       { seat: 0, delta: 10 },
@@ -304,7 +305,7 @@ describe("déroulement d'une partie", () => {
       .select()
       .from(stats)
       .where(and(eq(stats.userId, host.userId), eq(stats.game, "tictactoe")));
-    expect(gagnant).toMatchObject({ played: 1, won: 1, lost: 0, drawn: 0, elo: 1_000 });
+    expect(gagnant).toMatchObject({ played: 1, won: 1, lost: 0, drawn: 0, winStreak: 1 });
 
     const [perdant] = await db
       .select()
@@ -408,7 +409,7 @@ describe("forfaits et abandons", () => {
     expect(view?.status).toBe("finished");
     expect(view?.outcome).toMatchObject({ reason: "timeout", winnerSeat: 1 });
     expect(await balanceOf(host.userId)).toBe(980);
-    expect(await balanceOf(guest.userId)).toBe(1_010);
+    expect(await balanceOf(guest.userId)).toBe(1_010 + primes("premier_gain"));
 
     const [ligne] = await db
       .select()
@@ -454,7 +455,7 @@ describe("forfaits et abandons", () => {
     const view = viewFor(tableId, host.userId);
     expect(view?.status).toBe("finished");
     expect(view?.outcome).toMatchObject({ reason: "abandon", winnerSeat: 1 });
-    expect(await balanceOf(guest.userId)).toBe(1_010);
+    expect(await balanceOf(guest.userId)).toBe(1_010 + primes("premier_gain"));
   });
 
   it("reprend la partie si le joueur revient avant la fin du sursis", async () => {

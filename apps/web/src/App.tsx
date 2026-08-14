@@ -3,9 +3,12 @@ import { Loader2 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { AuthPage } from "@/pages/AuthPage";
 import { AdminPage } from "@/pages/AdminPage";
+import { ClassementPage } from "@/pages/ClassementPage";
 import { ComptePage } from "@/pages/ComptePage";
 import { LobbyPage } from "@/pages/LobbyPage";
 import { MotusPage } from "@/pages/MotusPage";
+import { ProfilPage } from "@/pages/ProfilPage";
+import { SuccesPage } from "@/pages/SuccesPage";
 import { WheelPage } from "@/pages/WheelPage";
 import { SalonPage } from "@/pages/SalonPage";
 import { TablePage } from "@/pages/TablePage";
@@ -75,6 +78,12 @@ function Screen({ route, user }: { route: Route; user: CurrentUser }) {
       return <AdminPage />;
     case "compte":
       return <ComptePage user={user} />;
+    case "classement":
+      return <ClassementPage user={user} />;
+    case "succes":
+      return <SuccesPage />;
+    case "profil":
+      return <ProfilPage pseudo={route.pseudo} user={user} />;
     case "salon":
       // Motus et la roue n'ont pas de salon : l'un est solo, l'autre est une
       // salle unique où l'on entre directement.

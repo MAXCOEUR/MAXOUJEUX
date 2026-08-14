@@ -170,8 +170,8 @@ function MotusCard({ nextSlotAt }: { nextSlotAt: string }) {
         {formatDuration(remaining)}
       </p>
       <p className="mt-1 text-xs text-cream-dim">
-        Un mot toutes les 6 h. Tu choisis ta mise et récupères de 1 × à {best} × selon le nombre
-        d'essais — bien jouer rapporte davantage.
+        Deux mots par jour, à minuit et à midi. Tu choisis ta mise et récupères de 1 × à {best} ×
+        selon le nombre d'essais — bien jouer rapporte davantage.
       </p>
       <p className="mt-2 text-xs text-cream-faint">Disponible au lot 2.</p>
     </section>

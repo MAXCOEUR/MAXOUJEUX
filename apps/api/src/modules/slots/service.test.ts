@@ -4,7 +4,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import { db, runMigrations } from "../../db/index.js";
 import { slotSpins } from "../../db/schema.js";
 import { AppError } from "../../lib/errors.js";
-import { balanceOf, ledgerSum, trackCreated } from "../../test/fixtures.js";
+import { balanceOf, ledgerSum, primes, trackCreated } from "../../test/fixtures.js";
 import { activityOf } from "../games/activity.js";
 import {
   leaveSlotsTable,
@@ -182,8 +182,9 @@ describe("tirages", () => {
     expect(spin?.kind).toBe("triple");
     // ×13 sur 100 MC.
     expect(spin?.payout).toBe(1_300);
-    expect(await balanceOf(joueur.userId)).toBe(1_000 - 100 + 1_300);
-    expect(await ledgerSum(joueur.userId)).toBe(1_200);
+    const bonus = primes("premier_gain", "coup_1000");
+    expect(await balanceOf(joueur.userId)).toBe(1_000 - 100 + 1_300 + bonus);
+    expect(await ledgerSum(joueur.userId)).toBe(1_200 + bonus);
   });
 
   it("verse la paire quand deux symboles seulement se répondent", async () => {
@@ -221,7 +222,15 @@ describe("tirages", () => {
     await spinReels(joueur.userId, tableId, 100, NOW);
 
     expect(viewSlots(tableId, joueur.userId, NOW)?.spinning?.payout).toBe(15_000);
-    expect(await balanceOf(joueur.userId)).toBe(1_000 - 100 + 15_000);
+    // Le MAXOU triple fait tomber cinq succès du même coup.
+    const bonus = primes(
+      "premier_gain",
+      "coup_1000",
+      "coup_10000",
+      "fortune_10k",
+      "slots_maxou",
+    );
+    expect(await balanceOf(joueur.userId)).toBe(1_000 - 100 + 15_000 + bonus);
   });
 
   it("occupe la machine pendant la rotation, puis la libère", async () => {

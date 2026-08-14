@@ -19,7 +19,12 @@ import { setPokerNotifier, updatePokerIdentity, viewPoker } from "../modules/pok
 import { leaveWheelRoom, setWheelNotifier, updateWheelIdentity } from "../modules/wheel/service.js";
 import { setRealtimeLogger } from "./guard.js";
 import { createMotusNotifier, registerMotusHandlers } from "./motus.js";
-import { setDisconnectNotifier, setIdentityNotifier, setWalletNotifier } from "./notify.js";
+import {
+  setAchievementNotifier,
+  setDisconnectNotifier,
+  setIdentityNotifier,
+  setWalletNotifier,
+} from "./notify.js";
 import {
   addConnection,
   presenceSnapshot,
@@ -87,6 +92,12 @@ export function attachRealtime(app: FastifyInstance): GameServer {
   // pour que le service de porte-monnaie n'ait pas à connaître Socket.IO.
   setWalletNotifier((userId, balance) => {
     io.to(userRoom(userId)).emit("wallet:update", { balance });
+  });
+
+  // Un succès peut tomber sur une table ouverte dans un autre onglet : c'est la
+  // pièce du joueur qu'on prévient, pas la socket qui a joué le coup.
+  setAchievementNotifier((userId, codes) => {
+    io.to(userRoom(userId)).emit("achievements:unlocked", { codes });
   });
 
   setDisconnectNotifier((userId) => {

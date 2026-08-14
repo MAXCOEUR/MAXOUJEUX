@@ -1,5 +1,5 @@
 import { COIN_NAME, formatCoins, type CurrentUser } from "@maxoujeux/shared";
-import { LogOut, MessageCircle, Shield } from "lucide-react";
+import { LogOut, Medal, MessageCircle, Shield, Trophy } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { Avatar } from "./Avatar";
 import { Button } from "./Button";
@@ -42,6 +42,24 @@ export function AppShell({ user, children }: AppShellProps) {
           <ConnectionBadge className="hidden sm:flex" />
 
           <div className="ml-auto flex shrink-0 items-center gap-1 sm:gap-3">
+            {/* Classements et succès : le libellé disparaît avant l'icône, comme
+                pour l'administration à côté. */}
+            <Lien
+              to={{ name: "classement" }}
+              aria-label="Classements"
+              className="inline-flex items-center gap-2 rounded-xl px-2.5 py-2 text-sm text-cream-dim transition-colors hover:bg-felt-raised hover:text-cream"
+            >
+              <Trophy className="size-4" aria-hidden />
+              <span className="hidden lg:inline">Classements</span>
+            </Lien>
+            <Lien
+              to={{ name: "succes" }}
+              aria-label="Succès"
+              className="inline-flex items-center gap-2 rounded-xl px-2.5 py-2 text-sm text-cream-dim transition-colors hover:bg-felt-raised hover:text-cream"
+            >
+              <Medal className="size-4" aria-hidden />
+              <span className="hidden lg:inline">Succès</span>
+            </Lien>
             {user.isAdmin && (
               <Lien
                 to={{ name: "admin" }}

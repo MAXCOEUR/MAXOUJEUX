@@ -18,6 +18,11 @@ import { motusAttempts, motusSlots, motusWords, wallets } from "../../db/schema.
 import { AppError } from "../../lib/errors.js";
 import { notifyWallet } from "../../realtime/notify.js";
 import { releaseActivity, reserveActivity } from "../games/activity.js";
+import {
+  publishRoundReceipt,
+  recordRoundInTx,
+  type RoundReceipt,
+} from "../stats/service.js";
 import { creditInTx, debitInTx } from "../wallet/service.js";
 
 type Attempt = typeof motusAttempts.$inferSelect;
@@ -182,6 +187,11 @@ async function attemptView(
     payout,
     net: attempt ? payout - attempt.stake : 0,
     version: attempt?.version ?? 0,
+    startedAt: attempt?.startedAt.toISOString() ?? null,
+    durationMs:
+      attempt && attempt.finishedAt
+        ? attempt.finishedAt.getTime() - attempt.startedAt.getTime()
+        : null,
     now: now.toISOString(),
   };
 }
@@ -278,7 +288,10 @@ export async function start(
       const slot = await ensureSlot(tx, now);
       const [inserted] = await tx
         .insert(motusAttempts)
-        .values({ userId, slotStart: slot.slotStart, stake })
+        // `startedAt` est posé explicitement et non laissé au `now()` de la base :
+        // le chrono doit suivre la même horloge que le reste du service, celle
+        // que les tests injectent.
+        .values({ userId, slotStart: slot.slotStart, stake, startedAt: now })
         .onConflictDoNothing()
         .returning();
 
@@ -328,6 +341,7 @@ export async function guess(
   }
 
   let balance: number | null = null;
+  let receipt: RoundReceipt | null = null;
   const view = await db.transaction(async (tx) => {
     await tx.execute(
       sql`select 1 from ${motusAttempts} where ${motusAttempts.userId} = ${userId} and ${motusAttempts.finishedAt} is null for update`,
@@ -369,10 +383,30 @@ export async function guess(
       .where(and(eq(motusAttempts.userId, userId), eq(motusAttempts.slotStart, attempt.slotStart)))
       .returning();
     if (!updated) fail("MOTUS_UNAVAILABLE", MOTUS_ERROR_LABELS.MOTUS_UNAVAILABLE, 503);
+
+    if (finished) {
+      receipt = await recordRoundInTx(tx, {
+        userId,
+        game: "motus",
+        wagered: attempt.stake,
+        returned: reward,
+        outcome: evaluation.solved ? "win" : "loss",
+        attempts: guesses.length,
+        // Le chrono court du premier engagement à la proposition décisive. Une
+        // tentative reprise après une déconnexion garde donc le temps écoulé
+        // entre les deux : c'est la seule mesure honnête d'une grille laissée
+        // ouverte, et elle ne pénalise que celui qui l'abandonne en route.
+        durationMs: now.getTime() - attempt.startedAt.getTime(),
+        flags: evaluation.solved && guesses.length === 1 ? ["motus_first_guess"] : [],
+        at: now,
+      });
+    }
+
     return attemptView(tx, userId, updated, slot, now);
   });
 
   if (balance !== null) notifyWallet(userId, balance);
+  publishRoundReceipt(receipt);
   synchronizeAttachedReservation(userId, view);
   notifier.state(userId, view);
   return view;
@@ -384,6 +418,7 @@ export async function abandon(userId: string, socketId: string, now = new Date()
     fail("MOTUS_GAME_OVER", MOTUS_ERROR_LABELS.MOTUS_GAME_OVER);
   }
 
+  let receipt: RoundReceipt | null = null;
   const view = await db.transaction(async (tx) => {
     await tx.execute(
       sql`select 1 from ${motusAttempts} where ${motusAttempts.userId} = ${userId} and ${motusAttempts.finishedAt} is null for update`,
@@ -400,9 +435,24 @@ export async function abandon(userId: string, socketId: string, now = new Date()
       .where(and(eq(motusAttempts.userId, userId), eq(motusAttempts.slotStart, attempt.slotStart)))
       .returning();
     if (!updated) fail("MOTUS_UNAVAILABLE", MOTUS_ERROR_LABELS.MOTUS_UNAVAILABLE, 503);
+
+    // Une grille abandonnée reste une manche jouée et une mise perdue. La taire
+    // laisserait le rendement d'un joueur qui renonce souvent artificiellement
+    // bon.
+    receipt = await recordRoundInTx(tx, {
+      userId,
+      game: "motus",
+      wagered: attempt.stake,
+      returned: 0,
+      outcome: "loss",
+      durationMs: now.getTime() - attempt.startedAt.getTime(),
+      at: now,
+    });
+
     return attemptView(tx, userId, updated, await slotOf(tx, attempt.slotStart), now);
   });
 
+  publishRoundReceipt(receipt);
   synchronizeAttachedReservation(userId, view);
   notifier.state(userId, view);
   return view;

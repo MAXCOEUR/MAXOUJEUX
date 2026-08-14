@@ -33,15 +33,16 @@ import {
   type TableSummary,
 } from "@maxoujeux/shared";
 import { roulettePayout, spinRoulette } from "@maxoujeux/engines";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "../../db/index.js";
-import { matchPlayers, matches, stats } from "../../db/schema.js";
+import { matchPlayers, matches } from "../../db/schema.js";
 import { AppError } from "../../lib/errors.js";
 import { notifyWallet } from "../../realtime/notify.js";
 import { connectionCount } from "../../realtime/presence.js";
 import { releaseActivity, reserveActivity } from "../games/activity.js";
 import type { PlayerIdentity } from "../tables/manager.js";
 import { recoverOpenRounds } from "../tables/recovery.js";
+import { publishRoundReceipt, recordRoundInTx, type RoundReceipt } from "../stats/service.js";
 import { creditInTx, debitInTx } from "../wallet/service.js";
 
 interface PlacedBet {
@@ -518,15 +519,24 @@ async function settle(table: RouletteTable): Promise<void> {
     .filter((player) => wagerOf(player) > 0)
     .map((player) => {
       let payout = 0;
-      for (const bet of player.bets.values()) payout += roulettePayout(bet.spot, bet.amount, result);
+      let straightUp = false;
+      for (const bet of player.bets.values()) {
+        const gain = roulettePayout(bet.spot, bet.amount, result);
+        payout += gain;
+        // Le plein est la seule case à 35:1 : la reconnaître ici évite d'avoir à
+        // deviner le succès à partir du seul rapport gain / mise.
+        if (gain > 0 && bet.spot.kind === "straight") straightUp = true;
+      }
       const wager = wagerOf(player);
       player.roundNet = payout - wager;
-      return { player, payout, net: payout - wager };
+      return { player, payout, net: payout - wager, wager, straightUp };
     });
 
-  const balances = await db.transaction(async (tx) => {
+  const settled = await db.transaction(async (tx) => {
     const credited = new Map<string, number>();
-    await tx.update(matches).set({ status: "finished", endedAt: new Date() }).where(eq(matches.id, roundId));
+    const receipts: RoundReceipt[] = [];
+    const endedAt = new Date();
+    await tx.update(matches).set({ status: "finished", endedAt }).where(eq(matches.id, roundId));
 
     for (const settlement of settlements) {
       const label = settlement.net > 0 ? "win" : settlement.net < 0 ? "loss" : "draw";
@@ -548,32 +558,27 @@ async function settle(table: RouletteTable): Promise<void> {
           ),
         );
 
-      await tx
-        .insert(stats)
-        .values({
+      // Un tour de roulette compte pour **une** manche, quel que soit le nombre
+      // de cases jouées : c'est ce que le joueur a engagé sur le tapis qui fait
+      // la mise, pas chacun de ses jetons pris à part.
+      receipts.push(
+        await recordRoundInTx(tx, {
           userId: settlement.player.userId,
           game: "roulette",
-          played: 1,
-          won: label === "win" ? 1 : 0,
-          lost: label === "loss" ? 1 : 0,
-          drawn: label === "draw" ? 1 : 0,
-        })
-        .onConflictDoUpdate({
-          target: [stats.userId, stats.game],
-          set: {
-            played: sql`${stats.played} + 1`,
-            won: sql`${stats.won} + ${label === "win" ? 1 : 0}`,
-            lost: sql`${stats.lost} + ${label === "loss" ? 1 : 0}`,
-            drawn: sql`${stats.drawn} + ${label === "draw" ? 1 : 0}`,
-            updatedAt: new Date(),
-          },
-        });
+          wagered: settlement.wager,
+          returned: settlement.payout,
+          outcome: label,
+          flags: settlement.straightUp ? ["roulette_straight_up"] : [],
+          at: endedAt,
+        }),
+      );
     }
-    return credited;
+    return { credited, receipts };
   });
 
   // Après le commit, jamais avant.
-  for (const [userId, balance] of balances) notifyWallet(userId, balance);
+  for (const [userId, balance] of settled.credited) notifyWallet(userId, balance);
+  for (const receipt of settled.receipts) publishRoundReceipt(receipt);
 
   table.history = [result, ...table.history].slice(0, ROULETTE_HISTORY);
   table.phase = "result";

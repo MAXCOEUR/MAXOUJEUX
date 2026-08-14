@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  WHEEL_COOLDOWN_MS,
   WHEEL_SEGMENTS,
   WHEEL_TOTAL_WEIGHT,
   nextWheelSpinAt,
@@ -69,21 +68,43 @@ describe("versement", () => {
   });
 });
 
-describe("délai de 24 h", () => {
+describe("un lancer par jour civil parisien", () => {
+  // 14 h à Paris le 13 août (UTC+2 en été).
   const now = new Date("2026-08-13T12:00:00.000Z");
 
   it("laisse lancer un compte qui n'a jamais joué", () => {
     expect(nextWheelSpinAt(null, now)).toBeNull();
   });
 
-  it("compte à partir du lancer, pas de minuit", () => {
-    const lastSpin = new Date(now.getTime() - 10 * 60 * 60 * 1000);
-    const next = nextWheelSpinAt(lastSpin, now);
-    expect(next?.toISOString()).toBe("2026-08-14T02:00:00.000Z");
+  it("renvoie au minuit suivant après un lancer du jour", () => {
+    const lastSpin = new Date("2026-08-13T06:00:00.000Z"); // 08 h Paris, même jour
+    // 00 h Paris le 14 août = 22 h UTC le 13, l'été.
+    expect(nextWheelSpinAt(lastSpin, now)?.toISOString()).toBe("2026-08-13T22:00:00.000Z");
   });
 
-  it("rouvre la roue à l'expiration exacte du délai", () => {
-    const lastSpin = new Date(now.getTime() - WHEEL_COOLDOWN_MS);
-    expect(nextWheelSpinAt(lastSpin, now)).toBeNull();
+  it("rouvre la roue dès le changement de jour, sans attendre 24 h", () => {
+    // 23 h 50 à Paris le 12 août ; il est 00 h 10 le 13 quand on redemande.
+    const lastSpin = new Date("2026-08-12T21:50:00.000Z");
+    const justeApresMinuit = new Date("2026-08-12T22:10:00.000Z");
+    // Vingt minutes se sont écoulées, mais le jour a changé : c'est ce que
+    // « une fois par jour » veut dire, et c'est la règle du bonus quotidien.
+    expect(nextWheelSpinAt(lastSpin, justeApresMinuit)).toBeNull();
+  });
+
+  it("ne rouvre pas la roue au bout de 24 h si le jour n'a pas changé", () => {
+    // Lancé à 02 h Paris le 13 ; il est 23 h le même jour, soit 21 h plus tard.
+    const lastSpin = new Date("2026-08-13T00:00:00.000Z");
+    const memeSoir = new Date("2026-08-13T21:00:00.000Z");
+    expect(nextWheelSpinAt(lastSpin, memeSoir)).not.toBeNull();
+  });
+
+  /**
+   * Comme pour les créneaux Motus, la borne est une **heure civile** : minuit à
+   * Paris, quelle que soit la saison. En hiver, il tombe à 23 h UTC.
+   */
+  it("cale la réouverture sur minuit de Paris, même en heure d'hiver", () => {
+    const hiver = new Date("2027-01-15T13:00:00.000Z"); // 14 h Paris
+    const lastSpin = new Date("2027-01-15T07:00:00.000Z"); // 08 h Paris, même jour
+    expect(nextWheelSpinAt(lastSpin, hiver)?.toISOString()).toBe("2027-01-15T23:00:00.000Z");
   });
 });

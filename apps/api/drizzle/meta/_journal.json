@@ -50,6 +50,20 @@
       "when": 1786611301390,
       "tag": "0006_thin_violations",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1786689328189,
+      "tag": "0007_flashy_warbound",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1786689349694,
+      "tag": "0008_many_vanisher",
+      "breakpoints": true
     }
   ]
 }

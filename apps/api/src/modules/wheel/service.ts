@@ -1,6 +1,7 @@
 import { randomInt } from "node:crypto";
 import {
   WHEEL_ERROR_LABELS,
+  WHEEL_MAX_TENTHS,
   WHEEL_SEGMENTS,
   WHEEL_SPIN_MS,
   isValidStake,
@@ -18,6 +19,12 @@ import { db } from "../../db/index.js";
 import { wallets, wheelSpins } from "../../db/schema.js";
 import { AppError } from "../../lib/errors.js";
 import { notifyWallet } from "../../realtime/notify.js";
+import {
+  casinoOutcome,
+  publishRoundReceipt,
+  recordRoundInTx,
+  type RoundReceipt,
+} from "../stats/service.js";
 import { creditInTx, debitInTx } from "../wallet/service.js";
 
 type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -28,7 +35,7 @@ type Spin = typeof wheelSpins.$inferSelect;
  *
  * Il n'y a **qu'une seule roue sur tout le site**, et donc aucune table à
  * créer : on entre dans la salle, on regarde tourner, et on lance à son tour si
- * on ne l'a pas déjà fait dans les 24 h. C'est la seule pièce du casino où le
+ * on ne l'a pas déjà fait aujourd'hui. C'est la seule pièce du casino où le
  * spectacle est partagé sans que personne n'ait à s'asseoir.
  *
  * Deux états seulement : la roue est libre, ou elle tourne. Le résultat est
@@ -162,7 +169,7 @@ async function lastSpinOf(tx: Transaction, userId: string): Promise<Spin | null>
  * L'état de la salle, vu par un joueur donné.
  *
  * La partie publique — occupants, roue en cours, historique — est la même pour
- * tous ; seuls le délai de 24 h et le dernier lancer sont personnels.
+ * tous ; seuls le lancer du jour et le dernier lancer sont personnels.
  */
 export async function wheelState(userId: string, now = new Date()): Promise<WheelView> {
   const spin = await db.transaction((tx) => lastSpinOf(tx, userId));
@@ -208,10 +215,11 @@ export async function spin(userId: string, stake: number, now = new Date()): Pro
   spinning = reservation;
 
   let balance: number | null = null;
+  let receipt: RoundReceipt | null = null;
   try {
     const result = await db.transaction(async (tx) => {
       // Le verrou du porte-monnaie sérialise deux lancers du même compte : sans
-      // lui, un double-clic passerait deux fois le contrôle des 24 h avant que
+      // lui, un double-clic passerait deux fois le contrôle du jour avant que
       // la première ligne ne soit visible.
       await tx.execute(
         sql`select ${wallets.userId} from ${wallets} where ${wallets.userId} = ${userId} for update`,
@@ -245,6 +253,16 @@ export async function spin(userId: string, stake: number, now = new Date()): Pro
       // mise encaissée sans gain.
       if (payout > 0) balance = await creditInTx(tx, userId, payout, "wheel_reward");
 
+      receipt = await recordRoundInTx(tx, {
+        userId,
+        game: "wheel",
+        wagered: stake,
+        returned: payout,
+        outcome: casinoOutcome(stake, payout),
+        flags: segment.multiplierTenths === WHEEL_MAX_TENTHS ? ["wheel_max"] : [],
+        at: now,
+      });
+
       return toResult(inserted);
     });
 
@@ -277,6 +295,7 @@ export async function spin(userId: string, stake: number, now = new Date()): Pro
   // Après le commit seulement : notifier un solde qui pourrait encore être
   // annulé ferait clignoter un montant faux.
   if (balance !== null) notifyWallet(userId, balance);
+  publishRoundReceipt(receipt);
 }
 
 /** Arrêt propre : aucune minuterie ne doit survivre au processus. */

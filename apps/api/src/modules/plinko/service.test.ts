@@ -11,7 +11,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { db, runMigrations } from "../../db/index.js";
 import { plinkoDrops } from "../../db/schema.js";
 import { AppError } from "../../lib/errors.js";
-import { balanceOf, ledgerSum, trackCreated } from "../../test/fixtures.js";
+import { balanceOf, ledgerSum, primes, trackCreated } from "../../test/fixtures.js";
 import { activityOf } from "../games/activity.js";
 import {
   dropBall,
@@ -176,8 +176,11 @@ describe("billes", () => {
     expect(bille?.slot).toBe(0);
     expect(bille?.multiplierTenths).toBe(plinkoMultiplier("high", 0));
     expect(bille?.payout).toBe(2_500);
-    expect(await balanceOf(joueur.userId)).toBe(1_000 - 100 + 2_500);
-    expect(await ledgerSum(joueur.userId)).toBe(2_400);
+    // La fente extrême décroche trois succès d'un coup : première victoire du
+    // compte, premier gros coup, et la fente du bord elle-même.
+    const bonus = primes("premier_gain", "coup_1000", "plinko_max");
+    expect(await balanceOf(joueur.userId)).toBe(1_000 - 100 + 2_500 + bonus);
+    expect(await ledgerSum(joueur.userId)).toBe(2_400 + bonus);
   });
 
   it("renvoie un trajet complet, cohérent avec la fente", async () => {

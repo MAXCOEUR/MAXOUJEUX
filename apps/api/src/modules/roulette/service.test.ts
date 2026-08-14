@@ -6,7 +6,7 @@ import { db, runMigrations } from "../../db/index.js";
 import { matches } from "../../db/schema.js";
 import { AppError } from "../../lib/errors.js";
 import { activityOf } from "../games/activity.js";
-import { balanceOf, ledgerSum, trackCreated } from "../../test/fixtures.js";
+import { balanceOf, ledgerSum, primes, trackCreated } from "../../test/fixtures.js";
 import type { PlayerIdentity } from "../tables/manager.js";
 import {
   betRoulette,
@@ -341,8 +341,10 @@ describe("tirage et règlement", () => {
     await until(async () => (await matchStatus(roundId)) === "finished");
 
     // Rouge perd 100. Le plein rend 10 × 36 = 360. Net : +250.
-    expect(await balanceOf(host.userId)).toBe(5_250);
-    expect(await ledgerSum(host.userId)).toBe(250);
+    // S'y ajoutent la première victoire du compte et le succès du plein.
+    const bonus = primes("premier_gain", "roulette_plein");
+    expect(await balanceOf(host.userId)).toBe(5_250 + bonus);
+    expect(await ledgerSum(host.userId)).toBe(250 + bonus);
     expect(viewRoulette(tableId, host.userId)?.history[0]).toBe(17);
   });
 
@@ -362,8 +364,9 @@ describe("tirage et règlement", () => {
     await until(async () => (await matchStatus(roundId)) === "finished");
 
     // 210 engagés, 360 rendus par le seul plein sur zéro.
-    expect(await balanceOf(host.userId)).toBe(5_150);
-    expect(await ledgerSum(host.userId)).toBe(150);
+    const bonus = primes("premier_gain", "roulette_plein");
+    expect(await balanceOf(host.userId)).toBe(5_150 + bonus);
+    expect(await ledgerSum(host.userId)).toBe(150 + bonus);
   });
 
   it("règle chaque joueur pour lui-même", async () => {
@@ -380,10 +383,11 @@ describe("tirage et règlement", () => {
 
     await until(async () => (await matchStatus(roundId)) === "finished");
 
-    expect(await balanceOf(gagnant.userId)).toBe(5_200);
+    const bonus = primes("premier_gain");
+    expect(await balanceOf(gagnant.userId)).toBe(5_200 + bonus);
     expect(await balanceOf(perdant.userId)).toBe(4_800);
     // L'invariant du journal tient pour chacun, séparément.
-    expect(await ledgerSum(gagnant.userId)).toBe(200);
+    expect(await ledgerSum(gagnant.userId)).toBe(200 + bonus);
     expect(await ledgerSum(perdant.userId)).toBe(-200);
   });
 

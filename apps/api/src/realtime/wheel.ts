@@ -15,7 +15,7 @@ import { userRoom, type GameServer, type GameSocket } from "./types.js";
  * Transport de la salle de la roue.
  *
  * Un message par occupant : la partie publique est identique pour tous, mais le
- * délai de 24 h et le dernier lancer sont personnels — une diffusion unique
+ * lancer du jour et le dernier lancer sont personnels — une diffusion unique
  * annoncerait à toute la salle que la roue est disponible alors qu'elle ne
  * l'est que pour une personne.
  */

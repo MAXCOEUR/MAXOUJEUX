@@ -16,6 +16,7 @@ import {
   type PokerTableConfig,
   type PokerTimerKind,
   type PokerView,
+  type RoundFlag,
   type TableCounts,
   type TableSummary,
 } from "@maxoujeux/shared";
@@ -30,14 +31,20 @@ import {
   startPokerHand,
   type PokerHandState,
 } from "@maxoujeux/engines";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "../../db/index.js";
-import { matchPlayers, matches, stats } from "../../db/schema.js";
+import { matchPlayers, matches } from "../../db/schema.js";
 import { AppError } from "../../lib/errors.js";
 import { notifyWallet } from "../../realtime/notify.js";
 import { connectionCount } from "../../realtime/presence.js";
 import { releaseActivity, reserveActivity } from "../games/activity.js";
 import { recoverOpenRounds } from "../tables/recovery.js";
+import {
+  casinoOutcome,
+  publishRoundReceipt,
+  recordRoundInTx,
+  type RoundReceipt,
+} from "../stats/service.js";
 import { creditInTx, debitInTx } from "../wallet/service.js";
 
 /**
@@ -86,6 +93,14 @@ interface Occupant extends PlayerIdentity {
   wonThisHand: number | null;
   /** A montré son jeu de lui-même après s'être couché. Remis à zéro chaque main. */
   revealed: boolean;
+  /**
+   * Coups d'éclat abattus depuis la cave, en attente de la sortie de table.
+   *
+   * La manche statistique du poker est la **session**, pas la main : un carré
+   * abattu au troisième coup ne peut donc pas être enregistré au moment où il
+   * tombe. Il attend ici que le joueur se lève.
+   */
+  achievementFlags: Set<RoundFlag>;
 }
 
 interface Watcher extends PlayerIdentity {
@@ -309,6 +324,7 @@ function freshOccupant(player: PlayerIdentity, seat: number): Occupant {
     lastAction: null,
     wonThisHand: null,
     revealed: false,
+    achievementFlags: new Set(),
   };
 }
 
@@ -478,7 +494,12 @@ export async function leavePoker(userId: string, tableId: string): Promise<void>
  * Sortie de table : les jetons repartent au porte-monnaie.
  *
  * C'est le **seul** endroit qui crédite un joueur de poker, et il écrit du même
- * mouvement le résultat de la session dans `match_players` et `stats`.
+ * mouvement le résultat de la session dans `match_players` et les cumuls.
+ *
+ * C'est aussi la borne de la manche statistique du poker : elle court de la
+ * première cave à la sortie de table, rebuys compris. Compter main par main
+ * n'aurait aucun sens ici — les jetons ne passent pas par le porte-monnaie entre
+ * les deux, et une session est ce que le joueur vit comme une partie.
  */
 async function cashOut(table: PokerTable, occupant: Occupant, keepWatching: boolean): Promise<void> {
   if (table.seats[occupant.seat] !== occupant) return;
@@ -487,6 +508,7 @@ async function cashOut(table: PokerTable, occupant: Occupant, keepWatching: bool
   occupant.stack = 0;
   occupant.cashOutTotal += montant;
   const delta = occupant.cashOutTotal - occupant.buyInTotal;
+  let receipt: RoundReceipt | null = null;
 
   try {
     const balance = await db.transaction(async (tx) => {
@@ -499,31 +521,27 @@ async function cashOut(table: PokerTable, occupant: Occupant, keepWatching: bool
             eq(matchPlayers.userId, occupant.userId),
           ),
         );
-      await tx
-        .insert(stats)
-        .values({
-          userId: occupant.userId,
-          game: "poker",
-          played: 1,
-          won: delta > 0 ? 1 : 0,
-          lost: delta < 0 ? 1 : 0,
-          drawn: delta === 0 ? 1 : 0,
-        })
-        .onConflictDoUpdate({
-          target: [stats.userId, stats.game],
-          set: {
-            played: sql`${stats.played} + 1`,
-            won: sql`${stats.won} + ${delta > 0 ? 1 : 0}`,
-            lost: sql`${stats.lost} + ${delta < 0 ? 1 : 0}`,
-            drawn: sql`${stats.drawn} + ${delta === 0 ? 1 : 0}`,
-            updatedAt: new Date(),
-          },
-        });
-      return montant > 0
-        ? creditInTx(tx, occupant.userId, montant, "poker_cashout", table.sessionMatchId)
-        : null;
+      const balance =
+        montant > 0
+          ? await creditInTx(tx, occupant.userId, montant, "poker_cashout", table.sessionMatchId)
+          : null;
+
+      // Après le versement : le solde lu par les succès de fortune doit être
+      // celui que le joueur a effectivement en poche en quittant la table.
+      receipt = await recordRoundInTx(tx, {
+        userId: occupant.userId,
+        game: "poker",
+        wagered: occupant.buyInTotal,
+        returned: occupant.cashOutTotal,
+        outcome: casinoOutcome(occupant.buyInTotal, occupant.cashOutTotal),
+        flags: [...occupant.achievementFlags],
+        at: new Date(),
+      });
+
+      return balance;
     });
     if (balance !== null) notifyWallet(occupant.userId, balance);
+    publishRoundReceipt(receipt);
   } catch (error) {
     occupant.stack = montant;
     occupant.cashOutTotal = cashOutPrecedent;
@@ -745,6 +763,21 @@ function phaseOf(hand: PokerHandState): PokerPhase {
   }
 }
 
+/**
+ * Retient les mains d'exception abattues au tapis.
+ *
+ * Ne regarde que l'abattage : une quinte flush qui remporte le pot sans être
+ * montrée n'a été vue de personne, et le moteur n'en garde pas trace.
+ */
+function collectHandFlags(table: PokerTable, hand: PokerHandState): void {
+  for (const entree of hand.showdown) {
+    const occupant = table.seats[entree.seat];
+    if (!occupant) continue;
+    if (entree.rank.category === "quinte-flush") occupant.achievementFlags.add("poker_straight_flush");
+    if (entree.rank.category === "carre") occupant.achievementFlags.add("poker_quads");
+  }
+}
+
 /** Recopie les tapis du moteur vers les sièges : le moteur fait autorité. */
 function syncStacks(table: PokerTable): void {
   if (!table.hand) return;
@@ -835,6 +868,11 @@ async function finishHand(table: PokerTable): Promise<void> {
     const occupant = table.seats[gain.seat];
     if (occupant) occupant.wonThisHand = gain.amount;
   }
+
+  // Les coups d'éclat sont **mémorisés**, pas enregistrés : au poker, la manche
+  // statistique est la session de table entière, pas la main. Ils repartiront
+  // avec le joueur au moment où il se lève.
+  collectHandFlags(table, hand);
 
   table.phase = "payout";
   clearTimer(table);

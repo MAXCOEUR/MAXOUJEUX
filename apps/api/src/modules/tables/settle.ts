@@ -13,10 +13,15 @@
  */
 
 import { winPayout, type DuelGame, type EndReason, type Seat } from "@maxoujeux/shared";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "../../db/index.js";
-import { matchPlayers, matches, stats } from "../../db/schema.js";
+import { matchPlayers, matches } from "../../db/schema.js";
 import { notifyWallet } from "../../realtime/notify.js";
+import {
+  publishRoundReceipt,
+  recordRoundInTx,
+  type RoundReceipt,
+} from "../stats/service.js";
 import { creditInTx } from "../wallet/service.js";
 
 /** Résultat inscrit dans `match_players`. */
@@ -48,10 +53,10 @@ export interface SettleResult {
  * distingué dans `match_players` : le journal doit rester lisible pour savoir
  * si un joueur perd ses parties ou s'il les quitte.
  */
-function statsColumn(result: PlayerResult): "won" | "lost" | "drawn" {
-  if (result === "win") return "won";
-  if (result === "draw") return "drawn";
-  return "lost";
+function roundOutcome(result: PlayerResult): "win" | "loss" | "draw" {
+  if (result === "win") return "win";
+  if (result === "draw") return "draw";
+  return "loss";
 }
 
 /**
@@ -76,6 +81,7 @@ export async function settleMatch(input: SettleInput): Promise<SettleResult> {
   const settled = await db.transaction(async (tx) => {
     const balances = new Map<string, number>();
     const deltas: { seat: Seat; delta: number }[] = [];
+    const receipts: RoundReceipt[] = [];
 
     await tx
       .update(matches)
@@ -104,40 +110,28 @@ export async function settleMatch(input: SettleInput): Promise<SettleResult> {
         .set({ result: player.result, chipsDelta: delta })
         .where(and(eq(matchPlayers.matchId, tableId), eq(matchPlayers.userId, player.userId)));
 
-      // Upsert : la ligne de statistiques n'existe pas avant la première partie
-      // du joueur sur ce jeu. Les incréments sont faits en SQL et non lus puis
-      // réécrits — deux parties qui se terminent en même temps ne doivent pas
-      // s'écraser l'une l'autre.
-      const column = statsColumn(player.result);
-      await tx
-        .insert(stats)
-        .values({
+      // Cumuls et succès : après le versement, pour que le solde lu par les
+      // succès de fortune soit celui que le joueur a réellement en poche.
+      receipts.push(
+        await recordRoundInTx(tx, {
           userId: player.userId,
           game,
-          played: 1,
-          won: column === "won" ? 1 : 0,
-          lost: column === "lost" ? 1 : 0,
-          drawn: column === "drawn" ? 1 : 0,
-        })
-        .onConflictDoUpdate({
-          target: [stats.userId, stats.game],
-          set: {
-            played: sql`${stats.played} + 1`,
-            won: sql`${stats.won} + ${column === "won" ? 1 : 0}`,
-            lost: sql`${stats.lost} + ${column === "lost" ? 1 : 0}`,
-            drawn: sql`${stats.drawn} + ${column === "drawn" ? 1 : 0}`,
-            updatedAt: endedAt,
-          },
-        });
+          wagered: stake,
+          returned: payout,
+          outcome: roundOutcome(player.result),
+          at: endedAt,
+        }),
+      );
 
       deltas.push({ seat: player.seat, delta });
     }
 
-    return { balances, deltas };
+    return { balances, deltas, receipts };
   });
 
   // Diffusion après validation de la transaction, jamais avant.
   for (const [userId, balance] of settled.balances) notifyWallet(userId, balance);
+  for (const receipt of settled.receipts) publishRoundReceipt(receipt);
 
   return settled;
 }
