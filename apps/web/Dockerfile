@@ -31,10 +31,20 @@ COPY tsconfig.base.json ./
 COPY packages/shared packages/shared
 COPY packages/engines packages/engines
 COPY apps/web apps/web
-RUN pnpm --filter @maxoujeux/web build
+# Les musiques sont sorties du paquet construit pour être copiées à part.
+# Elles pèsent cinquante fois le reste de l'image et ne changent presque
+# jamais : les laisser dans la même couche que le JavaScript ferait
+# reconstruire — donc republier, donc retélécharger sur le NAS — cinquante
+# mégaoctets d'audio inchangé à chaque correction d'une ligne de code.
+RUN pnpm --filter @maxoujeux/web build \
+    && mkdir -p /sons \
+    && if [ -d apps/web/dist/sons ]; then mv apps/web/dist/sons/* /sons/; rmdir apps/web/dist/sons; fi
 
 FROM nginx:1.27-alpine AS runtime
 COPY apps/web/nginx.conf /etc/nginx/conf.d/default.conf
+# L'audio d'abord : couche lourde et stable, mise en cache d'un build à l'autre.
+COPY --from=build /sons /srv/sons
+# Le front ensuite : couche légère, refaite à chaque modification.
 COPY --from=build /app/apps/web/dist /srv
 
 EXPOSE 80

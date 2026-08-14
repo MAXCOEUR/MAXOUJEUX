@@ -1,0 +1,12 @@
+{
+  "lobby": ["Lobby.mp3"],
+  "poker": ["poker.mp3"],
+  "blackjack": ["Blackjack.mp3"],
+  "roulette": ["Roulette.mp3"],
+  "motus": ["Motus.mp3"],
+  "wheel": ["Roue de la fortune.mp3"],
+  "plinko": ["Plinko.mp3"],
+  "slots": ["Lobby.mp3"],
+  "connect4": ["Puissance 4.mp3"],
+  "tictactoe": ["Morpion.mp3"]
+}

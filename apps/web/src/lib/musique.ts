@@ -149,13 +149,36 @@ let current: HTMLAudioElement | null = null;
 let currentZone: MusicZone | null = null;
 /** File mélangée de la zone : on l'épuise avant de la rebattre. */
 let file: string[] = [];
-let fadeTimer: ReturnType<typeof setInterval> | null = null;
 
-function stopFade(): void {
-  if (fadeTimer !== null) {
-    clearInterval(fadeTimer);
-    fadeTimer = null;
-  }
+/**
+ * Ce dont un fondu a besoin.
+ *
+ * Structurel plutôt que `HTMLAudioElement` : c'est ce qui rend le mécanisme
+ * testable sans navigateur, et il n'utilise effectivement rien d'autre.
+ */
+export interface Fadable {
+  volume: number;
+}
+
+/** Les fondus en cours, un par élément. Voir `fade`. */
+const fades = new Map<Fadable, ReturnType<typeof setInterval>>();
+
+/** Interrompt le fondu d'un élément, sans toucher à ceux des autres. */
+export function stopFade(element: Fadable): void {
+  const timer = fades.get(element);
+  if (timer === undefined) return;
+  clearInterval(timer);
+  fades.delete(element);
+}
+
+/** Un fondu court-il sur cet élément ? */
+export function isFading(element: Fadable): boolean {
+  return fades.has(element);
+}
+
+function stopAllFades(): void {
+  for (const timer of fades.values()) clearInterval(timer);
+  fades.clear();
 }
 
 /**
@@ -163,22 +186,31 @@ function stopFade(): void {
  *
  * Par paliers de 40 ms : sous le seuil où l'oreille perçoit des marches, et bien
  * au-dessus de ce qui coûterait quoi que ce soit au processeur.
+ *
+ * **Un fondu par élément, et non un fondu à la fois.** Un fondu enchaîné en fait
+ * courir deux de front : celui qui monte et celui qui descend. Avec une seule
+ * minuterie partagée, le second annulait le premier, dont la suite — mettre la
+ * piste sortante en pause — n'était jamais exécutée. La piste restait audible
+ * pour toujours, hors d'atteinte du volume et de la coupure, et chaque
+ * changement d'écran en ajoutait une.
  */
-function fade(element: HTMLAudioElement, to: number, done?: () => void): void {
-  stopFade();
+export function fade(element: Fadable, to: number, done?: () => void): void {
+  stopFade(element);
   const from = element.volume;
   const steps = Math.max(1, Math.round(FADE_MS / FADE_STEP_MS));
   let step = 0;
 
-  fadeTimer = setInterval(() => {
+  const timer = setInterval(() => {
     step += 1;
     const ratio = Math.min(1, step / steps);
     element.volume = Math.min(1, Math.max(0, from + (to - from) * ratio));
     if (ratio >= 1) {
-      stopFade();
+      stopFade(element);
       done?.();
     }
   }, FADE_STEP_MS);
+
+  fades.set(element, timer);
 }
 
 /**
@@ -196,20 +228,29 @@ export function melanger<T>(items: readonly T[]): T[] {
   return copie;
 }
 
-function arreterCourante(fondu: boolean): void {
-  const sortante = current;
-  current = null;
-  if (!sortante) return;
+/**
+ * Éteint une piste : fondu jusqu'au silence, puis arrêt franc.
+ *
+ * L'arrêt est **dans la suite du fondu**, jamais à côté : c'est ce qui garantit
+ * qu'aucun élément ne reste en lecture derrière le dos du reste du module.
+ */
+function eteindre(element: HTMLAudioElement, fondu: boolean): void {
+  const couper = () => {
+    element.pause();
+    // `removeAttribute` puis `load` et non `src = ""` : une source vide se
+    // résout en l'adresse de la page courante, que le navigateur tenterait alors
+    // de décoder comme un fichier audio. C'est la façon prévue de relâcher le
+    // flux et la mémoire qu'il occupe.
+    element.removeAttribute("src");
+    element.load();
+    stopFade(element);
+  };
 
   if (!fondu) {
-    sortante.pause();
-    sortante.src = "";
+    couper();
     return;
   }
-  fade(sortante, 0, () => {
-    sortante.pause();
-    sortante.src = "";
-  });
+  fade(element, 0, couper);
 }
 
 /** Lance la piste suivante de la file de la zone en cours. */
@@ -259,21 +300,22 @@ function jouerSuivante(fondu: boolean): void {
 
   void entrante
     .play()
-    .then(() => fade(entrante, effectiveVolume("musique")))
+    .then(() => {
+      // Le joueur a pu changer d'écran, ou couper le son, pendant que le
+      // navigateur ouvrait le fichier.
+      if (current !== entrante) return;
+      const volume = effectiveVolume("musique");
+      if (volume === 0) entrante.pause();
+      else fade(entrante, volume);
+    })
     .catch(() => {
       // Refus d'autoplay : la zone repartira au prochain geste du joueur.
       if (current === entrante) current = null;
     });
 
-  if (sortante && fondu) {
-    fade(sortante, 0, () => {
-      sortante.pause();
-      sortante.src = "";
-    });
-  } else if (sortante) {
-    sortante.pause();
-    sortante.src = "";
-  }
+  // La piste sortante s'éteint pour son propre compte : son fondu a désormais sa
+  // minuterie, celui de l'entrante ne peut plus l'interrompre.
+  if (sortante) eteindre(sortante, fondu);
 }
 
 /** Bascule sur une zone. Sans effet si elle est déjà en cours. */
@@ -286,7 +328,7 @@ export function playZone(zone: MusicZone): void {
     // La zone a pu changer pendant le chargement du manifeste.
     if (useMusic.getState().zone !== zone) return;
     if (currentZone === zone && current) {
-      if (!fadeTimer) current.volume = effectiveVolume("musique");
+      if (!isFading(current)) current.volume = effectiveVolume("musique");
       return;
     }
 
@@ -296,9 +338,19 @@ export function playZone(zone: MusicZone): void {
   });
 }
 
-/** Réaligne le volume de la piste en cours sur les réglages. */
+/**
+ * Réaligne le volume de la piste en cours sur les réglages.
+ *
+ * **Le fondu en cours est interrompu**, et non attendu : un geste explicite du
+ * joueur prime sur une transition automatique. Attendre la fin du fondu — ce que
+ * faisait la première version — rendait le curseur et la coupure sans effet
+ * pendant les huit dixièmes de seconde qui suivent un changement d'écran, et le
+ * fondu ramenait ensuite le volume qu'on venait de quitter.
+ */
 export function syncMusicVolume(): void {
-  if (!current || fadeTimer) return;
+  if (!current) return;
+  stopFade(current);
+
   const volume = effectiveVolume("musique");
   current.volume = volume;
   // Coupure générale ou volume à zéro : on met en pause plutôt que de laisser
@@ -313,10 +365,11 @@ export function nextTrack(): void {
   jouerSuivante(true);
 }
 
-/** Arrête tout. */
+/** Arrête tout, sans fondu et sans laisser de minuterie derrière. */
 export function stopMusic(): void {
-  stopFade();
-  arreterCourante(false);
+  stopAllFades();
+  if (current) eteindre(current, false);
+  current = null;
   currentZone = null;
   file = [];
   useMusic.setState({ zone: null, piste: null });
@@ -350,7 +403,7 @@ export function bindMusic(gameOf: () => GameCode | null): () => void {
 
 /** Remise à zéro. Réservé aux tests. */
 export function resetMusicForTests(): void {
-  stopFade();
+  stopAllFades();
   current = null;
   currentZone = null;
   file = [];
