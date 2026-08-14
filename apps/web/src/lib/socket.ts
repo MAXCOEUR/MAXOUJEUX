@@ -34,6 +34,7 @@ import {
 } from "./motus.js";
 import { queryClient } from "./queryClient";
 import { sessionQueryKey } from "./session";
+import { playSound } from "./sounds.js";
 import type { GameSocket } from "./socket-types.js";
 import { releaseWatcher, retainWatcher, useTables, watchedGames } from "./tables.js";
 import { pushToast } from "./toast.js";
@@ -144,6 +145,10 @@ export const useRealtime = create<RealtimeState>((set, get) => ({
      * partagé, le serveur n'envoie que des codes.
      */
     socket.on("achievements:unlocked", ({ codes }) => {
+      // Un seul carillon même sur trois succès simultanés : trois arpèges
+      // superposés ne s'entendraient plus, ils se masqueraient.
+      if (codes.length > 0) playSound("succes");
+
       for (const code of codes) {
         const succes = getAchievement(code);
         if (!succes) continue;

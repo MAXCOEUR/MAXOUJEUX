@@ -1,14 +1,17 @@
 import { COIN_NAME, formatCoins, type CurrentUser } from "@maxoujeux/shared";
-import { LogOut, Medal, MessageCircle, Shield, Trophy } from "lucide-react";
+import { LogOut, Medal, MessageCircle, Shield, Trophy, Volume2, VolumeX } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { Avatar } from "./Avatar";
 import { Button } from "./Button";
+import { Confettis } from "./Confettis";
 import { ConnectionBadge } from "./ConnectionBadge";
 import { Lien } from "./Lien";
 import { Logo } from "./Logo";
 import { ResumeBanner } from "./ResumeBanner";
 import { Toaster } from "./Toaster";
 import { WalletPanel } from "./WalletPanel";
+import { useCelebration } from "@/lib/ambiance";
+import { useAudio } from "@/lib/audio";
 import { useLogout } from "@/lib/session";
 import { useChat } from "@/lib/chat";
 import { ChatPanel, formatUnreadBadge } from "./ChatPanel";
@@ -25,6 +28,9 @@ export function AppShell({ user, children }: AppShellProps) {
   const unread = useChat((state) => state.unread);
   const openChat = useChat((state) => state.open);
   const closeChat = useChat((state) => state.close);
+  const muted = useAudio((state) => state.settings.muted);
+  const toggleMute = useAudio((state) => state.toggleMute);
+  const celebration = useCelebration();
 
   return (
     <div className="flex min-h-dvh flex-col">
@@ -70,6 +76,22 @@ export function AppShell({ user, children }: AppShellProps) {
                 <span className="hidden lg:inline">Administration</span>
               </Lien>
             )}
+            {/* Coupure générale : le geste d'urgence quand quelqu'un entre dans
+                la pièce. Les trois volumes se règlent dans « Mon compte », mais
+                les chercher n'est pas envisageable à cet instant-là. */}
+            <button
+              type="button"
+              onClick={toggleMute}
+              aria-pressed={muted}
+              aria-label={muted ? "Rétablir le son" : "Couper le son"}
+              className="inline-flex shrink-0 items-center justify-center rounded-xl p-2 text-cream-dim transition-colors hover:bg-felt-raised hover:text-cream sm:p-2.5"
+            >
+              {muted ? (
+                <VolumeX className="size-4 text-danger" aria-hidden />
+              ) : (
+                <Volume2 className="size-4" aria-hidden />
+              )}
+            </button>
             <button
               type="button"
               onClick={openChat}
@@ -145,6 +167,9 @@ export function AppShell({ user, children }: AppShellProps) {
 
       <WalletPanel open={walletOpen} onClose={() => setWalletOpen(false)} />
       <ChatPanel open={chatOpen} onClose={closeChat} meId={user.id} />
+      {/* Monté dans la coque et non dans chaque jeu : un gain se fête d'où qu'il
+          vienne, y compris depuis une table laissée dans un autre onglet. */}
+      <Confettis cle={celebration.cle} intense={celebration.intense} />
       <Toaster />
     </div>
   );

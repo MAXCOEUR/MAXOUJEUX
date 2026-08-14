@@ -5,6 +5,7 @@ import {
   formatCoins,
   getGame,
   isValidStake,
+  PLINKO_FALL_MS,
   plinkoReturnToPlayer,
   plinkoTable,
   stakeSuggestions,
@@ -13,7 +14,7 @@ import {
   type PlinkoTableView,
 } from "@maxoujeux/shared";
 import { ArrowLeft, Eye, Loader2, LogOut } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Avatar } from "@/components/Avatar";
 import { Button } from "@/components/Button";
 import { Lien } from "@/components/Lien";
@@ -21,10 +22,12 @@ import { Modal } from "@/components/Modal";
 import { Plaque } from "@/components/Plaque";
 import { StakePicker } from "@/components/StakePicker";
 import { PlinkoBoard, formatMultiplier } from "@/components/games/PlinkoBoard";
+import { marquerResultat } from "@/lib/ambiance";
 import { navigate } from "@/lib/route";
 import { cn } from "@/lib/cn";
 import { usePlinko } from "@/lib/plinko";
 import { request, useRealtime } from "@/lib/socket";
+import { playSound } from "@/lib/sounds";
 
 /**
  * Une table de Plinko.
@@ -57,6 +60,47 @@ export function PlinkoPage({ user, tableId }: { user: CurrentUser; tableId: stri
   return <PlinkoTableScreen user={user} view={view} />;
 }
 
+/**
+ * Le son des billes, calé sur leur chute.
+ *
+ * Le serveur a tiré la fente au moment du lâcher ; annoncer le résultat à cet
+ * instant le révélerait pendant que la bille tombe encore. Le verdict est donc
+ * programmé pour la fin de l'animation.
+ *
+ * Plusieurs billes peuvent être en l'air en même temps, chacune avec son propre
+ * verdict : d'où une minuterie par bille, et non une seule remise à zéro.
+ */
+function useSonDesBilles(view: PlinkoTableView, proprietaire: boolean): void {
+  const vues = useRef(new Set<string>());
+
+  useEffect(() => {
+    if (!proprietaire) return;
+
+    const minuteries: ReturnType<typeof setTimeout>[] = [];
+    const presentes = new Set(view.balls.map((ball) => ball.id));
+
+    for (const ball of view.balls) {
+      if (vues.current.has(ball.id)) continue;
+      vues.current.add(ball.id);
+
+      playSound("jeton");
+      minuteries.push(
+        setTimeout(() => marquerResultat(ball.payout - ball.stake), PLINKO_FALL_MS),
+      );
+    }
+
+    // Les billes retirées du plateau sortent aussi du registre : sans cet
+    // élagage, une longue session ferait grossir l'ensemble indéfiniment.
+    for (const id of vues.current) {
+      if (!presentes.has(id)) vues.current.delete(id);
+    }
+
+    return () => {
+      for (const minuterie of minuteries) clearTimeout(minuterie);
+    };
+  }, [view.balls, proprietaire]);
+}
+
 function PlinkoTableScreen({ user, view }: { user: CurrentUser; view: PlinkoTableView }) {
   const pending = usePlinko((state) => state.pending);
   const markPending = usePlinko((state) => state.markPending);
@@ -72,6 +116,8 @@ function PlinkoTableScreen({ user, view }: { user: CurrentUser; view: PlinkoTabl
   const proprietaire = view.owner.userId === user.id;
   const abordable = isValidStake("plinko", mise) && user.balance >= mise;
   const tablePleine = view.balls.length >= PLINKO_MAX_BALLS;
+
+  useSonDesBilles(view, proprietaire);
 
   async function lacher() {
     if (!proprietaire || !abordable || tablePleine) return;

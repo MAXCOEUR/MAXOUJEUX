@@ -17,6 +17,7 @@ import { Button } from "@/components/Button";
 import { Field } from "@/components/Field";
 import { Lien } from "@/components/Lien";
 import { Modal } from "@/components/Modal";
+import { ReglagesSon } from "@/components/ReglagesSon";
 import {
   useDeleteAccount,
   useRemoveAvatar,
@@ -73,6 +74,8 @@ export function ComptePage({ user }: { user: CurrentUser }) {
       </header>
 
       <AvatarCard user={user} />
+
+      <ReglagesSon />
 
       <Reglage titre="Adresse email" valeur={user.email} onOuvrir={() => setOuvert("email")} />
       <Reglage titre="Pseudo" valeur={user.pseudo} onOuvrir={() => setOuvert("pseudo")} />

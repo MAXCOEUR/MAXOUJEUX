@@ -1,4 +1,5 @@
 import {
+  SLOTS_SPIN_MS,
   SLOT_SYMBOLS,
   formatCoins,
   getGame,
@@ -12,7 +13,7 @@ import {
   type SlotsTableView,
 } from "@maxoujeux/shared";
 import { ArrowLeft, Eye, Loader2, LogOut } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Avatar } from "@/components/Avatar";
 import { Button } from "@/components/Button";
 import { Lien } from "@/components/Lien";
@@ -21,10 +22,12 @@ import { Plaque } from "@/components/Plaque";
 import { StakePicker } from "@/components/StakePicker";
 import { SlotMachine } from "@/components/games/SlotMachine";
 import { SlotSymbolGlyph } from "@/components/games/SlotSymbolGlyph";
+import { marquerResultat } from "@/lib/ambiance";
 import { cn } from "@/lib/cn";
 import { navigate } from "@/lib/route";
 import { useSlots } from "@/lib/slots";
 import { request, useRealtime } from "@/lib/socket";
+import { playSound } from "@/lib/sounds";
 
 /**
  * Une machine à sous.
@@ -57,6 +60,33 @@ export function SlotsPage({ user, tableId }: { user: CurrentUser; tableId: strin
   return <SlotsTableScreen user={user} view={view} />;
 }
 
+/**
+ * Le son des rouleaux, calé sur leur arrêt.
+ *
+ * Le tirage est décidé au départ ; le verdict ne doit tomber qu'une fois les
+ * trois rouleaux immobiles, sans quoi le son annoncerait le résultat avant que
+ * le troisième symbole ne soit lisible — et c'est précisément l'attente du
+ * troisième qui fait le suspense d'une machine à sous.
+ */
+function useSonDesRouleaux(spinning: SlotsSpinResult | null, proprietaire: boolean): void {
+  const dernier = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!spinning || !proprietaire) return;
+    // Un même tirage ne sonne qu'une fois : l'état de la machine est rediffusé
+    // à chaque spectateur qui entre ou sort pendant la rotation.
+    if (dernier.current === spinning.id) return;
+    dernier.current = spinning.id;
+
+    playSound("jeton");
+    const verdict = setTimeout(
+      () => marquerResultat(spinning.payout - spinning.stake),
+      SLOTS_SPIN_MS,
+    );
+    return () => clearTimeout(verdict);
+  }, [spinning, proprietaire]);
+}
+
 function SlotsTableScreen({ user, view }: { user: CurrentUser; view: SlotsTableView }) {
   const pending = useSlots((state) => state.pending);
   const markPending = useSlots((state) => state.markPending);
@@ -75,6 +105,8 @@ function SlotsTableScreen({ user, view }: { user: CurrentUser; view: SlotsTableV
   const abordable = isValidStake("slots", mise) && user.balance >= mise;
   const tourne = view.spinning !== null;
   const dernier = view.history[0] ?? null;
+
+  useSonDesRouleaux(view.spinning, proprietaire);
 
   async function tirer() {
     if (!proprietaire || !abordable || tourne) return;

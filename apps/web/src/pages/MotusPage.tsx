@@ -11,7 +11,7 @@ import {
   type MotusView,
 } from "@maxoujeux/shared";
 import { ArrowLeft, CircleCheck, CircleHelp, Loader2, Share2, Trophy } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/Button";
 import { Countdown } from "@/components/Countdown";
 import { GameArtefact } from "@/components/GameArtefact";
@@ -23,8 +23,10 @@ import { ChronoMotus } from "@/components/games/ChronoMotus";
 import { MotusBoard } from "@/components/games/MotusBoard";
 import { MotusKeyboard } from "@/components/games/MotusKeyboard";
 import { ExploitsMotusDuJour } from "@/components/stats/ClassementDuJour";
+import { marquerResultat } from "@/lib/ambiance";
 import { cn } from "@/lib/cn";
 import { useMotus } from "@/lib/motus";
+import { playSound } from "@/lib/sounds";
 import {
   appendMotusLetter,
   eraseMotusLetter,
@@ -53,6 +55,32 @@ export function MotusPage({ user }: { user: CurrentUser }) {
   }
 
   return <MotusContent user={user} view={view} />;
+}
+
+/**
+ * Le son de la grille : une carte à chaque ligne validée, le verdict à la fin.
+ *
+ * Le nombre de propositions sert de repère plutôt qu'un drapeau : c'est la seule
+ * grandeur qui ne bouge qu'aux moments qui comptent. La version de la tentative
+ * change aussi à l'abandon, où il n'y a pas de nouvelle ligne à annoncer.
+ */
+function useSonDeLaGrille(view: MotusView): void {
+  const lignes = useRef(view.guesses.length);
+  const termine = useRef(view.status === "won" || view.status === "lost");
+
+  useEffect(() => {
+    if (view.guesses.length > lignes.current) playSound("carte");
+    lignes.current = view.guesses.length;
+
+    const fini = view.status === "won" || view.status === "lost";
+    if (fini && !termine.current) {
+      // Le net et non le versement : trouver au sixième essai rend exactement la
+      // mise, ce qui n'est ni un gain ni une perte et ne mérite aucun des deux
+      // sons.
+      marquerResultat(view.net);
+    }
+    termine.current = fini;
+  }, [view.guesses.length, view.status, view.net]);
 }
 
 function MotusContent({ user, view }: { user: CurrentUser; view: MotusView }) {
@@ -125,6 +153,8 @@ function MotusContent({ user, view }: { user: CurrentUser; view: MotusView }) {
   const [mise, setMise] = useState(view.stake);
   const miseValide = isValidStake("motus", mise);
   const canAfford = miseValide && user.balance >= mise;
+
+  useSonDeLaGrille(view);
 
   useEffect(() => {
     if (!playing || pending || confirmAbandon) return;

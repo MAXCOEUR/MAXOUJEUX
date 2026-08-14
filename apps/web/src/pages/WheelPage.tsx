@@ -10,7 +10,7 @@ import {
   type WheelView,
 } from "@maxoujeux/shared";
 import { ArrowLeft, Loader2, Sparkles, Users } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Avatar } from "@/components/Avatar";
 import { Button } from "@/components/Button";
 import { Countdown } from "@/components/Countdown";
@@ -19,7 +19,10 @@ import { Plaque } from "@/components/Plaque";
 import { StakePicker } from "@/components/StakePicker";
 import { FortuneWheel } from "@/components/games/FortuneWheel";
 import { ClassementDuJour } from "@/components/stats/ClassementDuJour";
+import { marquerResultat } from "@/lib/ambiance";
+import { serverNow } from "@/lib/clock";
 import { cn } from "@/lib/cn";
+import { playWheelTicks } from "@/lib/sounds";
 import { enterWheelRoom, request, useRealtime } from "@/lib/socket";
 import { useWheel } from "@/lib/wheel";
 
@@ -54,6 +57,39 @@ export function WheelPage({ user }: { user: CurrentUser }) {
   return <WheelRoom user={user} view={view} />;
 }
 
+/**
+ * Le son de la roue, calé sur l'animation et non sur la réponse du serveur.
+ *
+ * L'API a tranché six secondes avant l'arrêt de la roue ; annoncer le résultat à
+ * ce moment-là le révélerait pendant qu'elle tourne encore. Le crépitement part
+ * donc avec l'animation, et le verdict tombe quand elle s'arrête.
+ *
+ * Le crépitement est joué pour **toute la salle** — c'est le spectacle partagé
+ * de la pièce — mais le verdict n'appartient qu'à celui qui a misé : personne
+ * n'a envie d'entendre le carillon du gain d'un autre.
+ */
+function useSonDeLaRoue(view: WheelView, userId: string): void {
+  const dernier = useRef<string | null>(null);
+
+  useEffect(() => {
+    const spinning = view.spinning;
+    if (!spinning) return;
+    // Un même lancer ne sonne qu'une fois : les états de la salle arrivent
+    // plusieurs fois pendant la rotation, un spectateur entrant à chaque fois.
+    if (dernier.current === spinning.endsAt) return;
+    dernier.current = spinning.endsAt;
+
+    const restant = Math.max(0, new Date(spinning.endsAt).getTime() - serverNow());
+    playWheelTicks(restant);
+
+    if (spinning.by.userId !== userId) return;
+
+    const { stake, payout } = spinning.result;
+    const verdict = setTimeout(() => marquerResultat(payout - stake), restant);
+    return () => clearTimeout(verdict);
+  }, [view.spinning, userId]);
+}
+
 function WheelRoom({ user, view }: { user: CurrentUser; view: WheelView }) {
   const pending = useWheel((state) => state.pending);
   const markPending = useWheel((state) => state.markPending);
@@ -70,6 +106,8 @@ function WheelRoom({ user, view }: { user: CurrentUser; view: WheelView }) {
   const abordable = miseValide && user.balance >= mise;
   const tourne = view.spinning !== null;
   const monLancer = view.spinning?.by.userId === user.id;
+
+  useSonDeLaRoue(view, user.id);
 
   async function lancer() {
     if (!abordable || pending || tourne) return;

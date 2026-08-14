@@ -124,6 +124,10 @@
   --animate-lueur: lueur 1.5s ease-in-out infinite;
   --animate-gain: gain 1.15s cubic-bezier(0.22, 1, 0.36, 1) forwards;
   --animate-tremble: tremble 0.36s ease-in-out;
+  /* Manche perdue : le panneau tremble, puis un voile rouge le traverse et se
+     dissipe. Le voile seul passerait inaperçu, le tremblement seul se lit comme
+     un refus d'action — c'est leur enchaînement qui dit « perdu » sans mot. */
+  --animate-voile-perte: voile-perte 0.9s cubic-bezier(0.22, 1, 0.36, 1) both;
 
   /* --- Blackjack -----------------------------------------------------------
      Sur une table de blackjack, le mouvement **est** l'information : une carte
@@ -283,6 +287,21 @@
   }
   75% {
     transform: translateX(-2px);
+  }
+}
+
+/* Voile rouge d'une manche perdue. Il monte vite et redescend lentement : un
+   fondu symétrique ressemblerait à un clignotement d'erreur, alors qu'il s'agit
+   d'accompagner un résultat, pas de signaler une panne. */
+@keyframes voile-perte {
+  0% {
+    box-shadow: inset 0 0 0 0 color-mix(in oklab, var(--color-danger) 0%, transparent);
+  }
+  18% {
+    box-shadow: inset 0 0 60px 0 color-mix(in oklab, var(--color-danger) 45%, transparent);
+  }
+  100% {
+    box-shadow: inset 0 0 0 0 color-mix(in oklab, var(--color-danger) 0%, transparent);
   }
 }
 
