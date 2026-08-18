@@ -19,6 +19,7 @@ pnpm-debug.log*
 # Compétences d'agent vendorisées : contenu tiers, restaurable depuis
 # skills-lock.json — même logique que node_modules face au fichier de verrouillage.
 .agents/
+.worktrees/
 
 # Réglages locaux de Claude Code (permissions propres au poste)
 .claude/settings.local.json
