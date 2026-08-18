@@ -48,12 +48,18 @@ export const loginSchema = z.object({
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 
+export const USER_ROLES = ["player", "moderator", "admin"] as const;
+export const userRoleSchema = z.enum(USER_ROLES);
+export type UserRole = z.infer<typeof userRoleSchema>;
+
 /** Profil renvoyé au client. Ne contient jamais le hash ni l'email d'un autre joueur. */
 export interface CurrentUser {
   id: string;
   email: string;
   pseudo: string;
   avatarSeed: string;
+  role: UserRole;
+  /** @deprecated Utiliser `role === "admin"`. */
   isAdmin: boolean;
   balance: number;
   createdAt: string;

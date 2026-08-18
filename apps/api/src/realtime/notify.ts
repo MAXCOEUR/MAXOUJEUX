@@ -18,11 +18,15 @@ export interface IdentityPatch {
 
 type WalletNotifier = (userId: string, balance: number) => void;
 type DisconnectNotifier = (userId: string) => void;
+type SessionDisconnectNotifier = (sessionId: string) => void;
+type AccessDisconnectNotifier = (kind: "ip" | "device", value: string) => void;
 type IdentityNotifier = (userId: string, patch: IdentityPatch) => void;
 type AchievementNotifier = (userId: string, codes: string[]) => void;
 
 let walletNotifier: WalletNotifier | null = null;
 let disconnectNotifier: DisconnectNotifier | null = null;
+let sessionDisconnectNotifier: SessionDisconnectNotifier | null = null;
+let accessDisconnectNotifier: AccessDisconnectNotifier | null = null;
 let identityNotifier: IdentityNotifier | null = null;
 let achievementNotifier: AchievementNotifier | null = null;
 
@@ -40,6 +44,22 @@ export function setDisconnectNotifier(notifier: DisconnectNotifier): void {
 
 export function disconnectUser(userId: string): void {
   disconnectNotifier?.(userId);
+}
+
+export function setSessionDisconnectNotifier(notifier: SessionDisconnectNotifier): void {
+  sessionDisconnectNotifier = notifier;
+}
+
+export function disconnectSession(sessionId: string): void {
+  sessionDisconnectNotifier?.(sessionId);
+}
+
+export function setAccessDisconnectNotifier(notifier: AccessDisconnectNotifier): void {
+  accessDisconnectNotifier = notifier;
+}
+
+export function disconnectAccess(kind: "ip" | "device", value: string): void {
+  accessDisconnectNotifier?.(kind, value);
 }
 
 export function setIdentityNotifier(notifier: IdentityNotifier): void {

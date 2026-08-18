@@ -8,6 +8,8 @@ const emptyToUndefined = (value: unknown): unknown => {
 const optionalAdminValue = <Schema extends z.ZodTypeAny>(schema: Schema) =>
   z.preprocess(emptyToUndefined, schema.optional());
 
+const optionalSecret = z.preprocess(emptyToUndefined, z.string().min(32).optional());
+
 /**
  * Configuration validée au démarrage. Le serveur refuse de démarrer si une
  * variable est manquante ou incohérente : mieux vaut un crash immédiat et
@@ -28,6 +30,7 @@ const envSchema = z
 
     /** Clé de signature des cookies. 32 caractères minimum. */
     SESSION_SECRET: z.string().min(32, "SESSION_SECRET doit faire au moins 32 caractères"),
+    DEVICE_FINGERPRINT_SECRET: optionalSecret,
 
     /** Durée de vie d'une session, en jours. */
     SESSION_TTL_DAYS: z.coerce.number().int().positive().default(30),
@@ -58,13 +61,33 @@ const envSchema = z
         message: "DATABASE_URL est obligatoire en production (PGlite est réservé au développement)",
       });
     }
+    if (value.NODE_ENV === "production" && !value.DEVICE_FINGERPRINT_SECRET) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["DEVICE_FINGERPRINT_SECRET"],
+        message: "DEVICE_FINGERPRINT_SECRET est obligatoire en production",
+      });
+    }
+    if (
+      value.DEVICE_FINGERPRINT_SECRET &&
+      value.DEVICE_FINGERPRINT_SECRET === value.SESSION_SECRET
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["DEVICE_FINGERPRINT_SECRET"],
+        message: "DEVICE_FINGERPRINT_SECRET doit être différent de SESSION_SECRET",
+      });
+    }
     const adminValues = [
       ["ADMIN_EMAIL", value.ADMIN_EMAIL],
       ["ADMIN_PSEUDO", value.ADMIN_PSEUDO],
       ["ADMIN_PASSWORD", value.ADMIN_PASSWORD],
     ] as const;
     const configuredAdminValues = adminValues.filter(([, adminValue]) => adminValue !== undefined);
-    if (configuredAdminValues.length > 0 && configuredAdminValues.length < adminValues.length) {
+    if (
+      (value.NODE_ENV === "production" && configuredAdminValues.length < adminValues.length) ||
+      (configuredAdminValues.length > 0 && configuredAdminValues.length < adminValues.length)
+    ) {
       for (const [key, adminValue] of adminValues) {
         if (adminValue === undefined) {
           ctx.addIssue({

@@ -9,7 +9,8 @@ import {
 } from "@maxoujeux/shared";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { currentUser, requireAuth } from "../../lib/require-auth.js";
+import { DEVICE_HEADER } from "../../lib/access-context.js";
+import { currentUser, requireAuth, requireResourceAuth } from "../../lib/require-auth.js";
 import { disconnectUser, notifyIdentity } from "../../realtime/notify.js";
 import { toPublicUser } from "../auth/public-user.js";
 import {
@@ -76,6 +77,10 @@ export async function accountRoutes(app: FastifyInstance): Promise<void> {
     const token = await createSession(id, {
       ip: request.ip,
       userAgent: request.headers["user-agent"],
+      deviceFingerprint:
+        typeof request.headers[DEVICE_HEADER] === "string"
+          ? request.headers[DEVICE_HEADER]
+          : undefined,
     });
     setSessionCookie(reply, token);
 
@@ -121,7 +126,7 @@ export async function avatarReadRoutes(app: FastifyInstance): Promise<void> {
   app.get(
     "/:userId/avatar",
     {
-      preHandler: requireAuth,
+      preHandler: requireResourceAuth,
       // Un salon plein déclenche une quinzaine de requêtes au premier
       // affichage, puis plus aucune. Le plafond global serait atteint par un
       // joueur qui navigue vite entre les salons.

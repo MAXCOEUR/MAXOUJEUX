@@ -15,6 +15,7 @@ export function toPublicUser(user: AuthenticatedUser): CurrentUser {
     email: user.email,
     pseudo: user.pseudo,
     avatarSeed: user.avatarSeed,
+    role: user.role,
     isAdmin: user.isAdmin,
     balance: user.balance,
     createdAt: user.createdAt.toISOString(),

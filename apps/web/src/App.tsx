@@ -25,6 +25,12 @@ export function App() {
   // fermée à la déconnexion, sans intervention des pages.
   useRealtimeConnection(session.data != null);
 
+  useEffect(() => {
+    const retryOnline = () => void session.refetch();
+    window.addEventListener("online", retryOnline);
+    return () => window.removeEventListener("online", retryOnline);
+  }, [session.refetch]);
+
   // `undefined` = session pas encore vérifiée. Sans ce cas distinct du `null`,
   // on afficherait brièvement l'écran de connexion à un joueur déjà connecté.
   if (session.isPending) {
@@ -39,10 +45,17 @@ export function App() {
     return (
       <div className="grid min-h-dvh place-items-center px-4">
         <div className="panel max-w-sm p-6 text-center">
-          <p className="text-sm text-cream">Impossible de joindre le serveur.</p>
+          <h1 className="font-display text-xl font-bold text-cream">Connexion requise</h1>
           <p className="mt-1 text-xs text-cream-faint">
-            Vérifie que l'API tourne, puis recharge la page.
+            MaxouJeux a besoin d’Internet pour vérifier ton compte et rejoindre les parties.
           </p>
+          <button
+            type="button"
+            onClick={() => void session.refetch()}
+            className="mt-5 min-h-11 rounded-xl bg-brass px-5 py-2.5 text-sm font-bold text-felt-deep"
+          >
+            Réessayer
+          </button>
         </div>
       </div>
     );
@@ -63,7 +76,7 @@ export function App() {
 }
 
 function Screen({ route, user }: { route: Route; user: CurrentUser }) {
-  const forbiddenAdmin = route.name === "admin" && !user.isAdmin;
+  const forbiddenAdmin = route.name === "admin" && user.role === "player";
 
   // La redirection est un effet pour que le rendu reste pur. Le serveur garde
   // de toute façon le dernier mot sur les appels d'administration.
@@ -75,7 +88,7 @@ function Screen({ route, user }: { route: Route; user: CurrentUser }) {
 
   switch (route.name) {
     case "admin":
-      return <AdminPage />;
+      return <AdminPage user={user} />;
     case "compte":
       return <ComptePage user={user} />;
     case "classement":

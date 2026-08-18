@@ -1,11 +1,14 @@
 import {
   createPlayerSchema,
+  banAccountSchema,
   formatCoins,
   resetPlayerPasswordSchema,
   setPlayerBalanceSchema,
   type AdminAccount,
+  type BanKind,
+  type CurrentUser,
 } from "@maxoujeux/shared";
-import { Loader2, Pencil, Plus, RotateCcw, Trash2 } from "lucide-react";
+import { Ban, Loader2, Pencil, Plus, RotateCcw, ShieldCheck, Trash2 } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import type { ZodError } from "zod";
 import { Button } from "@/components/Button";
@@ -15,9 +18,14 @@ import { ApiClientError } from "@/lib/api";
 import {
   adminActionAllowed,
   useAdminAccounts,
+  useAccountAccesses,
+  useAccountBans,
+  useBanAccount,
   useCreatePlayer,
   useDeletePlayer,
+  useRevokeBan,
   useResetPlayerPassword,
+  useSetAccountRole,
   useSetPlayerBalance,
 } from "@/lib/admin";
 
@@ -42,9 +50,12 @@ interface AccountTableProps {
   onResetPassword: (account: AdminAccount) => void;
   onSetBalance: (account: AdminAccount) => void;
   onDelete: (account: AdminAccount) => void;
+  onBan?: (account: AdminAccount) => void;
+  onToggleRole?: (account: AdminAccount) => void;
+  canAdminister?: boolean;
 }
 
-export function AccountTable({ accounts, onResetPassword, onSetBalance, onDelete }: AccountTableProps) {
+export function AccountTable({ accounts, onResetPassword, onSetBalance, onDelete, onBan, onToggleRole, canAdminister = true }: AccountTableProps) {
   return (
     <>
       <div className="hidden overflow-x-auto rounded-2xl border border-line md:block">
@@ -66,6 +77,9 @@ export function AccountTable({ accounts, onResetPassword, onSetBalance, onDelete
                 onResetPassword={onResetPassword}
                 onSetBalance={onSetBalance}
                 onDelete={onDelete}
+                onBan={onBan}
+                onToggleRole={onToggleRole}
+                canAdminister={canAdminister}
               />
             ))}
           </tbody>
@@ -79,10 +93,10 @@ export function AccountTable({ accounts, onResetPassword, onSetBalance, onDelete
               <dt className="text-cream-faint">Pseudo</dt><dd className="font-medium text-cream">{account.pseudo}</dd>
               <dt className="text-cream-faint">Email</dt><dd className="break-all text-cream-dim">{account.email}</dd>
               <dt className="text-cream-faint">Solde</dt><dd className="font-medium text-brass-bright">{formatCoins(account.balance)}</dd>
-              <dt className="text-cream-faint">Rôle</dt><dd className="text-cream">{account.isAdmin ? "Administrateur" : "Joueur"}</dd>
+              <dt className="text-cream-faint">Rôle</dt><dd className="text-cream">{roleLabel(account)}</dd>
             </dl>
             {adminActionAllowed(account) && (
-              <AccountActions account={account} onResetPassword={onResetPassword} onSetBalance={onSetBalance} onDelete={onDelete} />
+              <AccountActions account={account} onResetPassword={onResetPassword} onSetBalance={onSetBalance} onDelete={onDelete} onBan={onBan} onToggleRole={onToggleRole} canAdminister={canAdminister} />
             )}
           </article>
         ))}
@@ -91,23 +105,29 @@ export function AccountTable({ accounts, onResetPassword, onSetBalance, onDelete
   );
 }
 
-function AccountRow({ account, onResetPassword, onSetBalance, onDelete }: Pick<AccountTableProps, "onResetPassword" | "onSetBalance" | "onDelete"> & { account: AdminAccount }) {
+function roleLabel(account: AdminAccount): string {
+  if (account.role === "admin") return "Administrateur";
+  if (account.role === "moderator") return "Modérateur";
+  return "Joueur";
+}
+
+function AccountRow({ account, onResetPassword, onSetBalance, onDelete, onBan, onToggleRole, canAdminister }: Omit<AccountTableProps, "accounts"> & { account: AdminAccount }) {
   return (
     <tr className="bg-felt/25 text-cream-dim">
       <td className="px-4 py-3 font-medium text-cream">{account.pseudo}</td>
       <td className="px-4 py-3">{account.email}</td>
       <td className="px-4 py-3 font-medium text-brass-bright">{formatCoins(account.balance)}</td>
-      <td className="px-4 py-3">{account.isAdmin ? "Administrateur" : "Joueur"}</td>
+      <td className="px-4 py-3">{roleLabel(account)}{account.isBanned && <span className="ml-2 text-xs text-danger">Banni</span>}</td>
       <td className="px-4 py-3">
         {adminActionAllowed(account) && (
-          <AccountActions account={account} onResetPassword={onResetPassword} onSetBalance={onSetBalance} onDelete={onDelete} />
+          <AccountActions account={account} onResetPassword={onResetPassword} onSetBalance={onSetBalance} onDelete={onDelete} onBan={onBan} onToggleRole={onToggleRole} canAdminister={canAdminister} />
         )}
       </td>
     </tr>
   );
 }
 
-function AccountActions({ account, onResetPassword, onSetBalance, onDelete }: Pick<AccountTableProps, "onResetPassword" | "onSetBalance" | "onDelete"> & { account: AdminAccount }) {
+function AccountActions({ account, onResetPassword, onSetBalance, onDelete, onBan, onToggleRole, canAdminister = true }: Omit<AccountTableProps, "accounts"> & { account: AdminAccount }) {
   return (
     <div className="flex flex-wrap justify-end gap-2">
       <Button type="button" variant="outline" onClick={() => onResetPassword(account)} className="px-2.5 py-2" aria-label={`Réinitialiser le mot de passe de ${account.pseudo}`}>
@@ -116,9 +136,9 @@ function AccountActions({ account, onResetPassword, onSetBalance, onDelete }: Pi
       <Button type="button" variant="outline" onClick={() => onSetBalance(account)} className="px-2.5 py-2" aria-label={`Ajuster le solde de ${account.pseudo}`}>
         <Pencil className="size-4" aria-hidden />
       </Button>
-      <Button type="button" variant="ghost" onClick={() => onDelete(account)} className="px-2.5 py-2 text-danger hover:text-danger" aria-label={`Supprimer ${account.pseudo}`}>
-        <Trash2 className="size-4" aria-hidden />
-      </Button>
+      {onBan && <Button type="button" variant="outline" onClick={() => onBan(account)} className="px-2.5 py-2 text-danger" aria-label={`Bannir ${account.pseudo}`}><Ban className="size-4" aria-hidden /></Button>}
+      {canAdminister && onToggleRole && <Button type="button" variant="ghost" onClick={() => onToggleRole(account)} className="px-2.5 py-2" aria-label={account.role === "moderator" ? `Rétrograder ${account.pseudo}` : `Promouvoir ${account.pseudo} modérateur`}><ShieldCheck className="size-4" aria-hidden /></Button>}
+      {canAdminister && <Button type="button" variant="ghost" onClick={() => onDelete(account)} className="px-2.5 py-2 text-danger hover:text-danger" aria-label={`Supprimer ${account.pseudo}`}><Trash2 className="size-4" aria-hidden /></Button>}
     </div>
   );
 }
@@ -215,28 +235,128 @@ function DeleteAccountDialog({ account, onClose }: { account: AdminAccount | nul
   </Modal>;
 }
 
-export function AdminPage() {
+function BanAccountDialog({ account, onClose }: { account: AdminAccount | null; onClose: () => void }) {
+  const accesses = useAccountAccesses(account?.id ?? null);
+  const bans = useAccountBans(account?.id ?? null);
+  const banAccount = useBanAccount();
+  const revokeBan = useRevokeBan();
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!account) return;
+    setError(null);
+    const data = new FormData(event.currentTarget);
+    const parsed = banAccountSchema.safeParse({
+      kinds: data.getAll("kinds") as BanKind[],
+      accessId: data.get("accessId") || undefined,
+      reason: data.get("reason"),
+      duration: data.get("duration"),
+    });
+    if (!parsed.success) return setError(parsed.error.issues[0]?.message ?? "Bannissement invalide");
+    try {
+      await banAccount.mutateAsync({ accountId: account.id, input: parsed.data });
+      event.currentTarget.reset();
+    } catch (cause) {
+      setError(mutationError(cause).message ?? "Impossible d’appliquer le bannissement.");
+    }
+  }
+
+  const activeBans = bans.data?.filter(
+    (item) => item.revokedAt === null && (item.expiresAt === null || Date.parse(item.expiresAt) > Date.now()),
+  ) ?? [];
+
+  return (
+    <Modal open={account !== null} onClose={onClose} title={`Modération de ${account?.pseudo ?? ""}`}>
+      <form onSubmit={submit} className="space-y-5">
+        <fieldset className="space-y-2">
+          <legend className="text-sm font-semibold text-cream">Types de bannissement</legend>
+          {(["account", "ip", "device"] as const).map((kind) => (
+            <label key={kind} className="flex min-h-11 items-center gap-3 rounded-xl border border-line px-3 text-sm text-cream-dim">
+              <input type="checkbox" name="kinds" value={kind} defaultChecked={kind === "account"} className="size-4 accent-brass" />
+              {kind === "account" ? "Compte" : kind === "ip" ? "Adresse IP" : "Machine / navigateur"}
+            </label>
+          ))}
+        </fieldset>
+
+        <label className="block text-sm text-cream-dim">
+          Connexion récente pour l’IP ou la machine
+          <select name="accessId" className="mt-2 min-h-11 w-full rounded-xl border border-line bg-felt-raised px-3 text-cream">
+            <option value="">Choisir une connexion</option>
+            {accesses.data?.map((access) => (
+              <option key={access.id} value={access.id}>{access.ip} · {access.hasDevice ? "machine disponible" : "sans empreinte"}</option>
+            ))}
+          </select>
+        </label>
+        <p className="text-xs leading-relaxed text-cream-muted">
+          L’empreinte navigateur reste contournable et peut produire des faux positifs. Vérifie la connexion choisie avant de bannir une machine.
+        </p>
+
+        <label className="block text-sm text-cream-dim">
+          Durée
+          <select name="duration" defaultValue="1d" className="mt-2 min-h-11 w-full rounded-xl border border-line bg-felt-raised px-3 text-cream">
+            <option value="1h">1 heure</option><option value="1d">1 jour</option><option value="7d">7 jours</option><option value="30d">30 jours</option><option value="permanent">Permanent</option>
+          </select>
+        </label>
+
+        <label className="block text-sm text-cream-dim">
+          Motif
+          <textarea name="reason" required maxLength={500} className="mt-2 min-h-24 w-full rounded-xl border border-line bg-felt-raised px-3 py-2 text-cream" />
+        </label>
+        {error && <p role="alert" className="text-sm text-danger">{error}</p>}
+        <Button type="submit" loading={banAccount.isPending} className="w-full">Appliquer le bannissement</Button>
+      </form>
+
+      {activeBans.length > 0 && (
+        <section className="mt-6 border-t border-line pt-5">
+          <h3 className="text-sm font-semibold text-cream">Bannissements actifs</h3>
+          <div className="mt-3 space-y-2">
+            {activeBans.map((item) => (
+              <div key={item.id} className="flex items-center gap-3 rounded-xl bg-felt-raised/50 p-3 text-xs text-cream-dim">
+                <span className="min-w-0 flex-1"><strong className="text-cream">{item.kind}</strong> · {item.targetLabel}<br />{item.reason}</span>
+                <Button type="button" variant="ghost" loading={revokeBan.isPending} onClick={() => account && revokeBan.mutate({ accountId: account.id, banId: item.id })}>Révoquer</Button>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+    </Modal>
+  );
+}
+
+export function AdminPage({ user }: { user: CurrentUser }) {
   const accounts = useAdminAccounts();
+  const setRole = useSetAccountRole();
   const [createOpen, setCreateOpen] = useState(false);
   const [passwordAccount, setPasswordAccount] = useState<AdminAccount | null>(null);
   const [balanceAccount, setBalanceAccount] = useState<AdminAccount | null>(null);
   const [deleteAccount, setDeleteAccount] = useState<AdminAccount | null>(null);
+  const [banAccount, setBanAccount] = useState<AdminAccount | null>(null);
+  const canAdminister = user.role === "admin";
+
+  function toggleRole(account: AdminAccount) {
+    setRole.mutate({
+      accountId: account.id,
+      input: { role: account.role === "moderator" ? "player" : "moderator" },
+    });
+  }
 
   return (
     <section className="animate-rise">
       <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div><h1 className="font-display text-3xl font-bold text-cream">Administration</h1><p className="mt-1 text-sm text-cream-dim">Gérer les comptes joueurs de la maison.</p></div>
-        <Button type="button" onClick={() => setCreateOpen(true)}><Plus className="size-4" aria-hidden />Créer un joueur</Button>
+        {canAdminister && <Button type="button" onClick={() => setCreateOpen(true)}><Plus className="size-4" aria-hidden />Créer un joueur</Button>}
       </div>
 
       {accounts.isPending && <div className="grid min-h-48 place-items-center"><Loader2 className="size-6 animate-spin text-cream-faint" aria-label="Chargement des comptes" /></div>}
       {accounts.isError && <p role="alert" className="rounded-xl border border-danger/40 bg-danger/10 p-4 text-sm text-danger">Impossible de charger les comptes.</p>}
-      {accounts.data && <AccountTable accounts={accounts.data} onResetPassword={setPasswordAccount} onSetBalance={setBalanceAccount} onDelete={setDeleteAccount} />}
+      {accounts.data && <AccountTable accounts={accounts.data} onResetPassword={setPasswordAccount} onSetBalance={setBalanceAccount} onDelete={setDeleteAccount} onBan={setBanAccount} onToggleRole={toggleRole} canAdminister={canAdminister} />}
 
       <CreatePlayerDialog open={createOpen} onClose={() => setCreateOpen(false)} />
       <ResetPasswordDialog account={passwordAccount} onClose={() => setPasswordAccount(null)} />
       <SetBalanceDialog account={balanceAccount} onClose={() => setBalanceAccount(null)} />
       <DeleteAccountDialog account={deleteAccount} onClose={() => setDeleteAccount(null)} />
+      <BanAccountDialog account={banAccount} onClose={() => setBanAccount(null)} />
     </section>
   );
 }

@@ -5,6 +5,8 @@ import { App } from "./App";
 import { bindAmbiance, bindUnlockFeedback } from "./lib/ambiance";
 import { queryClient } from "./lib/queryClient";
 import "./index.css";
+import { PwaProvider } from "./lib/pwa";
+import { PwaNotices } from "./components/PwaInstall";
 
 const container = document.getElementById("root");
 if (!container) throw new Error("Élément #root introuvable dans index.html");
@@ -18,7 +20,10 @@ bindUnlockFeedback();
 createRoot(container).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <App />
+      <PwaProvider>
+        <PwaNotices />
+        <App />
+      </PwaProvider>
     </QueryClientProvider>
   </StrictMode>,
 );

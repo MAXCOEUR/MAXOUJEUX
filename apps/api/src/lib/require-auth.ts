@@ -1,6 +1,8 @@
 import type { FastifyReply, FastifyRequest, preHandlerHookHandler } from "fastify";
 import { SESSION_COOKIE, resolveSession, type AuthenticatedUser } from "../modules/auth/session.js";
 import { AppError } from "./errors.js";
+import { DEVICE_HEADER, hashDeviceFingerprint, normalizeIp } from "./access-context.js";
+import { assertAccessAllowed } from "../modules/moderation/service.js";
 
 declare module "fastify" {
   interface FastifyRequest {
@@ -28,6 +30,36 @@ export const requireAuth: preHandlerHookHandler = async (request: FastifyRequest
   if (!user) {
     throw new AppError(401, "UNAUTHENTICATED", "Connexion requise");
   }
+  const rawDevice = request.headers[DEVICE_HEADER];
+  await assertAccessAllowed({
+    userId: user.id,
+    role: user.role,
+    ip: normalizeIp(request.ip),
+    deviceHash: hashDeviceFingerprint(typeof rawDevice === "string" ? rawDevice : undefined),
+  });
+  request.user = user;
+};
+
+/**
+ * Variante pour les ressources chargées par le navigateur lui-même (`img`).
+ * Une balise image ne peut pas joindre `X-MaxouJeux-Device` : on contrôle donc
+ * l'IP courante et l'empreinte déjà liée à la session, sans jamais affaiblir
+ * les contrôles de ban compte, IP ou machine.
+ */
+export const requireResourceAuth: preHandlerHookHandler = async (
+  request: FastifyRequest,
+  _reply: FastifyReply,
+) => {
+  const user = await resolveSession(readSessionToken(request));
+  if (!user) {
+    throw new AppError(401, "UNAUTHENTICATED", "Connexion requise");
+  }
+  await assertAccessAllowed({
+    userId: user.id,
+    role: user.role,
+    ip: normalizeIp(request.ip),
+    deviceHash: user.deviceHash,
+  });
   request.user = user;
 };
 

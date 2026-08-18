@@ -52,6 +52,11 @@ async function appError(work: () => Promise<unknown>): Promise<AppError> {
 /** Laisse passer une phase raccourcie. */
 const attendre = (ms = 40) => new Promise((resolve) => setTimeout(resolve, ms));
 
+async function attendreJusqua(condition: () => boolean, timeoutMs = 1_000): Promise<void> {
+  const limite = Date.now() + timeoutMs;
+  while (!condition() && Date.now() < limite) await attendre(10);
+}
+
 beforeAll(async () => {
   await runMigrations();
 }, 60_000);
@@ -578,6 +583,12 @@ describe("pause", () => {
       await actPoker(auTrait?.userId ?? "", tableId, vue?.version ?? 0, { kind: "fold" });
       await attendre(25);
     }
+
+    // PostgreSQL réel valide le remboursement avant de libérer le siège ; ce
+    // commit peut dépasser les 25 ms fixes d'une base PGlite en mémoire.
+    await attendreJusqua(
+      () => !viewPoker(tableId, null)?.seats.some((siege) => siege.userId === hote.userId),
+    );
 
     expect(viewPoker(tableId, null)?.seats.some((siege) => siege.userId === hote.userId)).toBe(
       false,

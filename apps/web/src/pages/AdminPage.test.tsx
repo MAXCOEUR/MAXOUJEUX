@@ -7,9 +7,9 @@ import { AccountTable, CreatePlayerDialog } from "./AdminPage.js";
 
 const player: AdminAccount = {
   id: "player-id", email: "alice@example.test", pseudo: "Alice", avatarSeed: "seed",
-  isAdmin: false, balance: 1250, createdAt: "2026-01-01T00:00:00.000Z", lastSeenAt: "2026-01-01T00:00:00.000Z",
+  role: "player", isBanned: false, isAdmin: false, balance: 1250, createdAt: "2026-01-01T00:00:00.000Z", lastSeenAt: "2026-01-01T00:00:00.000Z",
 };
-const admin: AdminAccount = { ...player, id: "admin-id", pseudo: "Maison", isAdmin: true };
+const admin: AdminAccount = { ...player, id: "admin-id", pseudo: "Maison", role: "admin", isAdmin: true };
 const actions = { onResetPassword: () => undefined, onSetBalance: () => undefined, onDelete: () => undefined };
 
 test("affiche les informations des comptes et protège les administrateurs", () => {

@@ -182,7 +182,10 @@ describe("anonymiseAccount", () => {
 
   it("refuse de fermer un compte administrateur", async () => {
     const userId = await suivi.user(0);
-    await db.update(users).set({ isAdmin: true }).where(eq(users.id, userId));
+    await db
+      .update(users)
+      .set({ role: "admin", isAdmin: true })
+      .where(eq(users.id, userId));
 
     const erreur = await echec(anonymiseAccount(userId));
 

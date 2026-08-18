@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import type { BanKind, UserRole } from "@maxoujeux/shared";
 import {
   bigint,
   boolean,
@@ -62,6 +63,7 @@ export const users = pgTable(
     /** Réservé : passera à true le jour où un SMTP sera branché. */
     emailVerified: boolean("email_verified").notNull().default(false),
     isBanned: boolean("is_banned").notNull().default(false),
+    role: text("role").$type<UserRole>().notNull().default("player"),
     isAdmin: boolean("is_admin").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(now),
     lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().default(now),
@@ -78,6 +80,12 @@ export const users = pgTable(
     // Unicité insensible à la casse : "Maxou" et "maxou" sont le même pseudo.
     uniqueIndex("users_email_lower_idx").on(sql`lower(${table.email})`),
     uniqueIndex("users_pseudo_lower_idx").on(sql`lower(${table.pseudo})`),
+    uniqueIndex("users_single_admin_idx").on(table.role).where(sql`${table.role} = 'admin'`),
+    check("users_role_valid", sql`${table.role} in ('player', 'moderator', 'admin')`),
+    check(
+      "users_admin_compat_synced",
+      sql`${table.isAdmin} = (${table.role} = 'admin')`,
+    ),
   ],
 );
 
@@ -114,11 +122,68 @@ export const sessions = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(now),
     ip: text("ip"),
     userAgent: text("user_agent"),
+    deviceHash: text("device_hash"),
   },
   (table) => [
     index("sessions_user_id_idx").on(table.userId),
     index("sessions_expires_at_idx").on(table.expiresAt),
   ],
+);
+
+/** Connexions observées, utilisables comme cibles de modération. */
+export const accountAccesses = pgTable(
+  "account_accesses",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    ip: text("ip").notNull(),
+    /** HMAC-SHA-256 de l'empreinte navigateur. Jamais le visitorId brut. */
+    deviceHash: text("device_hash"),
+    userAgent: text("user_agent"),
+    firstSeenAt: timestamp("first_seen_at", { withTimezone: true }).notNull().default(now),
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().default(now),
+  },
+  (table) => [index("account_accesses_user_seen_idx").on(table.userId, table.lastSeenAt)],
+);
+
+/** Bannissements réversibles. Une révocation conserve la ligne d'audit. */
+export const moderationBans = pgTable(
+  "moderation_bans",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    kind: text("kind").$type<BanKind>().notNull(),
+    /** Identifiant du compte pour un ban compte, conservé même après suppression. */
+    targetUserId: uuid("target_user_id"),
+    /** userId, IP normalisée ou HMAC machine selon `kind`. */
+    targetValue: text("target_value").notNull(),
+    reason: text("reason").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    createdBy: uuid("created_by").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(now),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    revokedBy: uuid("revoked_by"),
+  },
+  (table) => [
+    check("moderation_bans_kind_valid", sql`${table.kind} in ('account', 'ip', 'device')`),
+    index("moderation_bans_target_idx").on(table.kind, table.targetValue),
+    index("moderation_bans_account_idx").on(table.targetUserId, table.createdAt),
+  ],
+);
+
+/** Journal des actions sensibles du personnel, sans secret ni mot de passe. */
+export const staffAuditLog = pgTable(
+  "staff_audit_log",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    action: text("action").notNull(),
+    actorUserId: uuid("actor_user_id").notNull(),
+    targetUserId: uuid("target_user_id"),
+    details: jsonb("details").$type<Record<string, string | number | boolean | null>>().notNull().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(now),
+  },
+  (table) => [index("staff_audit_log_actor_created_idx").on(table.actorUserId, table.createdAt)],
 );
 
 // ---------------------------------------------------------------------------

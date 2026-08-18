@@ -1,4 +1,5 @@
 import type { ApiError } from "@maxoujeux/shared";
+import { getDeviceFingerprint } from "./device";
 
 /**
  * Erreur d'API exploitable par les formulaires : `fields` permet d'afficher le
@@ -33,11 +34,13 @@ function isApiError(value: unknown): value is ApiError {
 export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
   let response: Response;
   try {
+    const fingerprint = await getDeviceFingerprint();
     response = await fetch(`/api${path}`, {
       ...init,
       credentials: "same-origin",
       headers: {
         ...(init.body ? { "Content-Type": "application/json" } : {}),
+        ...(fingerprint ? { "X-MaxouJeux-Device": fingerprint } : {}),
         ...init.headers,
       },
     });

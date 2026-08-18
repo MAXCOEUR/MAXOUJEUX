@@ -54,6 +54,7 @@ import type {
   PokerView,
 } from "./poker.js";
 import type { ChatMessage, ChatSendInput } from "./chat.js";
+import type { UserRole } from "./auth.js";
 
 export interface PresencePlayer {
   userId: string;
@@ -250,7 +251,11 @@ export interface ClientToServerEvents {
 
 /** Données attachées à la socket côté serveur, résolues au handshake. */
 export interface SocketData {
+  sessionId: string;
   userId: string;
   pseudo: string;
   avatarSeed: string;
+  role: UserRole;
+  ip: string;
+  deviceHash: string | null;
 }

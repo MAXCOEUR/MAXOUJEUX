@@ -18,6 +18,11 @@ export function userRoom(userId: string): string {
   return `user:${userId}`;
 }
 
+/** Nom de la room d'une session HTTP précise. */
+export function sessionRoom(sessionId: string): string {
+  return `session:${sessionId}`;
+}
+
 /** Room des observateurs du salon d'un jeu. */
 export function lobbyRoom(game: string): string {
   return `lobby:${game}`;

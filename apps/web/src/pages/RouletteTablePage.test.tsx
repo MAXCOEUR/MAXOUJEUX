@@ -24,6 +24,7 @@ const user: CurrentUser = {
   email: "maxou@example.com",
   pseudo: "Maxou",
   avatarSeed: "maxou",
+  role: "player",
   isAdmin: false,
   balance: 2_000,
   createdAt: "2026-08-12T00:00:00.000Z",

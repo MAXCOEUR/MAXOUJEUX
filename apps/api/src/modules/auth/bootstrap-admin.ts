@@ -1,7 +1,7 @@
 import type { RegisterInput } from "@maxoujeux/shared";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { db } from "../../db/index.js";
-import { users } from "../../db/schema.js";
+import { moderationBans, users } from "../../db/schema.js";
 import { env, type AdminBootstrapConfig } from "../../env.js";
 import { AppError } from "../../lib/errors.js";
 import { createAccount } from "./service.js";
@@ -16,7 +16,26 @@ async function accountByEmail(email: string): Promise<{ id: string } | undefined
 }
 
 async function promote(userId: string): Promise<void> {
-  await db.update(users).set({ isAdmin: true }).where(eq(users.id, userId));
+  await db.transaction(async (tx) => {
+    await tx
+      .update(users)
+      .set({ role: "player", isAdmin: false })
+      .where(eq(users.role, "admin"));
+    await tx
+      .update(users)
+      .set({ role: "admin", isAdmin: true, isBanned: false })
+      .where(eq(users.id, userId));
+    await tx
+      .update(moderationBans)
+      .set({ revokedAt: new Date(), revokedBy: userId })
+      .where(
+        and(
+          eq(moderationBans.kind, "account"),
+          eq(moderationBans.targetValue, userId),
+          isNull(moderationBans.revokedAt),
+        ),
+      );
+  });
 }
 
 /**
@@ -40,7 +59,10 @@ export async function bootstrapAdmin(config: AdminBootstrapConfig = env): Promis
 
   const input: RegisterInput = { email, pseudo, password };
   try {
-    await createAccount(input, { isAdmin: true });
+    // Crée d'abord sans privilège : l'index unique autorise ainsi le remplacement
+    // atomique d'un ancien administrateur par le compte configuré.
+    const created = await createAccount(input, { role: "player" });
+    await promote(created.id);
   } catch (error) {
     if (!(error instanceof AppError) || error.code !== "ACCOUNT_EXISTS") throw error;
 

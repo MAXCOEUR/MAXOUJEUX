@@ -18,6 +18,7 @@ import { Field } from "@/components/Field";
 import { Lien } from "@/components/Lien";
 import { Modal } from "@/components/Modal";
 import { ReglagesSon } from "@/components/ReglagesSon";
+import { PwaInstallCard } from "@/components/PwaInstall";
 import {
   useDeleteAccount,
   useRemoveAvatar,
@@ -76,6 +77,8 @@ export function ComptePage({ user }: { user: CurrentUser }) {
       <AvatarCard user={user} />
 
       <ReglagesSon />
+
+      <PwaInstallCard />
 
       <Reglage titre="Adresse email" valeur={user.email} onOuvrir={() => setOuvert("email")} />
       <Reglage titre="Pseudo" valeur={user.pseudo} onOuvrir={() => setOuvert("pseudo")} />

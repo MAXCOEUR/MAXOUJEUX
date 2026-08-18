@@ -13,7 +13,7 @@ import { sessionQueryKey } from "./session.js";
 
 const player: AdminAccount = {
   id: "player-id", email: "joueur@example.test", pseudo: "Joueur", avatarSeed: "seed",
-  isAdmin: false, balance: 1200, createdAt: "2026-01-01T00:00:00.000Z", lastSeenAt: "2026-01-01T00:00:00.000Z",
+  role: "player", isBanned: false, isAdmin: false, balance: 1200, createdAt: "2026-01-01T00:00:00.000Z", lastSeenAt: "2026-01-01T00:00:00.000Z",
 };
 
 test("reconnaît le chemin d'administration", () => {

@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import type { LoginInput, RegisterInput } from "@maxoujeux/shared";
+import type { LoginInput, RegisterInput, UserRole } from "@maxoujeux/shared";
 import { eq, or, sql } from "drizzle-orm";
 import { db } from "../../db/index.js";
 import { users, walletTx, wallets } from "../../db/schema.js";
@@ -8,10 +8,14 @@ import { AppError } from "../../lib/errors.js";
 import { isUniqueViolation } from "../../lib/pg-errors.js";
 import { burnTimingBudget, hashPassword, verifyPassword } from "./password.js";
 import type { AuthenticatedUser } from "./session.js";
+import {
+  assertAccessAllowed,
+  assertLegacyAccountAllowed,
+} from "../moderation/service.js";
 
 export async function createAccount(
   input: RegisterInput,
-  options: { isAdmin?: boolean } = {},
+  options: { isAdmin?: boolean; role?: UserRole } = {},
 ): Promise<AuthenticatedUser> {
   // Pré-contrôle pour pouvoir désigner le champ fautif à l'utilisateur.
   // L'index unique reste la vraie garantie en cas d'inscriptions simultanées.
@@ -40,6 +44,7 @@ export async function createAccount(
 
   const passwordHash = await hashPassword(input.password);
   const avatarSeed = randomBytes(8).toString("hex");
+  const role: UserRole = options.isAdmin ? "admin" : (options.role ?? "player");
 
   try {
     // Compte, porte-monnaie et écriture comptable dans la même transaction :
@@ -52,13 +57,15 @@ export async function createAccount(
           pseudo: input.pseudo,
           passwordHash,
           avatarSeed,
-          isAdmin: options.isAdmin ?? false,
+          role,
+          isAdmin: role === "admin",
         })
         .returning({
           id: users.id,
           email: users.email,
           pseudo: users.pseudo,
           avatarSeed: users.avatarSeed,
+          role: users.role,
           isAdmin: users.isAdmin,
           createdAt: users.createdAt,
         });
@@ -77,7 +84,13 @@ export async function createAccount(
         reason: "signup_bonus",
       });
 
-      return { ...created, balance: env.STARTING_BALANCE };
+      return {
+        ...created,
+        sessionId: "",
+        ip: null,
+        deviceHash: null,
+        balance: env.STARTING_BALANCE,
+      };
     });
   } catch (error) {
     if (isUniqueViolation(error)) {
@@ -102,6 +115,7 @@ export async function login(input: LoginInput): Promise<AuthenticatedUser> {
       createdAt: users.createdAt,
       passwordHash: users.passwordHash,
       isBanned: users.isBanned,
+      role: users.role,
       isAdmin: users.isAdmin,
       deletedAt: users.deletedAt,
       balance: wallets.balance,
@@ -127,18 +141,21 @@ export async function login(input: LoginInput): Promise<AuthenticatedUser> {
   // c'est une ceinture, pas la bretelle.
   if (row.deletedAt) throw invalidCredentials();
 
-  if (row.isBanned) {
-    throw new AppError(403, "ACCOUNT_BANNED", "Ce compte a été suspendu");
-  }
+  await assertAccessAllowed({ userId: row.id, role: row.role, ip: null, deviceHash: null });
+  await assertLegacyAccountAllowed(row.id, row.isBanned, row.role);
 
   await db.update(users).set({ lastSeenAt: new Date() }).where(eq(users.id, row.id));
 
   return {
+    sessionId: "",
     id: row.id,
     email: row.email,
     pseudo: row.pseudo,
     avatarSeed: row.avatarSeed,
+    role: row.role,
     isAdmin: row.isAdmin,
+    ip: null,
+    deviceHash: null,
     balance: row.balance ?? 0,
     createdAt: row.createdAt,
   };

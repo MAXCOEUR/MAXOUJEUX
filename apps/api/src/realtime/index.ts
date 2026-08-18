@@ -2,7 +2,13 @@ import fastifyCookie from "@fastify/cookie";
 import type { FastifyInstance } from "fastify";
 import { Server } from "socket.io";
 import { env, isProduction } from "../env.js";
-import { SESSION_COOKIE, resolveSession } from "../modules/auth/session.js";
+import {
+  SESSION_COOKIE,
+  resolveSession,
+  resolveSessionById,
+} from "../modules/auth/session.js";
+import { hashDeviceFingerprint, normalizeIp } from "../lib/access-context.js";
+import { assertAccessAllowed } from "../modules/moderation/service.js";
 import {
   attach,
   activeViewFor,
@@ -21,8 +27,10 @@ import { setRealtimeLogger } from "./guard.js";
 import { createMotusNotifier, registerMotusHandlers } from "./motus.js";
 import {
   setAchievementNotifier,
+  setAccessDisconnectNotifier,
   setDisconnectNotifier,
   setIdentityNotifier,
+  setSessionDisconnectNotifier,
   setWalletNotifier,
 } from "./notify.js";
 import {
@@ -39,8 +47,11 @@ import { createWheelNotifier, registerWheelHandlers } from "./wheel.js";
 import { createSlotsNotifier, registerSlotsHandlers } from "./slots.js";
 import { createPokerNotifier, registerPokerHandlers } from "./poker.js";
 import { registerChatHandlers } from "./chat.js";
-import { userRoom, type GameServer } from "./types.js";
+import { sessionRoom, userRoom, type GameServer } from "./types.js";
 import { setMotusNotifier, unwatch as unwatchMotus } from "../modules/motus/service.js";
+import { ConnectionRegistry, REALTIME_LIMITS, RealtimeRateLimiter } from "./limits.js";
+import { isAllowedSocketOrigin, socketClientIp } from "./origin.js";
+import { AppError } from "../lib/errors.js";
 
 export type { GameServer } from "./types.js";
 
@@ -53,38 +64,79 @@ export type { GameServer } from "./types.js";
  * la moindre room.
  */
 export function attachRealtime(app: FastifyInstance): GameServer {
+  const publicOrigin = new URL(env.PUBLIC_ORIGIN).origin;
+  const connections = new ConnectionRegistry(
+    REALTIME_LIMITS.socketsPerAccount,
+    REALTIME_LIMITS.socketsPerIp,
+  );
+  const events = new RealtimeRateLimiter(
+    REALTIME_LIMITS.eventsPerAccount,
+    REALTIME_LIMITS.eventsPerIp,
+    REALTIME_LIMITS.eventWindowMs,
+  );
   const io: GameServer = new Server(app.server, {
     path: "/socket.io",
-    // En production, front et API sortent de la même origine (le nginx du
-    // conteneur `web`) : aucun en-tête CORS n'est nécessaire, on n'en configure
-    // donc aucun. En développement, Vite tourne sur un port distinct.
-    ...(isProduction ? {} : { cors: { origin: env.PUBLIC_ORIGIN, credentials: true } }),
+    cors: { origin: publicOrigin, credentials: true },
+    maxHttpBufferSize: REALTIME_LIMITS.maxMessageBytes,
     // Un NAS n'a pas de bande passante à gaspiller en trames de contrôle.
     pingInterval: 25_000,
     pingTimeout: 20_000,
   });
 
   io.use(async (socket, next) => {
+    let counted = false;
+    const refuse = (code: string, details: Record<string, string> = {}) => {
+      app.log.warn({ code, ...details }, "Handshake Socket.IO refusé");
+      return next(new Error(code));
+    };
     try {
+      if (!isAllowedSocketOrigin(socket.handshake.headers.origin, publicOrigin)) {
+        return refuse("SOCKET_ORIGIN_FORBIDDEN");
+      }
       const header = socket.handshake.headers.cookie;
-      if (!header) return next(new Error("UNAUTHENTICATED"));
+      if (!header) return refuse("UNAUTHENTICATED");
 
       const raw = fastifyCookie.parse(header)[SESSION_COOKIE];
-      if (!raw) return next(new Error("UNAUTHENTICATED"));
+      if (!raw) return refuse("UNAUTHENTICATED");
 
       const unsigned = app.unsignCookie(raw);
-      if (!unsigned.valid || !unsigned.value) return next(new Error("UNAUTHENTICATED"));
+      if (!unsigned.valid || !unsigned.value) return refuse("UNAUTHENTICATED");
 
       const user = await resolveSession(unsigned.value);
-      if (!user) return next(new Error("UNAUTHENTICATED"));
+      if (!user) return refuse("UNAUTHENTICATED");
 
+      const rawFingerprint = socket.handshake.auth.deviceFingerprint;
+      const deviceHash = hashDeviceFingerprint(
+        typeof rawFingerprint === "string" ? rawFingerprint : undefined,
+      );
+      const ip = normalizeIp(
+        socketClientIp(
+          socket.handshake.headers["x-forwarded-for"],
+          socket.handshake.address,
+          isProduction ? 2 : 0,
+        ),
+      );
+      await assertAccessAllowed({ userId: user.id, role: user.role, ip, deviceHash });
+
+      const connectionLimit = connections.add(user.id, ip);
+      if (connectionLimit) {
+        return refuse("SOCKET_CONNECTION_LIMIT", { scope: connectionLimit });
+      }
+      counted = true;
+
+      socket.data.sessionId = user.sessionId;
       socket.data.userId = user.id;
       socket.data.pseudo = user.pseudo;
       socket.data.avatarSeed = user.avatarSeed;
+      socket.data.role = user.role;
+      socket.data.ip = ip;
+      socket.data.deviceHash = deviceHash;
       return next();
     } catch (error) {
-      app.log.error({ err: error }, "Échec du handshake Socket.IO");
-      return next(new Error("HANDSHAKE_FAILED"));
+      if (counted) connections.remove(socket.data.userId, socket.data.ip);
+      const code = error instanceof AppError ? error.code : "HANDSHAKE_FAILED";
+      app.log.warn({ code }, "Handshake Socket.IO refusé");
+      return next(new Error(code));
     }
   });
 
@@ -102,6 +154,17 @@ export function attachRealtime(app: FastifyInstance): GameServer {
 
   setDisconnectNotifier((userId) => {
     io.in(userRoom(userId)).disconnectSockets(true);
+  });
+
+  setSessionDisconnectNotifier((sessionId) => {
+    io.in(sessionRoom(sessionId)).disconnectSockets(true);
+  });
+
+  setAccessDisconnectNotifier((kind, value) => {
+    for (const socket of io.sockets.sockets.values()) {
+      const matches = kind === "ip" ? socket.data.ip === value : socket.data.deviceHash === value;
+      if (matches && socket.data.role !== "admin") socket.disconnect(true);
+    }
   });
 
   /**
@@ -159,6 +222,38 @@ export function attachRealtime(app: FastifyInstance): GameServer {
     // Room par compte : permet d'adresser un joueur sur tous ses appareils.
     // C'est aussi par elle que passe l'état des parties.
     void socket.join(userRoom(player.userId));
+    void socket.join(sessionRoom(socket.data.sessionId));
+
+    socket.use((packet, next) => {
+      if (events.take(socket.data.userId, socket.data.ip)) return next();
+      const failure = {
+        ok: false as const,
+        code: "SOCKET_RATE_LIMITED",
+        message: "Trop d’actions ont été envoyées. Réessaie dans un instant.",
+      };
+      const ack = packet.at(-1);
+      if (typeof ack === "function") ack(failure);
+      else socket.emit("error:app", failure);
+    });
+
+    let revalidating = false;
+    const revalidation = setInterval(() => {
+      if (revalidating) return;
+      revalidating = true;
+      void resolveSessionById(socket.data.sessionId)
+        .then((fresh) => {
+          if (!fresh) return socket.disconnect(true);
+          socket.data.role = fresh.role;
+          socket.data.pseudo = fresh.pseudo;
+          socket.data.avatarSeed = fresh.avatarSeed;
+          return undefined;
+        })
+        .catch(() => socket.disconnect(true))
+        .finally(() => {
+          revalidating = false;
+        });
+    }, REALTIME_LIMITS.sessionRecheckMs);
+    revalidation.unref();
 
     // On enregistre d'abord, pour que l'arrivant se voie lui-même dans la liste.
     // Les autres ne sont notifiés que si la liste change réellement : un
@@ -212,6 +307,9 @@ export function attachRealtime(app: FastifyInstance): GameServer {
     }
 
     socket.on("disconnect", () => {
+      clearInterval(revalidation);
+      connections.remove(socket.data.userId, socket.data.ip);
+      events.prune();
       // L'ordre importe : le sursis d'abandon est armé sur la perte de la
       // dernière socket, il faut donc décompter avant de tester la présence.
       detach(player.userId);

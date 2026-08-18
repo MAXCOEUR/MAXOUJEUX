@@ -39,6 +39,7 @@ import type { GameSocket } from "./socket-types.js";
 import { releaseWatcher, retainWatcher, useTables, watchedGames } from "./tables.js";
 import { pushToast } from "./toast.js";
 import { walletQueryKey } from "./wallet";
+import { getDeviceFingerprint } from "./device";
 
 export type { GameSocket } from "./socket-types.js";
 
@@ -67,6 +68,11 @@ export const useRealtime = create<RealtimeState>((set, get) => ({
       transports: ["websocket", "polling"],
       reconnectionDelay: 1_000,
       reconnectionDelayMax: 10_000,
+      auth: (callback) => {
+        void getDeviceFingerprint().then((deviceFingerprint) =>
+          callback(deviceFingerprint ? { deviceFingerprint } : {}),
+        );
+      },
     });
 
     socket.on("connect", () => {

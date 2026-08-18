@@ -1,9 +1,15 @@
 import { createHash, randomBytes } from "node:crypto";
-import { and, eq, gt, lt } from "drizzle-orm";
+import type { UserRole } from "@maxoujeux/shared";
+import { and, eq, gt, lt, type SQL } from "drizzle-orm";
 import type { FastifyReply } from "fastify";
 import { db, type Database } from "../../db/index.js";
-import { sessions, users, wallets } from "../../db/schema.js";
+import { accountAccesses, sessions, users, wallets } from "../../db/schema.js";
 import { env, isProduction } from "../../env.js";
+import { hashDeviceFingerprint, normalizeIp } from "../../lib/access-context.js";
+import {
+  assertAccessAllowed,
+  assertLegacyAccountAllowed,
+} from "../moderation/service.js";
 
 export const SESSION_COOKIE = "mxj_session";
 
@@ -15,11 +21,15 @@ function hashToken(token: string): string {
 }
 
 export interface AuthenticatedUser {
+  sessionId: string;
   id: string;
   email: string;
   pseudo: string;
   avatarSeed: string;
+  role: UserRole;
   isAdmin: boolean;
+  ip: string | null;
+  deviceHash: string | null;
   balance: number;
   createdAt: Date;
 }
@@ -27,19 +37,34 @@ export interface AuthenticatedUser {
 export interface RequestOrigin {
   ip?: string | undefined;
   userAgent?: string | undefined;
+  deviceFingerprint?: string | undefined;
 }
 
 /** Crée une session en base et renvoie le jeton en clair à poser en cookie. */
 export async function createSession(userId: string, origin: RequestOrigin): Promise<string> {
   const token = randomBytes(TOKEN_BYTES).toString("base64url");
   const expiresAt = new Date(Date.now() + env.SESSION_TTL_DAYS * 86_400_000);
+  const ip = origin.ip ? normalizeIp(origin.ip) : null;
+  const deviceHash = hashDeviceFingerprint(origin.deviceFingerprint);
 
-  await db.insert(sessions).values({
-    userId,
-    tokenHash: hashToken(token),
-    expiresAt,
-    ip: origin.ip ?? null,
-    userAgent: origin.userAgent?.slice(0, 255) ?? null,
+  await db.transaction(async (tx) => {
+    await tx.insert(sessions).values({
+      userId,
+      tokenHash: hashToken(token),
+      expiresAt,
+      ip,
+      deviceHash,
+      userAgent: origin.userAgent?.slice(0, 255) ?? null,
+    });
+
+    if (ip) {
+      await tx.insert(accountAccesses).values({
+        userId,
+        ip,
+        deviceHash,
+        userAgent: origin.userAgent?.slice(0, 255) ?? null,
+      });
+    }
   });
 
   return token;
@@ -54,17 +79,19 @@ export async function createSession(userId: string, origin: RequestOrigin): Prom
  * sélectionner l'image d'avatar : à ce rythme, la colonne binaire se paierait
  * en mégaoctets par minute.
  */
-export async function resolveSession(token: string | undefined): Promise<AuthenticatedUser | null> {
-  if (!token) return null;
-
+async function resolveSessionWhere(predicate: SQL<unknown>): Promise<AuthenticatedUser | null> {
   const [row] = await db
     .select({
+      sessionId: sessions.id,
+      sessionIp: sessions.ip,
+      deviceHash: sessions.deviceHash,
       id: users.id,
       email: users.email,
       pseudo: users.pseudo,
       avatarSeed: users.avatarSeed,
       createdAt: users.createdAt,
       isBanned: users.isBanned,
+      role: users.role,
       isAdmin: users.isAdmin,
       deletedAt: users.deletedAt,
       balance: wallets.balance,
@@ -72,27 +99,53 @@ export async function resolveSession(token: string | undefined): Promise<Authent
     .from(sessions)
     .innerJoin(users, eq(users.id, sessions.userId))
     .innerJoin(wallets, eq(wallets.userId, users.id))
-    .where(and(eq(sessions.tokenHash, hashToken(token)), gt(sessions.expiresAt, new Date())))
+    .where(and(predicate, gt(sessions.expiresAt, new Date())))
     .limit(1);
 
   // `deletedAt` double la révocation des sessions faite à la fermeture : il
   // couvre la session créée dans la seconde qui précède l'anonymisation.
-  if (!row || row.isBanned || row.deletedAt) return null;
+  if (!row || row.deletedAt) return null;
+
+  await assertAccessAllowed({
+    userId: row.id,
+    role: row.role,
+    ip: row.sessionIp,
+    deviceHash: row.deviceHash,
+  });
+  await assertLegacyAccountAllowed(row.id, row.isBanned, row.role);
 
   return {
+    sessionId: row.sessionId,
     id: row.id,
     email: row.email,
     pseudo: row.pseudo,
     avatarSeed: row.avatarSeed,
+    role: row.role,
     isAdmin: row.isAdmin,
+    ip: row.sessionIp,
+    deviceHash: row.deviceHash,
     balance: row.balance ?? 0,
     createdAt: row.createdAt,
   };
 }
 
-export async function revokeSession(token: string | undefined): Promise<void> {
-  if (!token) return;
-  await db.delete(sessions).where(eq(sessions.tokenHash, hashToken(token)));
+export async function resolveSession(token: string | undefined): Promise<AuthenticatedUser | null> {
+  if (!token) return null;
+  return resolveSessionWhere(eq(sessions.tokenHash, hashToken(token)));
+}
+
+/** Revalidation périodique des sockets sans conserver le jeton HTTP en mémoire. */
+export function resolveSessionById(sessionId: string): Promise<AuthenticatedUser | null> {
+  return resolveSessionWhere(eq(sessions.id, sessionId));
+}
+
+export async function revokeSession(token: string | undefined): Promise<string | null> {
+  if (!token) return null;
+  const [revoked] = await db
+    .delete(sessions)
+    .where(eq(sessions.tokenHash, hashToken(token)))
+    .returning({ id: sessions.id });
+  return revoked?.id ?? null;
 }
 
 /** Déconnecte le compte de partout. Utilisé au changement de mot de passe et au bannissement. */

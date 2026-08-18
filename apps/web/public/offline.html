@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#0f1115" />
+    <title>Connexion requise — MaxouJeux</title>
+    <style>
+      body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #0f1115; color: #f5efe2; font: 16px system-ui, sans-serif; }
+      main { max-width: 28rem; padding: 2rem; text-align: center; }
+      p { color: #aaa398; line-height: 1.5; }
+      button { min-height: 44px; border: 1px solid #b8914a; border-radius: 12px; padding: .75rem 1.25rem; background: #b8914a; color: #0f1115; font-weight: 700; cursor: pointer; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Connexion requise</h1>
+      <p>MaxouJeux a besoin d’Internet pour vérifier ton compte et rejoindre les parties.</p>
+      <button type="button" onclick="location.reload()">Réessayer</button>
+    </main>
+    <script>addEventListener("online", () => location.reload())</script>
+  </body>
+</html>

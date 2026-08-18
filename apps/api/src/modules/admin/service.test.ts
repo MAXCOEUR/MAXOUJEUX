@@ -34,6 +34,15 @@ async function trackedAccount(prefix: string, options: { isAdmin?: boolean } = {
   return account;
 }
 
+async function trackedAdmin(prefix: string): Promise<{ id: string }> {
+  const [existing] = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(eq(users.role, "admin"))
+    .limit(1);
+  return existing ?? trackedAccount(prefix, { isAdmin: true });
+}
+
 async function sessionCount(userId: string): Promise<number> {
   const [row] = await db
     .select({ count: sql<number>`count(*)::int` })
@@ -54,7 +63,7 @@ afterAll(async () => {
 describe("service d'administration des comptes", () => {
   it("liste joueurs et administrateurs sans exposer de hash", async () => {
     const player = await trackedAccount("z-player");
-    const admin = await trackedAccount("a-admin", { isAdmin: true });
+    const admin = await trackedAdmin("a-admin");
     await setPlayerBalance(player.id, { balance: 500 });
 
     const rows = await listAccounts();
@@ -87,7 +96,7 @@ describe("service d'administration des comptes", () => {
   });
 
   it("protège tout administrateur contre les trois mutations", async () => {
-    const target = await trackedAccount("protected-admin", { isAdmin: true });
+    const target = await trackedAdmin("protected-admin");
     const disconnected: string[] = [];
     setDisconnectNotifier((userId) => disconnected.push(userId));
     const protectedError = { code: "ADMIN_ACCOUNT_PROTECTED" };

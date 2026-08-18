@@ -4,7 +4,7 @@ import Fastify, { type FastifyInstance } from "fastify";
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { db, runMigrations } from "../../db/index.js";
-import { users } from "../../db/schema.js";
+import { staffAuditLog, users } from "../../db/schema.js";
 import { registerErrorHandler } from "../../lib/errors.js";
 import { createAccount } from "../auth/service.js";
 import { SESSION_COOKIE, createSession } from "../auth/session.js";
@@ -14,8 +14,10 @@ const createdUserIds: string[] = [];
 let app: FastifyInstance;
 let player: Awaited<ReturnType<typeof createAccount>>;
 let admin: Awaited<ReturnType<typeof createAccount>>;
+let moderator: Awaited<ReturnType<typeof createAccount>>;
 let playerCookie: string;
 let adminCookie: string;
+let moderatorCookie: string;
 
 function nextAccount(prefix: string) {
   const suffix = randomBytes(6).toString("hex");
@@ -43,13 +45,16 @@ beforeAll(async () => {
 
   player = await createAccount(nextAccount("route-player"));
   admin = await createAccount(nextAccount("route-admin"), { isAdmin: true });
-  createdUserIds.push(player.id, admin.id);
+  moderator = await createAccount(nextAccount("route-modo"), { role: "moderator" });
+  createdUserIds.push(player.id, admin.id, moderator.id);
   playerCookie = await cookieFor(player.id);
   adminCookie = await cookieFor(admin.id);
+  moderatorCookie = await cookieFor(moderator.id);
 }, 60_000);
 
 afterAll(async () => {
   await app.close();
+  await db.delete(staffAuditLog);
   for (const id of createdUserIds) {
     await db.delete(users).where(eq(users.id, id));
   }
@@ -71,7 +76,7 @@ describe("routes d'administration des comptes", () => {
     });
 
     expect(response.statusCode).toBe(403);
-    expect(response.json()).toMatchObject({ error: { code: "ADMIN_REQUIRED" } });
+    expect(response.json()).toMatchObject({ error: { code: "STAFF_REQUIRED" } });
   });
 
   it("retourne la liste à un administrateur", async () => {
@@ -85,6 +90,54 @@ describe("routes d'administration des comptes", () => {
     expect(response.json().accounts).toEqual(
       expect.arrayContaining([expect.objectContaining({ id: player.id, isAdmin: false })]),
     );
+  });
+
+  it("autorise un modérateur à lister, réinitialiser et ajuster un joueur", async () => {
+    const listed = await app.inject({ method: "GET", url: "/accounts", headers: { cookie: moderatorCookie } });
+    const reset = await app.inject({
+      method: "PATCH",
+      url: `/accounts/${player.id}/password`,
+      headers: { cookie: moderatorCookie },
+      payload: { password: "mot-de-passe-remplace" },
+    });
+    const balance = await app.inject({
+      method: "PATCH",
+      url: `/accounts/${player.id}/balance`,
+      headers: { cookie: moderatorCookie },
+      payload: { balance: 777 },
+    });
+
+    expect(listed.statusCode).toBe(200);
+    expect(reset.statusCode).toBe(204);
+    expect(balance.statusCode).toBe(200);
+  });
+
+  it("interdit au modérateur la création, la suppression et les rôles", async () => {
+    const responses = await Promise.all([
+      app.inject({ method: "POST", url: "/accounts", headers: { cookie: moderatorCookie }, payload: nextAccount("forbidden-create") }),
+      app.inject({ method: "DELETE", url: `/accounts/${player.id}`, headers: { cookie: moderatorCookie } }),
+      app.inject({ method: "PATCH", url: `/accounts/${player.id}/role`, headers: { cookie: moderatorCookie }, payload: { role: "moderator" } }),
+    ]);
+    for (const response of responses) {
+      expect(response.statusCode).toBe(403);
+      expect(response.json()).toMatchObject({ error: { code: "ADMIN_REQUIRED" } });
+    }
+  });
+
+  it("permet uniquement à l'administrateur de promouvoir et rétrograder un modérateur", async () => {
+    const target = await createAccount(nextAccount("route-role"));
+    createdUserIds.push(target.id);
+    for (const role of ["moderator", "player"] as const) {
+      const response = await app.inject({
+        method: "PATCH",
+        url: `/accounts/${target.id}/role`,
+        headers: { cookie: adminCookie },
+        payload: { role },
+      });
+      expect(response.statusCode).toBe(204);
+      const [stored] = await db.select({ role: users.role }).from(users).where(eq(users.id, target.id));
+      expect(stored?.role).toBe(role);
+    }
   });
 
   it("ignore isAdmin lors de la création et retourne un joueur", async () => {

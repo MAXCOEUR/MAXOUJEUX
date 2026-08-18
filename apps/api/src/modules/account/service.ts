@@ -31,6 +31,7 @@ async function relireCompte(userId: string): Promise<AuthenticatedUser> {
       email: users.email,
       pseudo: users.pseudo,
       avatarSeed: users.avatarSeed,
+      role: users.role,
       isAdmin: users.isAdmin,
       createdAt: users.createdAt,
       balance: wallets.balance,
@@ -41,7 +42,13 @@ async function relireCompte(userId: string): Promise<AuthenticatedUser> {
     .limit(1);
 
   if (!row) throw new AppError(404, "ACCOUNT_NOT_FOUND", "Compte introuvable");
-  return { ...row, balance: row.balance ?? 0 };
+  return {
+    ...row,
+    sessionId: "",
+    ip: null,
+    deviceHash: null,
+    balance: row.balance ?? 0,
+  };
 }
 
 /**

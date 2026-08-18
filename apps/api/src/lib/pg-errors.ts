@@ -10,9 +10,21 @@ const UNIQUE_VIOLATION = "23505";
 const CHECK_VIOLATION = "23514";
 
 function sqlState(error: unknown): string | undefined {
-  if (typeof error !== "object" || error === null || !("code" in error)) return undefined;
-  const { code } = error as { code: unknown };
-  return typeof code === "string" ? code : undefined;
+  const visited = new Set<object>();
+  let current = error;
+
+  while (typeof current === "object" && current !== null && !visited.has(current)) {
+    visited.add(current);
+
+    if ("code" in current) {
+      const { code } = current as { code: unknown };
+      if (typeof code === "string") return code;
+    }
+
+    current = "cause" in current ? (current as { cause: unknown }).cause : undefined;
+  }
+
+  return undefined;
 }
 
 /** Contrainte d'unicité violée — sert à détecter un doublon en concurrence. */

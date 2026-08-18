@@ -35,7 +35,10 @@ const app = Fastify({
   // Manager sur le NAS, puis le nginx du conteneur `web`. Sans trustProxy,
   // toutes les requêtes sembleraient venir de l'IP du conteneur et la
   // limitation de débit s'appliquerait à tous les joueurs d'un seul coup.
-  trustProxy: isProduction,
+  // Deux sauts et pas « tous » : web nginx puis Nginx Proxy Manager. Fastify
+  // s'arrête ainsi à l'adresse du client et ignore tout X-Forwarded-For qu'il
+  // aurait préinjecté plus à gauche dans la chaîne.
+  trustProxy: isProduction ? 2 : false,
   bodyLimit: 64 * 1024,
 });
 

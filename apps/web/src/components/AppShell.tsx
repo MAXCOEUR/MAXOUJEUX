@@ -66,7 +66,7 @@ export function AppShell({ user, children }: AppShellProps) {
               <Medal className="size-4" aria-hidden />
               <span className="hidden lg:inline">Succès</span>
             </Lien>
-            {user.isAdmin && (
+            {user.role !== "player" && (
               <Lien
                 to={{ name: "admin" }}
                 aria-label="Administration"
@@ -158,7 +158,6 @@ export function AppShell({ user, children }: AppShellProps) {
       </header>
 
       <ResumeBanner />
-
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6 sm:py-10">{children}</main>
 
       <footer className="border-t border-line px-4 py-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))] text-center text-xs text-cream-faint">
