@@ -15,6 +15,7 @@ import { Button } from "@/components/Button";
 import { Field } from "@/components/Field";
 import { Modal } from "@/components/Modal";
 import { ApiClientError } from "@/lib/api";
+import { resetAfterSuccessfulSubmit } from "@/lib/form-submit";
 import {
   adminActionAllowed,
   useAdminAccounts,
@@ -156,8 +157,7 @@ export function CreatePlayerDialog({ open, onClose }: { open: boolean; onClose: 
     const parsed = createPlayerSchema.safeParse(Object.fromEntries(new FormData(form)));
     if (!parsed.success) return setFieldErrors(toFieldErrors(parsed.error));
     try {
-      await createPlayer.mutateAsync(parsed.data);
-      form.reset();
+      await resetAfterSuccessfulSubmit(form, () => createPlayer.mutateAsync(parsed.data));
       onClose();
     } catch (error) {
       const outcome = mutationError(error);
@@ -257,8 +257,9 @@ function BanAccountDialog({ account, onClose }: { account: AdminAccount | null; 
     });
     if (!parsed.success) return setError(parsed.error.issues[0]?.message ?? "Bannissement invalide");
     try {
-      await banAccount.mutateAsync({ accountId: account.id, input: parsed.data });
-      form.reset();
+      await resetAfterSuccessfulSubmit(form, () =>
+        banAccount.mutateAsync({ accountId: account.id, input: parsed.data }),
+      );
     } catch (cause) {
       setError(mutationError(cause).message ?? "Impossible d’appliquer le bannissement.");
     }
