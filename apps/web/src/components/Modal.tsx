@@ -1,5 +1,6 @@
 import { X } from "lucide-react";
 import { useEffect, useId, useRef, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { cn } from "@/lib/cn";
 import { Button } from "./Button";
 
@@ -96,10 +97,10 @@ export function Modal({
 
   const lateral = variant === "lateral";
 
-  return (
+  const dialog = (
     <div
       className={cn(
-        "fixed inset-0 z-50 flex",
+        "fixed inset-0 z-[70] flex",
         lateral ? "justify-end" : "items-end justify-center sm:items-center",
       )}
     >
@@ -121,8 +122,8 @@ export function Modal({
             // saisie hors de l'écran au lieu de la garder collée en bas.
             ? "h-full w-full max-w-md overflow-hidden border-l border-line"
             : cn(
-                "max-h-[92dvh] w-full overflow-y-auto rounded-t-2xl border border-line",
-                "sm:max-w-lg sm:rounded-2xl",
+                "max-h-[calc(100dvh-0.5rem)] w-full overflow-hidden rounded-t-2xl border border-line",
+                "sm:max-h-[calc(100dvh-2rem)] sm:max-w-lg sm:rounded-2xl",
                 // Zone sûre iOS : sans ce complément, la barre d'action d'une
                 // feuille basse passe sous la barre de gestes.
                 "pb-[env(safe-area-inset-bottom)] sm:pb-0",
@@ -130,7 +131,7 @@ export function Modal({
           className,
         )}
       >
-        <header className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-line bg-felt/95 px-5 py-4 backdrop-blur">
+        <header className="z-10 flex shrink-0 items-center justify-between gap-3 border-b border-line bg-felt/95 px-5 py-4 backdrop-blur">
           <h2 id={titleId} className="font-display text-lg font-semibold text-cream">
             {title}
           </h2>
@@ -145,16 +146,22 @@ export function Modal({
           </Button>
         </header>
 
-        <div className={cn("flex-1 px-5 py-5", lateral && "min-h-0 overflow-y-auto")}>
+        <div data-modal-body="true" className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
           {children}
         </div>
 
         {footer && (
-          <footer className="sticky bottom-0 border-t border-line bg-felt/95 px-5 py-4 backdrop-blur">
+          <footer className="shrink-0 border-t border-line bg-felt/95 px-5 py-4 backdrop-blur">
             {footer}
           </footer>
         )}
       </div>
     </div>
   );
+
+  // Une modale rendue sous un parent animé (`transform`) n'est plus réellement
+  // fixe par rapport à la fenêtre et peut passer sous la navigation. Le portail
+  // l'isole de ces contextes d'empilement. Le retour direct conserve le rendu
+  // côté serveur utilisé par les tests et le pré-rendu.
+  return typeof document === "undefined" ? dialog : createPortal(dialog, document.body);
 }

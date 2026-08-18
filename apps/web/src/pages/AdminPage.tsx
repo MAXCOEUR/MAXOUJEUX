@@ -150,13 +150,14 @@ export function CreatePlayerDialog({ open, onClose }: { open: boolean; onClose: 
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const form = event.currentTarget;
     setFieldErrors({});
     setGlobalError(null);
-    const parsed = createPlayerSchema.safeParse(Object.fromEntries(new FormData(event.currentTarget)));
+    const parsed = createPlayerSchema.safeParse(Object.fromEntries(new FormData(form)));
     if (!parsed.success) return setFieldErrors(toFieldErrors(parsed.error));
     try {
       await createPlayer.mutateAsync(parsed.data);
-      event.currentTarget.reset();
+      form.reset();
       onClose();
     } catch (error) {
       const outcome = mutationError(error);
@@ -245,8 +246,9 @@ function BanAccountDialog({ account, onClose }: { account: AdminAccount | null; 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!account) return;
+    const form = event.currentTarget;
     setError(null);
-    const data = new FormData(event.currentTarget);
+    const data = new FormData(form);
     const parsed = banAccountSchema.safeParse({
       kinds: data.getAll("kinds") as BanKind[],
       accessId: data.get("accessId") || undefined,
@@ -256,7 +258,7 @@ function BanAccountDialog({ account, onClose }: { account: AdminAccount | null; 
     if (!parsed.success) return setError(parsed.error.issues[0]?.message ?? "Bannissement invalide");
     try {
       await banAccount.mutateAsync({ accountId: account.id, input: parsed.data });
-      event.currentTarget.reset();
+      form.reset();
     } catch (cause) {
       setError(mutationError(cause).message ?? "Impossible d’appliquer le bannissement.");
     }
@@ -267,8 +269,13 @@ function BanAccountDialog({ account, onClose }: { account: AdminAccount | null; 
   ) ?? [];
 
   return (
-    <Modal open={account !== null} onClose={onClose} title={`Modération de ${account?.pseudo ?? ""}`}>
-      <form onSubmit={submit} className="space-y-5">
+    <Modal
+      open={account !== null}
+      onClose={onClose}
+      title={`Modération de ${account?.pseudo ?? ""}`}
+      footer={<Button type="submit" form="ban-account" loading={banAccount.isPending} className="w-full">Appliquer le bannissement</Button>}
+    >
+      <form id="ban-account" onSubmit={submit} className="space-y-5">
         <fieldset className="space-y-2">
           <legend className="text-sm font-semibold text-cream">Types de bannissement</legend>
           {(["account", "ip", "device"] as const).map((kind) => (
@@ -304,7 +311,6 @@ function BanAccountDialog({ account, onClose }: { account: AdminAccount | null; 
           <textarea name="reason" required maxLength={500} className="mt-2 min-h-24 w-full rounded-xl border border-line bg-felt-raised px-3 py-2 text-cream" />
         </label>
         {error && <p role="alert" className="text-sm text-danger">{error}</p>}
-        <Button type="submit" loading={banAccount.isPending} className="w-full">Appliquer le bannissement</Button>
       </form>
 
       {activeBans.length > 0 && (
